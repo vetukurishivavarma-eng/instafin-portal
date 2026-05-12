@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import DashboardCharts from '../components/charts/DashboardCharts';
 
 const API_BASE = 'http://localhost:3001/api';
 
@@ -92,6 +93,8 @@ export default function DashboardPage() {
           <h3 className="text-5xl font-bold text-white mt-2">{stats.revenue}</h3>
         </div>
       </div>
+
+      <DashboardCharts />
     </div>
   );
 }

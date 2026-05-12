@@ -429,4 +429,25 @@ router.get('/stats/dashboard', authorize('admin', 'executive', 'dsa'), (req, res
   }
 });
 
+// Get status distribution for pie chart
+router.get('/stats/status-distribution', authenticate, (req, res) => {
+  const distribution = {
+    'New': leads.filter(l => l.status === 'New' || l.status === 'fresh').length,
+    'Processing': leads.filter(l => l.status === 'Processing' || l.status === 'Assigned').length,
+    'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
+    'Disbursed': leads.filter(l => l.status === 'Disbursed').length
+  };
+  res.json(distribution);
+});
+
+// Get loan type distribution for bar chart
+router.get('/stats/loan-type-distribution', authenticate, (req, res) => {
+  const loanTypes = {};
+  leads.forEach(lead => {
+    const type = lead.loanType || 'Unknown';
+    loanTypes[type] = (loanTypes[type] || 0) + 1;
+  });
+  res.json(loanTypes);
+});
+
 export default router;
