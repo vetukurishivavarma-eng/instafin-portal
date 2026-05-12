@@ -4,6 +4,17 @@ import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE = 'http://localhost:3001/api';
 
+const getStatusBorder = (status) => {
+  const colors = {
+    'New': 'border-yellow-400',
+    'Processing': 'border-blue-400',
+    'Sanctioned': 'border-green-400',
+    'Disbursed': 'border-purple-400',
+    'Assigned': 'border-orange-400'
+  };
+  return colors[status] || 'border-gray-200';
+};
+
 export default function PipelinePage() {
   const { accessToken, refreshAccessToken } = useAuth();
   const [leads, setLeads] = useState([]);
@@ -105,25 +116,31 @@ export default function PipelinePage() {
         </div>
         {loading ? (
           <div className="text-center py-12">Loading...</div>
+        ) : filteredLeads.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">No leads found</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50">
-                <tr><th className="p-4">Customer</th><th className="p-4">Loan</th><th className="p-4">Amount</th><th className="p-4">Bank</th><th className="p-4">Executive</th><th className="p-4">Status</th></tr>
-              </thead>
-              <tbody>
-                {filteredLeads.map(lead => (
-                  <tr key={lead.id} className="border-t hover:bg-gray-50">
-                    <td className="p-4 font-medium">{lead.customerName}</td>
-                    <td className="p-4">{lead.loanType}</td>
-                    <td className="p-4">{lead.expectedAmount}</td>
-                    <td className="p-4 text-blue-700">{lead.assignedBanks?.[0] || '-'}</td>
-                    <td className="p-4">{lead.assignedTo || '-'}</td>
-                    <td className="p-4"><StatusBadge status={lead.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+            {filteredLeads.map(lead => (
+              <div
+                key={lead.id}
+                className={`bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 ${getStatusBorder(lead.status)}`}
+              >
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">{lead.customerName}</h3>
+                    <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-semibold">
+                      {lead.loanType}
+                    </span>
+                  </div>
+                  <p className="text-2xl font-bold text-gray-800 mb-2">₹{lead.expectedAmount?.toLocaleString()}</p>
+                  <p className="text-blue-600 text-sm mb-4">{lead.assignedBanks?.[0] || 'No bank assigned'}</p>
+                  <div className="flex justify-between items-center border-t pt-4">
+                    <span className="text-sm text-gray-500">{lead.assignedTo || 'Unassigned'}</span>
+                    <StatusBadge status={lead.status} />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

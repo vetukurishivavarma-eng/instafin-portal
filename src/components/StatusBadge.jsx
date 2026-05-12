@@ -1,19 +1,26 @@
 import React from 'react';
 
 export default function StatusBadge({ status }) {
-  const getStatusColor = (s) => {
+  const getStatusStyle = (s) => {
     switch (s) {
-      case "fresh": return "bg-blue-100 text-blue-700";
-      case "processing": return "bg-yellow-100 text-yellow-700";
-      case "sanctioned": return "bg-green-100 text-green-700";
-      case "disbursed": return "bg-purple-100 text-purple-700";
-      case "New": return "bg-blue-100 text-blue-700";
-      case "Processing": return "bg-yellow-100 text-yellow-700";
-      case "Sanctioned": return "bg-green-100 text-green-700";
-      case "Disbursed": return "bg-purple-100 text-purple-700";
-      case "Assigned": return "bg-indigo-100 text-indigo-700";
-      case "Rejected": return "bg-gray-200 text-gray-700";
-      default: return "bg-gray-100 text-gray-700";
+      case "fresh":
+      case "New":
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      case "processing":
+      case "Processing":
+        return "bg-yellow-50 text-yellow-700 border-yellow-200";
+      case "sanctioned":
+      case "Sanctioned":
+        return "bg-green-50 text-green-700 border-green-200";
+      case "disbursed":
+      case "Disbursed":
+        return "bg-purple-50 text-purple-700 border-purple-200";
+      case "Assigned":
+        return "bg-orange-50 text-orange-700 border-orange-200";
+      case "Rejected":
+        return "bg-gray-100 text-gray-600 border-gray-200";
+      default:
+        return "bg-gray-50 text-gray-600 border-gray-200";
     }
   };
 
@@ -23,7 +30,7 @@ export default function StatusBadge({ status }) {
   };
 
   return (
-    <span className={`${getStatusColor(status)} px-3 py-1 rounded-full text-sm font-medium`}>
+    <span className={`${getStatusStyle(status)} px-3 py-1.5 rounded-xl text-xs font-semibold border`}>
       {getDisplayStatus(status)}
     </span>
   );

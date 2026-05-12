@@ -64,32 +64,32 @@ export default function DashboardPage() {
       )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-blue-500">
-          <p className="text-gray-500 text-sm">Total Leads</p>
-          <h3 className="text-4xl font-bold text-blue-700 mt-2">{stats.totalLeads.toLocaleString()}</h3>
+        <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-3xl p-6 shadow-lg">
+          <p className="text-blue-100 text-sm font-medium">Total Leads</p>
+          <h3 className="text-5xl font-bold text-white mt-2">{stats.totalLeads.toLocaleString()}</h3>
         </div>
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-cyan-500">
-          <p className="text-gray-500 text-sm">Fresh Leads</p>
-          <h3 className="text-4xl font-bold text-cyan-700 mt-2">{stats.newLeads || stats.freshLeads}</h3>
+        <div className="bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-3xl p-6 shadow-lg">
+          <p className="text-cyan-100 text-sm font-medium">Fresh Leads</p>
+          <h3 className="text-5xl font-bold text-white mt-2">{stats.newLeads || stats.freshLeads}</h3>
         </div>
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-yellow-500">
-          <p className="text-gray-500 text-sm">Processing</p>
-          <h3 className="text-4xl font-bold text-yellow-600 mt-2">{stats.processing}</h3>
+        <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-3xl p-6 shadow-lg">
+          <p className="text-yellow-100 text-sm font-medium">Processing</p>
+          <h3 className="text-5xl font-bold text-white mt-2">{stats.processing}</h3>
         </div>
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-green-500">
-          <p className="text-gray-500 text-sm">Sanctioned</p>
-          <h3 className="text-4xl font-bold text-green-700 mt-2">{stats.sanctioned}</h3>
+        <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-3xl p-6 shadow-lg">
+          <p className="text-green-100 text-sm font-medium">Sanctioned</p>
+          <h3 className="text-5xl font-bold text-white mt-2">{stats.sanctioned}</h3>
         </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-purple-500">
-          <p className="text-gray-500 text-sm">Disbursed</p>
-          <h3 className="text-4xl font-bold text-purple-700 mt-2">{stats.disbursed}</h3>
+        <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-3xl p-6 shadow-lg">
+          <p className="text-purple-100 text-sm font-medium">Disbursed</p>
+          <h3 className="text-5xl font-bold text-white mt-2">{stats.disbursed}</h3>
         </div>
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-emerald-500">
-          <p className="text-gray-500 text-sm">Revenue Generated</p>
-          <h3 className="text-4xl font-bold text-emerald-700 mt-2">{stats.revenue}</h3>
+        <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-3xl p-6 shadow-lg">
+          <p className="text-emerald-100 text-sm font-medium">Revenue Generated</p>
+          <h3 className="text-5xl font-bold text-white mt-2">{stats.revenue}</h3>
         </div>
       </div>
     </div>
