@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
-
-const API_BASE = 'http://localhost:3001/api';
+import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
   const { isAdmin, accessToken } = useAuth();

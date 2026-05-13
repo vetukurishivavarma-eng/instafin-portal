@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardCharts from '../components/charts/DashboardCharts';
-
-const API_BASE = 'http://localhost:3001/api';
+import API_BASE from '../config/api';
 
 export default function DashboardPage() {
   const { user, isAdmin, accessToken, refreshAccessToken } = useAuth();

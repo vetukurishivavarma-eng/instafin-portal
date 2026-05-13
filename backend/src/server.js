@@ -5,9 +5,15 @@ import leadsRouter from './routes/leads.js';
 import documentsRouter from './routes/documents.js';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// CORS configuration for production
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes
@@ -15,6 +21,11 @@ app.use('/api/auth', authRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/documents', documentsRouter);
 
+// Health check
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Instafin API is running' });
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
