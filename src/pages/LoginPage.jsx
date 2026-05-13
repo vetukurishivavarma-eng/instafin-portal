@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import './LandingPage.css';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -26,54 +27,102 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-r from-blue-700 to-indigo-800 flex items-center justify-center">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-blue-700 mb-2 text-center">InstaFin</h1>
-        <p className="text-gray-500 text-center mb-6">Login to your account</p>
+    <div className="landing">
+      <div className="floating-shapes">
+        <div className="shape shape-1"></div>
+        <div className="shape shape-2"></div>
+        <div className="shape shape-3"></div>
+        <div className="shape shape-4"></div>
+      </div>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-4">
-            {error}
-          </div>
-        )}
+      <nav className="landing-nav">
+        <div className="logo">
+          <Link to="/" className="logo-icon" style={{ textDecoration: 'none', display: 'flex' }}>IF</Link>
+          <Link to="/" className="logo-text" style={{ textDecoration: 'none' }}>InstaFin</Link>
+        </div>
+        <div className="nav-actions">
+          <Link to="/" className="btn-login">Home</Link>
+        </div>
+      </nav>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              className="w-full border rounded-xl px-4 py-3"
-              placeholder="admin@instafin.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full border rounded-xl px-4 py-3"
-              placeholder="admin123"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-700 text-white py-3 rounded-xl font-semibold disabled:opacity-50"
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
+      <div className="landing-content" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="modal" style={{ maxWidth: '420px', width: '90%' }}>
+          <h2>Welcome Back</h2>
+          <p className="modal-subtitle">Sign in to access your dashboard</p>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-          <p className="text-sm font-semibold text-gray-700 mb-2">Demo Accounts:</p>
-          <p className="text-xs text-gray-500">admin@instafin.com / admin123</p>
-          <p className="text-xs text-gray-500">exec@instafin.com / exec123</p>
-          <p className="text-xs text-gray-500">dsa@instafin.com / dsa123</p>
+          {error && (
+            <div className="error-message" style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#fca5a5',
+              padding: '0.75rem 1rem',
+              borderRadius: '12px',
+              marginBottom: '1.5rem',
+              fontSize: '0.9rem'
+            }}>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <button type="submit" className="btn-submit" disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+
+          <div style={{
+            marginTop: '1.5rem',
+            padding: '1.25rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.05)'
+          }}>
+            <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', marginBottom: '0.5rem', fontWeight: '600' }}>Demo Accounts:</p>
+            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>admin@instafin.com / admin123</p>
+            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>exec@instafin.com / exec123</p>
+            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>dsa@instafin.com / dsa123</p>
+          </div>
+
+          <p style={{
+            textAlign: 'center',
+            marginTop: '1.5rem',
+            color: 'rgba(255, 255, 255, 0.5)',
+            fontSize: '0.9rem'
+          }}>
+            Don't have an account?{' '}
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#667eea',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+            >
+              Request Access
+            </button>
+          </p>
         </div>
       </div>
     </div>
