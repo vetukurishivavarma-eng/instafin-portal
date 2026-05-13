@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import API_BASE from '../config/api';
 const AuthContext = createContext(null);
 
@@ -6,6 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [accessToken, setAccessToken] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const savedUser = localStorage.getItem('instafin_user');
@@ -33,6 +35,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('instafin_user', JSON.stringify(data.user));
     localStorage.setItem('instafin_token', data.accessToken);
     localStorage.setItem('instafin_refresh', data.refreshToken);
+    navigate('/dashboard');
     return data.user;
   };
 

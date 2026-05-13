@@ -7,7 +7,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  if (location.pathname === '/login') {
+  if (location.pathname === '/login' || location.pathname === '/') {
     return <>{children}</>;
   }
 
@@ -20,7 +20,7 @@ export default function Layout({ children }) {
               <Link to="/" className="text-2xl font-bold text-blue-700">InstaFin</Link>
             </div>
             <div className="flex items-center space-x-6">
-              <Link to="/" className={location.pathname === '/' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Dashboard</Link>
+              <Link to="/dashboard" className={location.pathname === '/dashboard' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Dashboard</Link>
               <Link to="/leads" className={location.pathname === '/leads' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Leads</Link>
               {user?.role === 'admin' && (
                 <Link to="/add-lead" className={location.pathname === '/add-lead' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Add Lead</Link>

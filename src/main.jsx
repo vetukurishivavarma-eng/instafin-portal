@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import LeadEntryPage from './pages/LeadEntryPage'
@@ -34,17 +35,38 @@ function AppRoutes() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/dashboard" element={
           <ProtectedRoute>
             <DashboardPage />
           </ProtectedRoute>
         } />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/leads" element={<PipelinePage />} />
-        <Route path="/eligibility" element={<EligibilityPage />} />
-        <Route path="/documents" element={<DocumentsPage />} />
-        <Route path="/checklists" element={<ChecklistsPage />} />
-        <Route path="/sanction" element={<SanctionPage />} />
+        <Route path="/leads" element={
+          <ProtectedRoute>
+            <PipelinePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/eligibility" element={
+          <ProtectedRoute>
+            <EligibilityPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/documents" element={
+          <ProtectedRoute>
+            <DocumentsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/checklists" element={
+          <ProtectedRoute>
+            <ChecklistsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/sanction" element={
+          <ProtectedRoute>
+            <SanctionPage />
+          </ProtectedRoute>
+        } />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route
