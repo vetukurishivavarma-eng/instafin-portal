@@ -111,7 +111,7 @@ export default function LoginPage() {
           }}>
             Don't have an account?{' '}
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/?action=signup')}
               style={{
                 background: 'none',
                 border: 'none',

@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './LandingPage.css';
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [showSignup, setShowSignup] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'signup') {
+      setShowSignup(true);
+    }
+  }, [searchParams]);
 
   const handleLogin = () => {
     navigate('/login');
