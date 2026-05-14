@@ -55,10 +55,14 @@ router.get('/checklist', authorize('admin', 'executive', 'dsa'), async (req, res
       return res.status(400).json({ error: 'loanType parameter is required' });
     }
 
+    console.log('Fetching checklist for loan type:', loanType);
+
     const { data: docTypes, error } = await supabase
       .from('document_types')
       .select('*')
       .eq('loan_type', loanType);
+
+    console.log('Supabase response:', docTypes, 'error:', error);
 
     if (error) throw error;
 
@@ -68,6 +72,7 @@ router.get('/checklist', authorize('admin', 'executive', 'dsa'), async (req, res
       required: d.required
     })));
   } catch (error) {
+    console.error('Checklist error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
