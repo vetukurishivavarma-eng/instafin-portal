@@ -23,7 +23,10 @@ export default function Layout({ children }) {
               <Link to="/dashboard" className={location.pathname === '/dashboard' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Dashboard</Link>
               <Link to="/leads" className={location.pathname === '/leads' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Leads</Link>
               {user?.role === 'admin' && (
-                <Link to="/add-lead" className={location.pathname === '/add-lead' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Add Lead</Link>
+                <>
+                  <Link to="/add-lead" className={location.pathname === '/add-lead' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Add Lead</Link>
+                  <Link to="/bulk-upload" className={location.pathname === '/bulk-upload' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Bulk Upload</Link>
+                </>
               )}
               <Link to="/eligibility" className={location.pathname === '/eligibility' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Eligibility</Link>
               <Link to="/documents" className={location.pathname === '/documents' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Documents</Link>

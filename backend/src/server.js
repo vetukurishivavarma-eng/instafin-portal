@@ -3,6 +3,7 @@ import cors from 'cors';
 import authRouter from './routes/auth.js';
 import leadsRouter from './routes/leads.js';
 import documentsRouter from './routes/documents.js';
+import bulkUploadRouter from './routes/bulkUpload.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/documents', documentsRouter);
+app.use('/api/bulk', bulkUploadRouter);
 
 // Health check
 app.get('/', (req, res) => {
