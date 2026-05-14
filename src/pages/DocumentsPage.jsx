@@ -80,7 +80,7 @@ export default function DocumentsPage() {
     fetchWithAuth(`${API_BASE}/documents/lead/${selectedLead}`)
       .then(r => r.json())
       .then(data => {
-        const docs = Array.isArray(data) ? data.map(d => d.documentName) : [];
+        const docs = Array.isArray(data) ? data.map(d => d.documentType || d.document_name || d.name) : [];
         setUploadedDocs(docs);
       })
       .catch(() => setUploadedDocs([]));
@@ -94,7 +94,7 @@ export default function DocumentsPage() {
     setUploadLoading(true);
     const formData = new FormData();
     formData.append('leadId', selectedLead);
-    formData.append('documentName', documentName);
+    formData.append('documentType', documentName);
     formData.append('file', file);
 
     try {
