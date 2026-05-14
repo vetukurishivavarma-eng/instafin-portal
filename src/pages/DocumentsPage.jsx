@@ -57,22 +57,33 @@ export default function DocumentsPage() {
     setError('');
     fetchWithAuth(`${API_BASE}/leads`)
       .then(r => r.json())
-      .then(data => setLeads(data.data || []))
-      .catch(() => {});
+      .then(data => {
+        console.log('Leads loaded:', data.data?.length || 0);
+        setLeads(data.data || []);
+      })
+      .catch(err => console.error('Failed to load leads:', err));
   }, [accessToken]);
 
   useEffect(() => {
+    console.log('Checklist effect - selectedLoan:', selectedLoan, 'accessToken:', !!accessToken);
     if (!selectedLoan || !accessToken) {
       setChecklist([]);
       return;
     }
     fetchWithAuth(`${API_BASE}/documents/checklist?loanType=${encodeURIComponent(selectedLoan)}`)
       .then(r => r.json())
-      .then(data => setChecklist(Array.isArray(data) ? data : []))
-      .catch(() => setChecklist([]));
+      .then(data => {
+        console.log('Checklist loaded:', data.length, 'items');
+        setChecklist(Array.isArray(data) ? data : []);
+      })
+      .catch(err => {
+        console.error('Checklist error:', err);
+        setChecklist([]);
+      });
   }, [selectedLoan, accessToken]);
 
   useEffect(() => {
+    console.log('Uploaded docs effect - selectedLead:', selectedLead, 'accessToken:', !!accessToken);
     if (!selectedLead || !accessToken) {
       setUploadedDocs([]);
       return;
@@ -80,10 +91,14 @@ export default function DocumentsPage() {
     fetchWithAuth(`${API_BASE}/documents/lead/${selectedLead}`)
       .then(r => r.json())
       .then(data => {
+        console.log('Uploaded docs loaded:', data.length, 'items', data);
         const docs = Array.isArray(data) ? data.map(d => d.documentType || d.document_name || d.name) : [];
         setUploadedDocs(docs);
       })
-      .catch(() => setUploadedDocs([]));
+      .catch(err => {
+        console.error('Uploaded docs error:', err);
+        setUploadedDocs([]);
+      });
   }, [selectedLead, accessToken]);
 
   const handleFileUpload = async (documentName, file) => {
