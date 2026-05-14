@@ -15,12 +15,15 @@ const getStatusBorder = (status) => {
 };
 
 export default function PipelinePage() {
-  const { accessToken, refreshAccessToken } = useAuth();
+  const { accessToken, refreshAccessToken, isAdmin } = useAuth();
   const [leads, setLeads] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [editingLead, setEditingLead] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const intervalRef = useRef(null);
 
   const loadData = async () => {
@@ -137,12 +140,162 @@ export default function PipelinePage() {
                     <span className="text-sm text-gray-500">{lead.assignedTo || 'Unassigned'}</span>
                     <StatusBadge status={lead.status} />
                   </div>
+                  {isAdmin && (
+                    <div className="flex gap-2 mt-4 pt-3 border-t">
+                      <button
+                        onClick={() => { setEditingLead(lead); setEditForm({...lead}); }}
+                        className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg text-sm font-semibold hover:bg-blue-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(lead)}
+                        className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg text-sm font-semibold hover:bg-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingLead && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setEditingLead(null)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4">Edit Lead</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  className="w-full border rounded-xl px-4 py-2"
+                  value={editForm.customerName || ''}
+                  onChange={e => setEditForm({...editForm, customerName: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+                <input
+                  type="text"
+                  className="w-full border rounded-xl px-4 py-2"
+                  value={editForm.mobile || ''}
+                  onChange={e => setEditForm({...editForm, mobile: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Loan Type</label>
+                <select
+                  className="w-full border rounded-xl px-4 py-2"
+                  value={editForm.loanType || ''}
+                  onChange={e => setEditForm({...editForm, loanType: e.target.value})}
+                >
+                  <option value="">Select Loan Type</option>
+                  <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option>
+                  <option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Expected Amount</label>
+                <input
+                  type="text"
+                  className="w-full border rounded-xl px-4 py-2"
+                  value={editForm.expectedAmount || ''}
+                  onChange={e => setEditForm({...editForm, expectedAmount: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  className="w-full border rounded-xl px-4 py-2"
+                  value={editForm.status || 'New'}
+                  onChange={e => setEditForm({...editForm, status: e.target.value})}
+                >
+                  <option>New</option><option>Processing</option><option>Assigned</option>
+                  <option>Sanctioned</option><option>Disbursed</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/leads/${editingLead.id}`, {
+                      method: 'PUT',
+                      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        customerName: editForm.customerName,
+                        mobile: editForm.mobile,
+                        loanType: editForm.loanType,
+                        expectedAmount: editForm.expectedAmount,
+                        status: editForm.status
+                      })
+                    });
+                    if (res.ok) {
+                      setLeads(leads.map(l => l.id === editingLead.id ? {...l, ...editForm} : l));
+                      setEditingLead(null);
+                    }
+                  } catch (err) {
+                    setError('Failed to update lead');
+                  }
+                }}
+                className="flex-1 bg-green-600 text-white py-2 rounded-xl font-semibold hover:bg-green-700"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => setEditingLead(null)}
+                className="flex-1 bg-gray-500 text-white py-2 rounded-xl font-semibold hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-2 text-red-600">Delete Lead?</h3>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete <strong>{deleteConfirm.customerName}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/leads/${deleteConfirm.id}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                    if (res.ok) {
+                      setLeads(leads.filter(l => l.id !== deleteConfirm.id));
+                      setDeleteConfirm(null);
+                    }
+                  } catch (err) {
+                    setError('Failed to delete lead');
+                  }
+                }}
+                className="flex-1 bg-red-600 text-white py-2 rounded-xl font-semibold hover:bg-red-700"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 bg-gray-500 text-white py-2 rounded-xl font-semibold hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
