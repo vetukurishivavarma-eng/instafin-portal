@@ -1,108 +1,151 @@
 import express from 'express';
-import { leads, executives } from '../data/store.js';
+import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 
 const router = express.Router();
 
-// Apply authenticate middleware to all routes
 router.use(authenticate);
 
 // GET all leads with search, filter and pagination
-router.get('/', authorize('admin', 'executive', 'dsa'), (req, res) => {
+router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    let filteredLeads = [...leads];
+    let query = supabase.from('leads').select('*', { count: 'exact' });
 
-    // Role-based filtering - non-admin users only see their assigned leads
+    // Role-based filtering
     if (req.user.role !== 'admin') {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.assignedTo === req.user.id || lead.createdBy === req.user.id
-      );
+      query = query.eq('assigned_to', req.user.id);
     }
 
     // Filter by status
     if (req.query.status) {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.status.toLowerCase() === req.query.status.toLowerCase()
-      );
+      query = query.eq('status', req.query.status);
     }
 
     // Filter by loan type
     if (req.query.loanType) {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.loanType.toLowerCase().includes(req.query.loanType.toLowerCase())
-      );
+      query = query.ilike('loan_type', `%${req.query.loanType}%`);
     }
 
-    // Filter by assigned executive name
-    if (req.query.assignedTo) {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.assignedTo && lead.assignedTo.toLowerCase().includes(req.query.assignedTo.toLowerCase())
-      );
-    }
-
-    // Search in customerName and mobile
+    // Search
     if (req.query.search) {
-      const searchTerm = req.query.search.toLowerCase();
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.customerName.toLowerCase().includes(searchTerm) ||
-        lead.mobile.includes(searchTerm)
-      );
+      query = query.or(`customer_name.ilike.%${req.query.search}%,mobile.ilike.%${req.query.search}%`);
     }
 
     // Pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
+    query = query.range(startIndex, startIndex + limit - 1);
 
-    const paginatedLeads = filteredLeads.slice(startIndex, endIndex);
+    // Order by created_at desc
+    query = query.order('created_at', { ascending: false });
+
+    const { data: leads, error, count } = await query;
+
+    if (error) throw error;
+
+    // Map database fields to API response
+    const mappedLeads = leads.map(lead => ({
+      id: lead.id,
+      customerName: lead.customer_name,
+      mobile: lead.mobile,
+      email: lead.email,
+      loanType: lead.loan_type,
+      expectedAmount: lead.expected_amount,
+      assignedBanks: lead.assigned_banks || [],
+      status: lead.status,
+      assignedTo: lead.assigned_to,
+      department: lead.department,
+      priority: lead.priority,
+      followUp: lead.follow_up,
+      remarks: lead.remarks,
+      createdAt: lead.created_at
+    }));
 
     res.json({
-      data: paginatedLeads,
+      data: mappedLeads,
       pagination: {
-        total: filteredLeads.length,
+        total: count,
         page,
         limit,
-        totalPages: Math.ceil(filteredLeads.length / limit)
+        totalPages: Math.ceil(count / limit)
       }
+    });
+  } catch (error) {
+    console.error('Error fetching leads:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET single lead by ID
+router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { data: lead, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Role-based access
+    if (req.user.role !== 'admin' && lead.assigned_to !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    res.json({
+      id: lead.id,
+      customerName: lead.customer_name,
+      mobile: lead.mobile,
+      email: lead.email,
+      loanType: lead.loan_type,
+      expectedAmount: lead.expected_amount,
+      assignedBanks: lead.assigned_banks || [],
+      status: lead.status,
+      assignedTo: lead.assigned_to,
+      department: lead.department,
+      priority: lead.priority,
+      followUp: lead.follow_up,
+      remarks: lead.remarks,
+      createdAt: lead.created_at
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET single lead by ID
-router.get('/:id', authorize('admin', 'executive', 'dsa'), (req, res) => {
+// GET executives list
+router.get('/meta/executives', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    const lead = leads.find(l => l.id === req.params.id);
+    const { data: executives, error } = await supabase
+      .from('executives')
+      .select('*')
+      .eq('active', true)
+      .order('name');
 
-    if (!lead) {
-      return res.status(404).json({ error: 'Lead not found' });
-    }
+    if (error) throw error;
 
-    // Role-based access - non-admin users can only view their assigned leads
-    if (req.user.role !== 'admin' && lead.assignedTo !== req.user.id && lead.createdBy !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    res.json(lead);
+    res.json(executives.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      department: ex.department,
+      active: ex.active
+    })));
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to fetch executives' });
   }
 });
 
-// GET executives list
-router.get('/meta/executives', authorize('admin', 'executive', 'dsa'), (req, res) => {
-  res.json(executives);
-});
-
 // POST create new lead
-router.post('/', authorize('admin', 'executive', 'dsa'), (req, res) => {
+router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
     const {
       customerName,
       mobile,
+      email,
       loanType,
       expectedAmount,
       assignedBanks,
@@ -113,341 +156,197 @@ router.post('/', authorize('admin', 'executive', 'dsa'), (req, res) => {
       remarks
     } = req.body;
 
-    // Validation
     if (!customerName || !mobile) {
       return res.status(400).json({ error: 'Customer name and mobile are required' });
     }
 
-    const newLead = {
-      id: Date.now().toString(),
-      customerName,
-      mobile,
-      loanType: loanType || '',
-      expectedAmount: expectedAmount || '',
-      assignedBanks: assignedBanks || [],
-      status: 'New',
-      assignedTo: null,
-      department: null,
-      priority: 'Medium',
-      followUp: null,
-      // Additional fields
-      aadhaar: aadhaar || '',
-      pan: pan || '',
-      annualIncome: annualIncome || '',
-      businessType: businessType || '',
-      remarks: remarks || '',
-      lastUpdated: new Date().toISOString(),
-      // Track creation
-      createdBy: req.user.id,
-      createdAt: new Date().toISOString(),
-    };
+    const { data: newLead, error } = await supabase
+      .from('leads')
+      .insert({
+        customer_name: customerName,
+        mobile,
+        email: email || null,
+        loan_type: loanType || null,
+        expected_amount: expectedAmount || null,
+        assigned_banks: assignedBanks || [],
+        status: 'New',
+        assigned_to: req.user.role === 'admin' ? null : req.user.id,
+        priority: 'Medium'
+      })
+      .select()
+      .single();
 
-    leads.push(newLead);
-    res.status(201).json(newLead);
+    if (error) throw error;
+
+    res.status(201).json({
+      id: newLead.id,
+      customerName: newLead.customer_name,
+      mobile: newLead.mobile,
+      loanType: newLead.loan_type,
+      status: newLead.status,
+      createdAt: newLead.created_at
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error creating lead:', error);
+    res.status(500).json({ error: 'Failed to create lead' });
   }
 });
 
 // PUT update lead
-router.put('/:id', authorize('admin', 'executive', 'dsa'), (req, res) => {
+router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    const index = leads.findIndex(l => l.id === req.params.id);
+    // Check if lead exists
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('assigned_to, created_by')
+      .eq('id', req.params.id)
+      .single();
 
-    if (index === -1) {
+    if (!existingLead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    // Non-admin users can only update their assigned leads
+    // Role-based access
     if (req.user.role !== 'admin' &&
-        leads[index].assignedTo !== req.user.id &&
-        leads[index].createdBy !== req.user.id) {
+        existingLead.assigned_to !== req.user.id &&
+        existingLead.created_by !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Update lead with new data and set lastUpdated
-    leads[index] = {
-      ...leads[index],
-      ...req.body,
-      lastUpdated: new Date().toISOString()
+    const updateData = {};
+    const fieldMappings = {
+      customerName: 'customer_name',
+      mobile: 'mobile',
+      email: 'email',
+      loanType: 'loan_type',
+      expectedAmount: 'expected_amount',
+      assignedBanks: 'assigned_banks',
+      status: 'status',
+      assignedTo: 'assigned_to',
+      department: 'department',
+      priority: 'priority',
+      followUp: 'follow_up',
+      remarks: 'remarks'
     };
 
-    res.json(leads[index]);
+    Object.keys(fieldMappings).forEach(apiField => {
+      if (req.body[apiField] !== undefined) {
+        updateData[fieldMappings[apiField]] = req.body[apiField];
+      }
+    });
+
+    const { data: updatedLead, error } = await supabase
+      .from('leads')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      id: updatedLead.id,
+      customerName: updatedLead.customer_name,
+      status: updatedLead.status
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PUT assign lead to executive
-router.put('/:id/assign', authorize('admin', 'executive'), (req, res) => {
-  try {
-    const index = leads.findIndex(l => l.id === req.params.id);
-
-    if (index === -1) {
-      return res.status(404).json({ error: 'Lead not found' });
-    }
-
-    // Non-admin users can only assign their own leads
-    if (req.user.role !== 'admin' &&
-        leads[index].assignedTo !== req.user.id &&
-        leads[index].createdBy !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const { assignedTo, department, priority } = req.body;
-
-    leads[index] = {
-      ...leads[index],
-      assignedTo,
-      department,
-      priority,
-      status: 'Assigned',
-      lastUpdated: new Date().toISOString()
-    };
-
-    res.json(leads[index]);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PUT update lead status
-router.put('/:id/status', authorize('admin', 'executive', 'dsa'), (req, res) => {
-  try {
-    const index = leads.findIndex(l => l.id === req.params.id);
-
-    if (index === -1) {
-      return res.status(404).json({ error: 'Lead not found' });
-    }
-
-    const { status } = req.body;
-
-    // Validate status
-    const validStatuses = ['New', 'Processing', 'Assigned', 'Sanctioned', 'Disbursed'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
-
-    leads[index].status = status;
-    leads[index].lastUpdated = new Date().toISOString();
-
-    res.json(leads[index]);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PUT schedule follow-up date
-router.put('/:id/follow-up', authorize('admin', 'executive', 'dsa'), (req, res) => {
-  try {
-    const index = leads.findIndex(l => l.id === req.params.id);
-
-    if (index === -1) {
-      return res.status(404).json({ error: 'Lead not found' });
-    }
-
-    // Non-admin users can only update their assigned leads
-    if (req.user.role !== 'admin' &&
-        leads[index].assignedTo !== req.user.id &&
-        leads[index].createdBy !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const { followUp } = req.body;
-
-    if (!followUp) {
-      return res.status(400).json({ error: 'Follow-up date is required' });
-    }
-
-    leads[index].followUp = followUp;
-    leads[index].lastUpdated = new Date().toISOString();
-
-    res.json(leads[index]);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to update lead' });
   }
 });
 
 // DELETE lead - admin only
-router.delete('/:id', authorize('admin'), (req, res) => {
+router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
-    const index = leads.findIndex(l => l.id === req.params.id);
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', req.params.id);
 
-    if (index === -1) {
-      return res.status(404).json({ error: 'Lead not found' });
-    }
+    if (error) throw error;
 
-    leads.splice(index, 1);
     res.json({ message: 'Lead deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to delete lead' });
   }
 });
 
-// GET dashboard overview stats
-router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), (req, res) => {
+// GET dashboard stats
+router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    let filteredLeads = [...leads];
+    let query = supabase.from('leads').select('status');
 
-    // Non-admin users only see their leads
     if (req.user.role !== 'admin') {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.assignedTo === req.user.id || lead.createdBy === req.user.id
-      );
+      query = query.eq('assigned_to', req.user.id);
     }
 
+    const { data: leads, error } = await query;
+
+    if (error) throw error;
+
     const stats = {
-      totalLeads: filteredLeads.length,
-      newLeads: filteredLeads.filter(l => l.status === 'New').length,
-      processing: filteredLeads.filter(l => l.status === 'Processing').length,
-      assigned: filteredLeads.filter(l => l.status === 'Assigned').length,
-      sanctioned: filteredLeads.filter(l => l.status === 'Sanctioned').length,
-      disbursed: filteredLeads.filter(l => l.status === 'Disbursed').length,
+      totalLeads: leads.length,
+      newLeads: leads.filter(l => l.status === 'New').length,
+      processing: leads.filter(l => l.status === 'Processing').length,
+      assigned: leads.filter(l => l.status === 'Assigned').length,
+      sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
+      disbursed: leads.filter(l => l.status === 'Disbursed').length,
     };
 
     res.json(stats);
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
 
-// GET leads count by status
-router.get('/stats/by-status', authorize('admin', 'executive', 'dsa'), (req, res) => {
+// Status distribution for charts
+router.get('/stats/status-distribution', authenticate, async (req, res) => {
   try {
-    let filteredLeads = [...leads];
+    let query = supabase.from('leads').select('status');
 
-    // Non-admin users only see their leads
     if (req.user.role !== 'admin') {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.assignedTo === req.user.id || lead.createdBy === req.user.id
-      );
+      query = query.eq('assigned_to', req.user.id);
     }
 
-    const statusCounts = {};
-    const statuses = ['New', 'Processing', 'Assigned', 'Sanctioned', 'Disbursed'];
+    const { data: leads, error } = await query;
 
-    statuses.forEach(status => {
-      statusCounts[status] = filteredLeads.filter(l => l.status === status).length;
-    });
+    if (error) throw error;
 
-    res.json(statusCounts);
+    const distribution = {
+      'New': leads.filter(l => l.status === 'New').length,
+      'Processing': leads.filter(l => l.status === 'Processing' || l.status === 'Assigned').length,
+      'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
+      'Disbursed': leads.filter(l => l.status === 'Disbursed').length
+    };
+
+    res.json(distribution);
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to fetch distribution' });
   }
 });
 
-// GET leads count per executive
-router.get('/stats/by-executive', authorize('admin'), (req, res) => {
+// Loan type distribution for charts
+router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
   try {
-    const executiveStats = {};
+    let query = supabase.from('leads').select('loan_type');
 
-    // Initialize with all executives
-    executives.forEach(exec => {
-      executiveStats[exec.name] = {
-        name: exec.name,
-        department: exec.department,
-        total: 0,
-        new: 0,
-        processing: 0,
-        sanctioned: 0,
-        disbursed: 0
-      };
-    });
+    if (req.user.role !== 'admin') {
+      query = query.eq('assigned_to', req.user.id);
+    }
 
-    // Count leads per executive
+    const { data: leads, error } = await query;
+
+    if (error) throw error;
+
+    const loanTypes = {};
     leads.forEach(lead => {
-      if (lead.assignedTo && executiveStats[lead.assignedTo]) {
-        executiveStats[lead.assignedTo].total++;
-        if (lead.status === 'New') executiveStats[lead.assignedTo].new++;
-        if (lead.status === 'Processing') executiveStats[lead.assignedTo].processing++;
-        if (lead.status === 'Sanctioned') executiveStats[lead.assignedTo].sanctioned++;
-        if (lead.status === 'Disbursed') executiveStats[lead.assignedTo].disbursed++;
-      }
+      const type = lead.loan_type || 'Unknown';
+      loanTypes[type] = (loanTypes[type] || 0) + 1;
     });
 
-    res.json(Object.values(executiveStats));
+    res.json(loanTypes);
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to fetch loan types' });
   }
-});
-
-// GET bank-wise stats (legacy endpoint)
-router.get('/stats/bank-wise', authorize('admin', 'executive', 'dsa'), (req, res) => {
-  try {
-    let filteredLeads = [...leads];
-
-    // Non-admin users only see their leads
-    if (req.user.role !== 'admin') {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.assignedTo === req.user.id || lead.createdBy === req.user.id
-      );
-    }
-
-    const bankStats = {};
-
-    filteredLeads.forEach(lead => {
-      lead.assignedBanks.forEach(bank => {
-        if (!bankStats[bank]) {
-          bankStats[bank] = { bank, assigned: 0, processing: 0, sanctioned: 0, disbursed: 0 };
-        }
-        bankStats[bank].assigned++;
-        if (lead.status === 'Processing') bankStats[bank].processing++;
-        if (lead.status === 'Sanctioned') bankStats[bank].sanctioned++;
-        if (lead.status === 'Disbursed') bankStats[bank].disbursed++;
-      });
-    });
-
-    res.json(Object.values(bankStats));
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// GET dashboard stats (legacy endpoint)
-router.get('/stats/dashboard', authorize('admin', 'executive', 'dsa'), (req, res) => {
-  try {
-    let filteredLeads = [...leads];
-
-    // Non-admin users only see their leads
-    if (req.user.role !== 'admin') {
-      filteredLeads = filteredLeads.filter(lead =>
-        lead.assignedTo === req.user.id || lead.createdBy === req.user.id
-      );
-    }
-
-    const stats = {
-      totalLeads: filteredLeads.length,
-      freshLeads: filteredLeads.filter(l => l.status === 'New').length,
-      processing: filteredLeads.filter(l => l.status === 'Processing').length,
-      sanctioned: filteredLeads.filter(l => l.status === 'Sanctioned').length,
-      disbursed: filteredLeads.filter(l => l.status === 'Disbursed').length,
-    };
-
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get status distribution for pie chart
-router.get('/stats/status-distribution', authenticate, (req, res) => {
-  const distribution = {
-    'New': leads.filter(l => l.status === 'New' || l.status === 'fresh').length,
-    'Processing': leads.filter(l => l.status === 'Processing' || l.status === 'Assigned').length,
-    'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
-    'Disbursed': leads.filter(l => l.status === 'Disbursed').length
-  };
-  res.json(distribution);
-});
-
-// Get loan type distribution for bar chart
-router.get('/stats/loan-type-distribution', authenticate, (req, res) => {
-  const loanTypes = {};
-  leads.forEach(lead => {
-    const type = lead.loanType || 'Unknown';
-    loanTypes[type] = (loanTypes[type] || 0) + 1;
-  });
-  res.json(loanTypes);
 });
 
 export default router;

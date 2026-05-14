@@ -3,19 +3,17 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { documentTypes, leadDocuments, leads } from '../data/store.js';
+import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 
 const router = express.Router();
 
-// Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -28,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'application/pdf',
@@ -41,16 +39,15 @@ const upload = multer({
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only PDF, JPEG, PNG, and Word documents are allowed.'));
+      cb(new Error('Invalid file type'));
     }
   },
 });
 
-// Apply authenticate middleware to all routes
 router.use(authenticate);
 
-// GET /api/documents/checklist?loanType=<type> - Get required documents for a loan type
-router.get('/checklist', authorize('admin', 'executive', 'dsa'), (req, res) => {
+// GET /api/documents/checklist?loanType=<type>
+router.get('/checklist', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
     const { loanType } = req.query;
 
@@ -58,191 +55,165 @@ router.get('/checklist', authorize('admin', 'executive', 'dsa'), (req, res) => {
       return res.status(400).json({ error: 'loanType parameter is required' });
     }
 
-    const checklist = documentTypes[loanType];
+    const { data: docTypes, error } = await supabase
+      .from('document_types')
+      .select('*')
+      .eq('loan_type', loanType);
 
-    if (!checklist) {
-      return res.status(404).json({
-        error: 'Loan type not found',
-        availableTypes: Object.keys(documentTypes),
-      });
-    }
+    if (error) throw error;
 
-    res.json(checklist);
+    res.json(docTypes.map(d => ({
+      name: d.name,
+      category: d.category,
+      required: d.required
+    })));
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/documents/upload - Upload document (leadId, documentName, file)
-router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('file'), (req, res) => {
+// POST /api/documents/upload
+router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('file'), async (req, res) => {
   try {
-    const { leadId, documentName } = req.body;
+    const { leadId, documentType } = req.body;
 
     if (!leadId) {
       return res.status(400).json({ error: 'leadId is required' });
     }
 
-    if (!documentName) {
-      return res.status(400).json({ error: 'documentName is required' });
+    if (!documentType) {
+      return res.status(400).json({ error: 'documentType is required' });
     }
 
     // Check if lead exists
-    const lead = leads.find(l => l.id === leadId);
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', leadId)
+      .single();
+
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'File is required' });
+    let fileName = null;
+    let filePath = null;
+
+    if (req.file) {
+      fileName = req.file.originalname;
+      filePath = req.file.filename;
     }
 
-    // Determine category based on document name
-    let category = 'Other';
-    const loanType = lead.loanType;
-    const docTypes = documentTypes[loanType] || [];
-    const docType = docTypes.find(d => d.name === documentName);
-    if (docType) {
-      category = docType.category;
-    }
+    const { data: newDoc, error } = await supabase
+      .from('lead_documents')
+      .insert({
+        lead_id: leadId,
+        document_type: documentType,
+        file_name: fileName,
+        file_path: filePath
+      })
+      .select()
+      .single();
 
-    const newDocument = {
-      id: uuidv4(),
-      leadId,
-      documentName,
-      category,
-      fileName: req.file.originalname,
-      filePath: req.file.filename,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      status: 'pending',
-      uploadedBy: req.user.id,
-      uploadedAt: new Date().toISOString(),
-      verifiedAt: null,
-      remarks: '',
-    };
+    if (error) throw error;
 
-    leadDocuments.push(newDocument);
-    res.status(201).json(newDocument);
+    res.status(201).json({
+      id: newDoc.id,
+      leadId: newDoc.lead_id,
+      documentType: newDoc.document_type,
+      fileName: newDoc.file_name,
+      uploadedAt: newDoc.uploaded_at
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload document' });
   }
 });
 
-// GET /api/documents/lead/:leadId - Get all documents for a lead
-router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), (req, res) => {
+// GET /api/documents/lead/:leadId
+router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
-    // Check if lead exists
-    const lead = leads.find(l => l.id === leadId);
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', leadId)
+      .single();
+
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    // Filter documents for this lead
-    const documents = leadDocuments.filter(d => d.leadId === leadId);
+    const { data: documents, error } = await supabase
+      .from('lead_documents')
+      .select('*')
+      .eq('lead_id', leadId);
 
-    res.json(documents);
+    if (error) throw error;
+
+    res.json(documents.map(d => ({
+      id: d.id,
+      leadId: d.lead_id,
+      documentType: d.document_type,
+      fileName: d.file_name,
+      uploadedAt: d.uploaded_at
+    })));
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
+// GET /api/documents/:id
+router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { data: document, error } = await supabase
+      .from('lead_documents')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.json({
+      id: document.id,
+      leadId: document.lead_id,
+      documentType: document.document_type,
+      fileName: document.file_name
+    });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/documents/:id - Get single document
-router.get('/:id', authorize('admin', 'executive', 'dsa'), (req, res) => {
+// DELETE /api/documents/:id
+router.delete('/:id', authorize('admin', 'executive'), async (req, res) => {
   try {
-    const document = leadDocuments.find(d => d.id === req.params.id);
+    const { data: doc } = await supabase
+      .from('lead_documents')
+      .select('file_path')
+      .eq('id', req.params.id)
+      .single();
 
-    if (!document) {
-      return res.status(404).json({ error: 'Document not found' });
+    if (doc && doc.file_path) {
+      const filePath = path.join(uploadsDir, doc.file_path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
 
-    res.json(document);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+    const { error } = await supabase
+      .from('lead_documents')
+      .delete()
+      .eq('id', req.params.id);
 
-// DELETE /api/documents/:id - Delete document
-router.delete('/:id', authorize('admin', 'executive'), (req, res) => {
-  try {
-    const index = leadDocuments.findIndex(d => d.id === req.params.id);
-
-    if (index === -1) {
-      return res.status(404).json({ error: 'Document not found' });
-    }
-
-    const document = leadDocuments[index];
-
-    // Delete the file from filesystem
-    const filePath = path.join(uploadsDir, document.filePath);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    // Remove from array
-    leadDocuments.splice(index, 1);
+    if (error) throw error;
 
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PUT /api/documents/:id/status - Update document status
-router.put('/:id/status', authorize('admin', 'executive'), (req, res) => {
-  try {
-    const index = leadDocuments.findIndex(d => d.id === req.params.id);
-
-    if (index === -1) {
-      return res.status(404).json({ error: 'Document not found' });
-    }
-
-    const { status, remarks } = req.body;
-
-    // Validate status
-    const validStatuses = ['pending', 'submitted', 'verified', 'rejected'];
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({
-        error: 'Invalid status',
-        validStatuses,
-      });
-    }
-
-    leadDocuments[index].status = status;
-
-    if (status === 'verified') {
-      leadDocuments[index].verifiedAt = new Date().toISOString();
-    }
-
-    if (remarks !== undefined) {
-      leadDocuments[index].remarks = remarks;
-    }
-
-    res.json(leadDocuments[index]);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// GET /api/documents/download/:id - Download document file
-router.get('/download/:id', authorize('admin', 'executive', 'dsa'), (req, res) => {
-  try {
-    const document = leadDocuments.find(d => d.id === req.params.id);
-
-    if (!document) {
-      return res.status(404).json({ error: 'Document not found' });
-    }
-
-    const filePath = path.join(uploadsDir, document.filePath);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found on server' });
-    }
-
-    res.download(filePath, document.fileName);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to delete document' });
   }
 });
 

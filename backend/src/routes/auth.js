@@ -1,9 +1,8 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { users, refreshTokens } from '../data/users.js';
+import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
-import crypto from 'crypto';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'instafin-dev-secret-2024';
@@ -33,7 +32,14 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
-    if (users.find(u => u.email === email)) {
+    // Check if user exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
       return res.status(400).json({ error: 'Email already exists' });
     }
 
@@ -43,22 +49,20 @@ router.post('/register', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const newUser = {
-      id: crypto.randomUUID(),
-      name,
-      email,
-      passwordHash,
-      role
-    };
+    const { data: newUser, error } = await supabase
+      .from('users')
+      .insert({ name, email, password: passwordHash, role })
+      .select()
+      .single();
 
-    users.push(newUser);
+    if (error) throw error;
 
     const { accessToken, refreshToken } = generateTokens(newUser);
-    refreshTokens.push(refreshToken);
 
     const userResponse = { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role };
     res.status(201).json({ user: userResponse, accessToken, refreshToken });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -72,54 +76,53 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = users.find(u => u.email === email);
-    if (!user) {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error || !user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const { accessToken, refreshToken } = generateTokens(user);
-    refreshTokens.push(refreshToken);
 
     const userResponse = { id: user.id, name: user.name, email: user.email, role: user.role };
     res.json({ user: userResponse, accessToken, refreshToken });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
 // POST /api/auth/refresh
-router.post('/refresh', (req, res) => {
+router.post('/refresh', async (req, res) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
     return res.status(400).json({ error: 'Refresh token is required' });
   }
 
-  if (!refreshTokens.includes(refreshToken)) {
-    return res.status(401).json({ error: 'Invalid refresh token' });
-  }
-
   try {
     const decoded = jwt.verify(refreshToken, JWT_SECRET);
-    const user = users.find(u => u.id === decoded.id);
 
-    if (!user) {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', decoded.id)
+      .single();
+
+    if (error || !user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Remove old refresh token
-    const index = refreshTokens.indexOf(refreshToken);
-    refreshTokens.splice(index, 1);
-
-    // Generate new tokens
     const tokens = generateTokens(user);
-    refreshTokens.push(tokens.refreshToken);
-
     res.json({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired refresh token' });
@@ -128,29 +131,53 @@ router.post('/refresh', (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(400).json({ error: 'Refresh token is required' });
-  }
-
-  const index = refreshTokens.indexOf(refreshToken);
-  if (index > -1) {
-    refreshTokens.splice(index, 1);
-  }
-
   res.json({ message: 'Logged out successfully' });
 });
 
 // GET /api/auth/me
-router.get('/me', authenticate, (req, res) => {
-  const user = users.find(u => u.id === req.user.id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, name, email, role')
+      .eq('id', req.user.id)
+      .single();
 
-  const userResponse = { id: user.id, name: user.name, email: user.email, role: user.role };
-  res.json(userResponse);
+    if (error || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// POST /api/auth/request-access (for signup modal)
+router.post('/request-access', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    const { error } = await supabase
+      .from('access_requests')
+      .insert({ name, email, password });
+
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(400).json({ error: 'Email already has a pending request' });
+      }
+      throw error;
+    }
+
+    res.status(201).json({ message: 'Access request submitted. Admin will review it.' });
+  } catch (error) {
+    console.error('Access request error:', error);
+    res.status(500).json({ error: 'Failed to submit access request' });
+  }
 });
 
 export default router;
