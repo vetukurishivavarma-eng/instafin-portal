@@ -235,25 +235,29 @@ router.post('/process', authorize('admin'), async (req, res) => {
         try {
           const insertData = {};
 
-          // Map fields
-          if (lead.customerName || lead.Customer_Name) insertData.customer_name = lead.customerName || lead.Customer_Name;
+          // Map fields - handle various Excel column name formats
+          if (lead.customerName || lead.Customer_Name || lead['CUSTOMER NAME']) insertData.customer_name = lead.customerName || lead.Customer_Name || lead['CUSTOMER NAME'];
           if (lead.mobile || lead.Mobile || lead['Mobile No']) insertData.mobile = (lead.mobile || lead.Mobile || lead['Mobile No']).toString();
           if (lead.email || lead.Email) insertData.email = lead.email || lead.Email;
-          if (lead.loanType || lead['Loan Type']) insertData.loan_type = lead.loanType || lead['Loan Type'];
+          if (lead.loanType || lead['Loan Type'] || lead['Loan Type']) insertData.loan_type = lead.loanType || lead['Loan Type'] || lead['Loan Type'];
           if (lead.expectedAmount || lead['Expected Amount']) insertData.expected_amount = lead.expectedAmount || lead['Expected Amount'];
-          if (lead.status || lead.Status) insertData.status = lead.status || lead.Status || 'New';
+          insertData.status = 'New';
 
           insertData.created_at = new Date().toISOString();
 
+          console.log('Inserting lead:', insertData);
+
           const { error } = await supabase.from('leads').insert(insertData);
 
+          console.log('Insert result:', error);
+
           if (error) {
-            results.errors.push({ lead: lead.customerName || lead.mobile, error: error.message });
+            results.errors.push({ lead: insertData.customer_name || insertData.mobile, error: error.message });
           } else {
             results.inserted++;
           }
         } catch (e) {
-          results.errors.push({ lead: lead.customerName || lead.mobile, error: e.message });
+          results.errors.push({ lead: insertData?.customer_name || lead.mobile, error: e.message });
         }
       }
     }
