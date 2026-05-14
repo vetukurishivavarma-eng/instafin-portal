@@ -117,11 +117,15 @@ router.post('/preview', authorize('admin'), upload.single('file'), async (req, r
     const existingLeads = [];
     const changes = [];
 
+    console.log('Data rows:', JSON.stringify(data, null, 2));
+
     for (const row of data) {
       const mobile = row.mobile || row.Mobile || row['Mobile No'];
+      console.log('Processing row with mobile:', mobile);
 
       if (!mobile) {
-        continue; // Skip rows without mobile
+        console.log('Skipping row - no mobile');
+        continue;
       }
 
       // Check if lead exists
@@ -130,6 +134,8 @@ router.post('/preview', authorize('admin'), upload.single('file'), async (req, r
         .select('*')
         .eq('mobile', mobile.toString())
         .single();
+
+      console.log('Existing lead found:', existing ? existing.id : 'none');
 
       if (!existing) {
         // New lead
