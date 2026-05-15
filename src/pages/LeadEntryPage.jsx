@@ -11,6 +11,7 @@ export default function LeadEntryPage() {
     mobile: '',
     loanType: '',
     expectedAmount: '',
+    referralCode: '',
     assignedBanks: []
   });
   const [assignData, setAssignData] = useState({
@@ -129,7 +130,7 @@ export default function LeadEntryPage() {
       setCreatedLead(lead);
       setSuccess(`Lead created! ID: ${lead.id}`);
       loadLeads();
-      setFormData({ customerName: '', mobile: '', loanType: '', expectedAmount: '', assignedBanks: [] });
+      setFormData({ customerName: '', mobile: '', loanType: '', expectedAmount: '', referralCode: '', assignedBanks: [] });
       setFieldErrors({});
     } catch (err) {
       setError('Failed to create lead');
@@ -266,7 +267,7 @@ export default function LeadEntryPage() {
                 onChange={(e) => { setFormData(p => ({ ...p, loanType: e.target.value })); setFieldErrors(prev => ({ ...prev, loanType: '' })); }}
               >
                 <option value="">Select Loan Type *</option>
-                <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option>
+                <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option><option>Education Loan</option>
               </select>
               {fieldErrors.loanType && <p className="text-red-500 text-sm mt-1">{fieldErrors.loanType}</p>}
             </div>
@@ -279,6 +280,15 @@ export default function LeadEntryPage() {
                 onChange={handleAmountChange}
               />
               {fieldErrors.expectedAmount && <p className="text-red-500 text-sm mt-1">{fieldErrors.expectedAmount}</p>}
+            </div>
+            <div>
+              <input
+                type="text"
+                placeholder="Referral Code (Optional)"
+                className="border rounded-2xl px-4 py-3 w-full"
+                value={formData.referralCode || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, referralCode: e.target.value.toUpperCase() }))}
+              />
             </div>
           </div>
 

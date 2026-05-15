@@ -167,7 +167,7 @@ export default function DocumentsPage() {
               disabled={!!(selectedLead && selectedLoan)}
             >
               <option value="">Select Loan Type</option>
-              <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option>
+              <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option><option>Education Loan</option>
             </select>
             {selectedLead && (
               <button
