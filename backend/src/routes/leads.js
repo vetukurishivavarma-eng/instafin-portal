@@ -161,24 +161,51 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       return res.status(400).json({ error: 'Customer name and mobile are required' });
     }
 
+    // Build insert object - conditionally include referral_code
+    const insertData = {
+      customer_name: customerName,
+      mobile,
+      email: email || null,
+      loan_type: loanType || null,
+      expected_amount: expectedAmount || null,
+      assigned_banks: assignedBanks || [],
+      status: 'New',
+      assigned_to: req.user.role === 'admin' ? null : req.user.id,
+      priority: 'Medium'
+    };
+
+    // Only add referral_code if it's provided (to handle missing column gracefully)
+    if (referralCode) {
+      insertData.referral_code = referralCode;
+    }
+
     const { data: newLead, error } = await supabase
       .from('leads')
-      .insert({
-        customer_name: customerName,
-        mobile,
-        email: email || null,
-        loan_type: loanType || null,
-        expected_amount: expectedAmount || null,
-        referral_code: referralCode || null,
-        assigned_banks: assignedBanks || [],
-        status: 'New',
-        assigned_to: req.user.role === 'admin' ? null : req.user.id,
-        priority: 'Medium'
-      })
+      .insert(insertData)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // If referral_code column doesn't exist, retry without it
+      if (error.code === 'PGRST204' && error.message.includes('referral_code')) {
+        delete insertData.referral_code;
+        const { data: retryLead, error: retryError } = await supabase
+          .from('leads')
+          .insert(insertData)
+          .select()
+          .single();
+        if (retryError) throw retryError;
+        return res.status(201).json({
+          id: retryLead.id,
+          customerName: retryLead.customer_name,
+          mobile: retryLead.mobile,
+          loanType: retryLead.loan_type,
+          status: retryLead.status,
+          createdAt: retryLead.created_at
+        });
+      }
+      throw error;
+    }
 
     res.status(201).json({
       id: newLead.id,
