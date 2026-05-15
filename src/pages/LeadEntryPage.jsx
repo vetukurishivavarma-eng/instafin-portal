@@ -127,8 +127,12 @@ export default function LeadEntryPage() {
         body: JSON.stringify(formData),
       });
       const lead = await res.json();
+      if (!res.ok) {
+        setError(lead.error || 'Failed to create lead');
+        return;
+      }
       setCreatedLead(lead);
-      setSuccess(`Lead created! ID: ${lead.id}`);
+      setSuccess(`Lead created successfully!`);
       loadLeads();
       setFormData({ customerName: '', mobile: '', loanType: '', expectedAmount: '', referralCode: '', assignedBanks: [] });
       setFieldErrors({});
