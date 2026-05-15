@@ -169,7 +169,6 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         email: email || null,
         loan_type: loanType || null,
         expected_amount: expectedAmount || null,
-        referral_code: referralCode || null,
         assigned_banks: assignedBanks || [],
         status: 'New',
         assigned_to: req.user.role === 'admin' ? null : req.user.id,
