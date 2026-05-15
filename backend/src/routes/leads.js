@@ -388,4 +388,60 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
   }
 });
 
+// PUT /api/leads/:id/assign - Assign lead to executive
+router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { assignedTo, department, priority } = req.body;
+
+    if (!assignedTo) {
+      return res.status(400).json({ error: 'Executive name is required' });
+    }
+
+    // First, find the executive by name to get their ID
+    const { data: executive } = await supabase
+      .from('executives')
+      .select('id, name, department')
+      .eq('name', assignedTo)
+      .single();
+
+    if (!executive) {
+      // If executive not found in DB, just store the name directly
+      const { data: updatedLead, error } = await supabase
+        .from('leads')
+        .update({
+          assigned_to: assignedTo,
+          department: department || executive?.department,
+          priority: priority || 'Medium',
+          status: 'Assigned'
+        })
+        .eq('id', req.params.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json({ message: 'Lead assigned', lead: updatedLead });
+    }
+
+    // If executive found, use their ID
+    const { data: updatedLead, error } = await supabase
+      .from('leads')
+      .update({
+        assigned_to: executive.id,
+        department: department || executive.department,
+        priority: priority || 'Medium',
+        status: 'Assigned'
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ message: 'Lead assigned', lead: updatedLead });
+  } catch (error) {
+    console.error('Assign error:', error);
+    res.status(500).json({ error: 'Failed to assign lead' });
+  }
+});
+
 export default router;
