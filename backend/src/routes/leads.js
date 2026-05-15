@@ -34,7 +34,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     // Pagination
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 100;
     const startIndex = (page - 1) * limit;
     query = query.range(startIndex, startIndex + limit - 1);
 
