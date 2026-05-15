@@ -32,11 +32,15 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       query = query.or(`customer_name.ilike.%${req.query.search}%,mobile.ilike.%${req.query.search}%`);
     }
 
-    // Pagination
+    // Pagination - allow client to specify page and limit
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 100;
-    const startIndex = (page - 1) * limit;
-    query = query.range(startIndex, startIndex + limit - 1);
+    const limit = req.query.limit ? parseInt(req.query.limit) : null; // No default limit - return all if not specified
+
+    // Only apply pagination if limit is explicitly provided
+    if (limit) {
+      const startIndex = (page - 1) * limit;
+      query = query.range(startIndex, startIndex + limit - 1);
+    }
 
     // Order by created_at desc
     query = query.order('created_at', { ascending: false });
@@ -63,15 +67,19 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       createdAt: lead.created_at
     }));
 
-    res.json({
-      data: mappedLeads,
-      pagination: {
+    // Build response - include pagination only if limit was specified
+    const response = { data: mappedLeads };
+    if (limit) {
+      response.pagination = {
         total: count,
         page,
         limit,
         totalPages: Math.ceil(count / limit)
-      }
-    });
+      };
+    } else {
+      response.total = count;
+    }
+    res.json(response);
   } catch (error) {
     console.error('Error fetching leads:', error);
     res.status(500).json({ error: 'Internal server error' });
