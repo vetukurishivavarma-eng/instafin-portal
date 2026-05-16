@@ -350,5 +350,66 @@ export const DECISION_TREE: DecisionTree = {
   ],
 };
 
+// ============ COMMON CHECKLIST - Applied to ALL loan types ============
+
+// Financial Documents - as per user requirement
+const commonFinancialDocs = {
+  aadhaarAll: createChecklistItem('fin_aadhaar_all', 'Aadhar Card (All Director)', 'financial_documents'),
+  panAll: createChecklistItem('fin_pan_all', 'Pan Card (All Director)', 'financial_documents'),
+  presentAddress: createChecklistItem('fin_present_addr', 'Present Address Proof', 'financial_documents'),
+  individualIT3: createChecklistItem('fin_ind_it3', 'Individual IT Returns (Last 3 years)', 'financial_documents'),
+  individualSavings1: createChecklistItem('fin_ind_savings1', 'Individual Savings Account Statement (Last 1 year)', 'financial_documents'),
+  firmIT3: createChecklistItem('fin_firm_it3', 'Firm IT Returns (Last 3 years)', 'financial_documents'),
+  firmCurrent1: createChecklistItem('fin_firm_current1', 'Firm Current Account Statement (Last 1 year)', 'financial_documents'),
+  latestProvisional: createChecklistItem('fin_latest_prov', 'Latest Provisional (if any)', 'financial_documents'),
+  gstRegCert: createChecklistItem('fin_gst_reg', 'GST Registration Certificate', 'financial_documents'),
+  gstReturns1: createChecklistItem('fin_gst_returns1', 'GST Returns (Last 1 year)', 'financial_documents'),
+  udyamCert: createChecklistItem('fin_udyam', 'Udyam Registration Certificate', 'financial_documents'),
+  regAoaMoa: createChecklistItem('fin_reg_aoa_moa', 'Registration Certificate, AOA, MOA (Pvt Ltd)', 'financial_documents'),
+  loanSanction: createChecklistItem('fin_loan_sanction', 'Loan Sanction Letters (if any)', 'financial_documents'),
+  loanStatements1: createChecklistItem('fin_loan_stmt1', 'Loan Account Statements Last 1 year (if any)', 'financial_documents'),
+};
+
+// Legal Documents - as per user requirement
+const commonLegalDocs = {
+  saleDeed: createChecklistItem('legal_sale_deed', 'Sale Deed', 'legal_documents'),
+  linkDocs: createChecklistItem('legal_link_docs', 'Link Documents', 'legal_documents'),
+  propertyTax: createChecklistItem('legal_prop_tax', 'Property Tax', 'legal_documents'),
+  planProceeding: createChecklistItem('legal_plan_proceeding', 'Plan and Proceeding Copy', 'legal_documents'),
+  currentBill: createChecklistItem('legal_current_bill', 'Current Bill', 'legal_documents'),
+};
+
+// Others - as per user requirement
+const commonOthers = {
+  photos3: createChecklistItem('others_photos3', '3 Photos', 'others'),
+};
+
+// Common checklist for all loan types
+export const COMMON_CHECKLIST: ChecklistItem[] = [
+  // FINANCIAL DOCUMENTS section
+  commonFinancialDocs.aadhaarAll,
+  commonFinancialDocs.panAll,
+  commonFinancialDocs.presentAddress,
+  commonFinancialDocs.individualIT3,
+  commonFinancialDocs.individualSavings1,
+  commonFinancialDocs.firmIT3,
+  commonFinancialDocs.firmCurrent1,
+  commonFinancialDocs.latestProvisional,
+  commonFinancialDocs.gstRegCert,
+  commonFinancialDocs.gstReturns1,
+  commonFinancialDocs.udyamCert,
+  commonFinancialDocs.regAoaMoa,
+  commonFinancialDocs.loanSanction,
+  commonFinancialDocs.loanStatements1,
+  // LEGAL DOCUMENTS section
+  commonLegalDocs.saleDeed,
+  commonLegalDocs.linkDocs,
+  commonLegalDocs.propertyTax,
+  commonLegalDocs.planProceeding,
+  commonLegalDocs.currentBill,
+  // OTHERS section
+  commonOthers.photos3,
+];
+
 // Export all checklists for reference
 export const ALL_CHECKLIST_COMBINATIONS = Object.keys(DECISION_TREE);

@@ -24,7 +24,8 @@ export type DocumentCategory =
   | 'business_documents'
   | 'property_documents'
   | 'financial_documents'
-  | 'legal_documents';
+  | 'legal_documents'
+  | 'others';
 
 // Selection object - user selections in the decision tree
 export interface Selection {

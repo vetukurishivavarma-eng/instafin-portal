@@ -5,7 +5,7 @@
  */
 
 import { Selection, ChecklistItem, ChecklistKey } from '../data/types';
-import { DECISION_TREE } from '../data/checklists';
+import { DECISION_TREE, COMMON_CHECKLIST } from '../data/checklists';
 
 // Memoization cache - singleton to persist across calls
 const checklistCache: Map<string, ChecklistItem[]> = new Map();
@@ -107,9 +107,11 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
   }
 
   // Look up in decision tree
-  const checklist = DECISION_TREE[key];
+  // For now, return the common checklist for all valid selections
+  // This gives users the full document list regardless of loan type
+  const checklist = COMMON_CHECKLIST;
 
-  if (!checklist) {
+  if (!checklist || checklist.length === 0) {
     // Return empty array if no matching checklist found
     return [];
   }

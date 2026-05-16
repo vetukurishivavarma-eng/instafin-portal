@@ -15,8 +15,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   income_proof: 'Income Proof',
   business_documents: 'Business Documents',
   property_documents: 'Property Documents',
-  financial_documents: 'Financial Documents',
-  legal_documents: 'Legal Documents',
+  financial_documents: 'FINANCIAL DOCUMENTS',
+  legal_documents: 'LEGAL DOCUMENTS',
+  others: 'OTHERS',
 };
 
 const CATEGORY_ORDER = [
@@ -26,6 +27,7 @@ const CATEGORY_ORDER = [
   'property_documents',
   'financial_documents',
   'legal_documents',
+  'others',
 ];
 
 const ChecklistDisplay: React.FC<ChecklistDisplayProps> = ({ items }) => {
