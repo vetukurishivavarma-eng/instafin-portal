@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Selection, LoanType, LoanStatus, IncomeSource, ResidentType, BusinessType, ChecklistItem } from '../checklist-spec';
 import DropdownStep from './DropdownStep';
 import ChecklistDisplay from './ChecklistDisplay';
+import { getChecklist } from '../utils/resolver';
 
 // Loan type options
 const LOAN_TYPE_OPTIONS = [
@@ -40,19 +41,6 @@ const BUSINESS_TYPE_OPTIONS = [
   { value: 'pvt_ltd', label: 'Pvt Ltd' },
   { value: 'llp', label: 'LLP' },
 ];
-
-// Placeholder for getChecklist - will be imported from utils/resolver when available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let getChecklist: ((selection: Selection) => ChecklistItem[]) | undefined;
-
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const resolver = require('../utils/resolver');
-  getChecklist = resolver.getChecklist;
-} catch {
-  // getChecklist will be undefined if resolver doesn't exist yet
-  console.warn('utils/resolver not found - checklist will be empty until resolver is created');
-}
 
 const ChecklistPage: React.FC = () => {
   const [selection, setSelection] = useState<Selection>({
@@ -124,10 +112,8 @@ const ChecklistPage: React.FC = () => {
 
   // Update checklist when selection changes
   useEffect(() => {
-    if (getChecklist) {
-      const items = getChecklist(selection);
-      setChecklistItems(items);
-    }
+    const items = getChecklist(selection);
+    setChecklistItems(items);
   }, [selection]);
 
   const handleSelectionChange = (key: keyof Selection, value: string) => {
