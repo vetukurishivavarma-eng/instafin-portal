@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Selection, LoanType, LoanStatus, IncomeSource, ResidentType, BusinessType, ChecklistItem } from '../checklist-spec';
 import DropdownStep from './DropdownStep';
 import ChecklistDisplay from './ChecklistDisplay';
+import ActionBar from './ActionBar';
 import { getChecklist } from '../utils/resolver';
 
 // Loan type options
@@ -232,6 +233,7 @@ const ChecklistPage: React.FC = () => {
               Required Documents
             </h2>
             <ChecklistDisplay items={checklistItems} />
+            <ActionBar selection={selection} items={checklistItems} />
           </div>
         )}
       </div>
