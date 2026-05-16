@@ -392,6 +392,9 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
 router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
   try {
     const { assignedTo, department, priority } = req.body;
+    const leadId = req.params.id;
+
+    console.log('Assign request - leadId:', leadId, 'assignedTo:', assignedTo);
 
     if (!assignedTo) {
       return res.status(400).json({ error: 'Executive name is required' });
@@ -404,13 +407,15 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
       .eq('name', assignedTo)
       .single();
 
+    console.log('Executive found:', executive);
+
     if (!executive) {
       // If executive not found in DB, just store the name directly
       const { data: updatedLead, error } = await supabase
         .from('leads')
         .update({
           assigned_to: assignedTo,
-          department: department || executive?.department,
+          department: department || null,
           priority: priority || 'Medium',
           status: 'Assigned'
         })
