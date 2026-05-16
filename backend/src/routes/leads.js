@@ -325,7 +325,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     const stats = {
       totalLeads: leads.length,
       newLeads: leads.filter(l => l.status === 'New').length,
-      processing: leads.filter(l => l.status === 'Processing').length,
+      processing: leads.filter(l => l.status === 'Processing' || l.status === 'Assigned').length,
       assigned: leads.filter(l => l.status === 'Assigned').length,
       sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
       disbursed: leads.filter(l => l.status === 'Disbursed').length,
