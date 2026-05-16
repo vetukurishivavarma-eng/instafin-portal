@@ -431,7 +431,7 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
     const { data: updatedLead, error } = await supabase
       .from('leads')
       .update({
-        assigned_to: executive.id,
+        assigned_to: executive.name,
         department: department || executive.department,
         priority: priority || 'Medium',
         status: 'Assigned'
