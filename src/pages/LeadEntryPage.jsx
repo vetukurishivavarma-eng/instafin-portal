@@ -151,7 +151,7 @@ export default function LeadEntryPage() {
 
     setLoading(true);
     try {
-      await fetch(`${API_BASE}/leads/${createdLead.id}/assign`, {
+      const res = await fetch(`${API_BASE}/leads/${createdLead.id}/assign`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -159,6 +159,14 @@ export default function LeadEntryPage() {
         },
         body: JSON.stringify(assignData),
       });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to assign');
+        setLoading(false);
+        return;
+      }
+
       setSuccess('Executive assigned!');
       setCreatedLead(null);
       setAssignData({ assignedTo: '', department: '', priority: 'Medium' });
@@ -177,7 +185,7 @@ export default function LeadEntryPage() {
     }
     setLoading(true);
     try {
-      await fetch(`${API_BASE}/leads/${leadId}/assign`, {
+      const res = await fetch(`${API_BASE}/leads/${leadId}/assign`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -185,6 +193,14 @@ export default function LeadEntryPage() {
         },
         body: JSON.stringify(assignData),
       });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to assign');
+        setLoading(false);
+        return;
+      }
+
       setSuccess('Executive assigned!');
       setSelectedLead(null);
       setAssignData({ assignedTo: '', department: '', priority: 'Medium' });
