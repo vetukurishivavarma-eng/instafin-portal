@@ -104,18 +104,23 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
     let filePath;
 
     if (process.env.NODE_ENV === 'production') {
-      // Production: upload to Supabase Storage
-      const fileBuffer = fs.readFileSync(req.file.path);
-      const storagePath = `${leadId}/${uuidv4()}-${req.file.originalname}`;
-      const { data, error } = await supabase.storage
-        .from('lead-documents')
-        .upload(storagePath, fileBuffer, { contentType: req.file.mimetype });
+      // Production: try Supabase Storage, fall back to local if it fails
+      try {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const storagePath = `${leadId}/${uuidv4()}-${req.file.originalname}`;
+        const { data, error } = await supabase.storage
+          .from('lead-documents')
+          .upload(storagePath, fileBuffer, { contentType: req.file.mimetype });
 
-      if (error) throw error;
-      filePath = storagePath;
+        if (error) throw error;
+        filePath = storagePath;
 
-      // Clean up local temp file
-      fs.unlinkSync(req.file.path);
+        // Clean up local temp file
+        fs.unlinkSync(req.file.path);
+      } catch (storageErr) {
+        console.warn('Supabase Storage upload failed, using local storage:', storageErr.message);
+        filePath = req.file.filename;
+      }
     } else {
       // Development: keep local file
       filePath = req.file.filename;
