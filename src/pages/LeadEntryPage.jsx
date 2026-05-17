@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
+import { LoanType, LoanStatus, IncomeSource, ResidentType, BusinessType } from '../checklist-spec';
 import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
@@ -10,10 +11,15 @@ export default function LeadEntryPage() {
     customerName: '',
     mobile: '',
     loanType: '',
+    loanStatus: '',
+    incomeSource: '',
+    residentType: '',
+    businessType: '',
     expectedAmount: '',
     referralCode: '',
     assignedBanks: []
   });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [assignData, setAssignData] = useState({
     assignedTo: '',
     department: '',
@@ -26,7 +32,6 @@ export default function LeadEntryPage() {
   const [success, setSuccess] = useState('');
   const [createdLead, setCreatedLead] = useState(null);
   const [selectedLead, setSelectedLead] = useState(null);
-  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (!accessToken) return;
@@ -48,30 +53,51 @@ export default function LeadEntryPage() {
       .catch(() => {});
   };
 
-  // Validation functions
-  const validateName = (name) => {
-    if (!name.trim()) return 'Customer name is required';
-    if (/[0-9]/.test(name)) return 'Name cannot contain numbers';
-    return '';
-  };
+// Validation functions
+const validateName = (name) => {
+  if (!name.trim()) return 'Customer name is required';
+  if (/[0-9]/.test(name)) return 'Name cannot contain numbers';
+  return '';
+};
 
-  const validateMobile = (mobile) => {
-    if (!mobile.trim()) return 'Mobile number is required';
-    if (!/^\d+$/.test(mobile)) return 'Mobile must contain only numbers';
-    if (mobile.length !== 10) return 'Mobile must be exactly 10 digits';
-    return '';
-  };
+const validateMobile = (mobile) => {
+  if (!mobile.trim()) return 'Mobile number is required';
+  if (!/^\d+$/.test(mobile)) return 'Mobile must contain only numbers';
+  if (mobile.length !== 10) return 'Mobile must be exactly 10 digits';
+  return '';
+};
 
-  const validateAmount = (amount) => {
-    if (!amount.trim()) return 'Expected amount is required';
-    if (!/^\d+$/.test(amount)) return 'Amount must contain only numbers';
-    return '';
-  };
+const validateAmount = (amount) => {
+  if (!amount.trim()) return 'Expected amount is required';
+  if (!/^\d+$/.test(amount)) return 'Amount must contain only numbers';
+  return '';
+};
 
-  const validateLoanType = (loanType) => {
-    if (!loanType) return 'Please select a loan type';
-    return '';
-  };
+const validateLoanType = (loanType) => {
+  if (!loanType) return 'Please select a loan type';
+  return '';
+};
+
+const validateLoanStatus = (loanStatus) => {
+  if (!loanStatus) return 'Please select a loan status';
+  return '';
+};
+
+const validateIncomeSource = (incomeSource) => {
+  if (!incomeSource) return 'Please select an income source';
+  return '';
+};
+
+const validateResidentType = (residentType) => {
+  if (!residentType) return 'Please select a resident type';
+  return '';
+};
+
+const validateBusinessType = (businessType) => {
+  // Business type is only required for non-salaried
+  if (incomeSource === 'non_salaried' && !businessType) return 'Please select a business type';
+  return '';
+};
 
   const handleNameChange = (e) => {
     const value = e.target.value.replace(/[0-9]/g, '');
@@ -105,7 +131,11 @@ export default function LeadEntryPage() {
       customerName: validateName(formData.customerName),
       mobile: validateMobile(formData.mobile),
       expectedAmount: validateAmount(formData.expectedAmount),
-      loanType: validateLoanType(formData.loanType)
+      loanType: validateLoanType(formData.loanType),
+      loanStatus: validateLoanStatus(formData.loanStatus),
+      incomeSource: validateIncomeSource(formData.incomeSource),
+      residentType: validateResidentType(formData.residentType),
+      businessType: validateBusinessType(formData.businessType)
     };
 
     setFieldErrors(errors);
@@ -134,7 +164,7 @@ export default function LeadEntryPage() {
       setCreatedLead(lead);
       setSuccess(`Lead created successfully!`);
       loadLeads();
-      setFormData({ customerName: '', mobile: '', loanType: '', expectedAmount: '', referralCode: '', assignedBanks: [] });
+      setFormData({ customerName: '', mobile: '', loanType: '', loanStatus: '', incomeSource: '', residentType: '', businessType: '', expectedAmount: '', referralCode: '', assignedBanks: [] });
       setFieldErrors({});
     } catch (err) {
       setError('Failed to create lead');
@@ -254,63 +284,126 @@ export default function LeadEntryPage() {
 
       {activeTab === 'new' && (
         <div className="bg-white rounded-3xl shadow-xl p-8 border">
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <input
-                type="text"
-                placeholder="Customer Name *"
-                className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.customerName ? 'border-red-500' : ''}`}
-                value={formData.customerName}
-                onChange={handleNameChange}
-                maxLength={50}
-              />
-              {fieldErrors.customerName && <p className="text-red-500 text-sm mt-1">{fieldErrors.customerName}</p>}
-            </div>
-            <div>
-              <input
-                type="tel"
-                placeholder="Mobile Number * (10 digits)"
-                className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.mobile ? 'border-red-500' : ''}`}
-                value={formData.mobile}
-                onChange={handleMobileChange}
-                maxLength={10}
-              />
-              {fieldErrors.mobile && <p className="text-red-500 text-sm mt-1">{fieldErrors.mobile}</p>}
-            </div>
-          </div>
+<div className="grid md:grid-cols-2 gap-6 mb-6">
+             <div>
+               <input
+                 type="text"
+                 placeholder="Customer Name *"
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.customerName ? 'border-red-500' : ''}`}
+                 value={formData.customerName}
+                 onChange={handleNameChange}
+                 maxLength={50}
+               />
+               {fieldErrors.customerName && <p className="text-red-500 text-sm mt-1">{fieldErrors.customerName}</p>}
+             </div>
+             <div>
+               <input
+                 type="tel"
+                 placeholder="Mobile Number * (10 digits)"
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.mobile ? 'border-red-500' : ''}`}
+                 value={formData.mobile}
+                 onChange={handleMobileChange}
+                 maxLength={10}
+               />
+               {fieldErrors.mobile && <p className="text-red-500 text-sm mt-1">{fieldErrors.mobile}</p>}
+             </div>
+           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <select
-                className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.loanType ? 'border-red-500' : ''}`}
-                value={formData.loanType}
-                onChange={(e) => { setFormData(p => ({ ...p, loanType: e.target.value })); setFieldErrors(prev => ({ ...prev, loanType: '' })); }}
-              >
-                <option value="">Select Loan Type *</option>
-                <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option><option>Education Loan</option>
-              </select>
-              {fieldErrors.loanType && <p className="text-red-500 text-sm mt-1">{fieldErrors.loanType}</p>}
-            </div>
-            <div>
-              <input
-                type="text"
-                placeholder="Expected Loan Amount *"
-                className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.expectedAmount ? 'border-red-500' : ''}`}
-                value={formData.expectedAmount}
-                onChange={handleAmountChange}
-              />
-              {fieldErrors.expectedAmount && <p className="text-red-500 text-sm mt-1">{fieldErrors.expectedAmount}</p>}
-            </div>
-            <div>
-              <input
-                type="text"
-                placeholder="Referral Code (Optional)"
-                className="border rounded-2xl px-4 py-3 w-full"
-                value={formData.referralCode || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, referralCode: e.target.value.toUpperCase() }))}
-              />
-            </div>
-          </div>
+           <div className="grid md:grid-cols-2 gap-6 mb-6">
+             <div>
+               <select
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.loanType ? 'border-red-500' : ''}`}
+                 value={formData.loanType}
+                 onChange={(e) => { setFormData(p => ({ ...p, loanType: e.target.value })); setFieldErrors(prev => ({ ...prev, loanType: '' })); }}
+               >
+                 <option value="">Select Loan Type *</option>
+                 <option value="home_loan">Home Loan</option>
+                 <option value="lap">LAP</option>
+                 <option value="mudra">Mudra Loan</option>
+                 <option value="msme">MSME Loan</option>
+                 <option value="business_loan">Business Loan</option>
+                 <option value="personal_loan">Personal Loan</option>
+                 <option value="education_loan">Education Loan</option>
+               </select>
+               {fieldErrors.loanType && <p className="text-red-500 text-sm mt-1">{fieldErrors.loanType}</p>}
+             </div>
+             <div>
+               <select
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.loanStatus ? 'border-red-500' : ''}`}
+                 value={formData.loanStatus}
+                 onChange={(e) => { setFormData(p => ({ ...p, loanStatus: e.target.value })); setFieldErrors(prev => ({ ...prev, loanStatus: '' })); }}
+               >
+                 <option value="">Select Loan Status *</option>
+                 <option value="new">New Loan</option>
+                 <option value="topup_equity">Top-up/Equity</option>
+                 <option value="takeover">Takeover</option>
+               </select>
+               {fieldErrors.loanStatus && <p className="text-red-500 text-sm mt-1">{fieldErrors.loanStatus}</p>}
+             </div>
+           </div>
+
+           <div className="grid md:grid-cols-2 gap-6 mb-6">
+             <div>
+               <select
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.incomeSource ? 'border-red-500' : ''}`}
+                 value={formData.incomeSource}
+                 onChange={(e) => { setFormData(p => ({ ...p, incomeSource: e.target.value })); setFieldErrors(prev => ({ ...prev, incomeSource: '' })); }}
+               >
+                 <option value="">Select Income Source *</option>
+                 <option value="salaried">Salaried</option>
+                 <option value="non_salaried">Non-Salaried</option>
+               </select>
+               {fieldErrors.incomeSource && <p className="text-red-500 text-sm mt-1">{fieldErrors.incomeSource}</p>}
+             </div>
+             <div>
+               <select
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.residentType ? 'border-red-500' : ''}`}
+                 value={formData.residentType}
+                 onChange={(e) => { setFormData(p => ({ ...p, residentType: e.target.value })); setFieldErrors(prev => ({ ...prev, residentType: '' })); }}
+               >
+                 <option value="">Select Resident Type *</option>
+                 <option value="nri">NRI</option>
+                 <option value="indian_resident">Indian Resident</option>
+               </select>
+               {fieldErrors.residentType && <p className="text-red-500 text-sm mt-1">{fieldErrors.residentType}</p>}
+             </div>
+           </div>
+
+           <div className="grid md:grid-cols-2 gap-6 mb-6">
+             <div>
+               <select
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.businessType ? 'border-red-500' : ''}`}
+                 value={formData.businessType}
+                 onChange={(e) => { setFormData(p => ({ ...p, businessType: e.target.value })); setFieldErrors(prev => ({ ...prev, businessType: '' })); }}
+               >
+                 <option value="">Select Business Type (Optional)</option>
+                 <option value="proprietor">Proprietor</option>
+                 <option value="partnership">Partnership</option>
+                 <option value="pvt_ltd">Pvt Ltd</option>
+                 <option value="llp">LLP</option>
+               </select>
+               {fieldErrors.businessType && <p className="text-red-500 text-sm mt-1">{fieldErrors.businessType}</p>}
+             </div>
+             <div>
+               <input
+                 type="text"
+                 placeholder="Expected Loan Amount *"
+                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.expectedAmount ? 'border-red-500' : ''}`}
+                 value={formData.expectedAmount}
+                 onChange={handleAmountChange}
+               />
+               {fieldErrors.expectedAmount && <p className="text-red-500 text-sm mt-1">{fieldErrors.expectedAmount}</p>}
+             </div>
+             <div>
+               <input
+                 type="text"
+                 placeholder="Referral Code (Optional)"
+                 className="border rounded-2xl px-4 py-3 w-full"
+                 value={formData.referralCode || ''}
+                 onChange={(e) => setFormData(prev => ({ ...prev, referralCode: e.target.value.toUpperCase() }))}
+               />
+             </div>
+           </div>
 
           <button onClick={handleSaveLead} disabled={loading} className="bg-blue-700 text-white px-6 py-3 rounded-2xl font-semibold disabled:opacity-50">
             {loading ? 'Saving...' : 'Save Lead'}

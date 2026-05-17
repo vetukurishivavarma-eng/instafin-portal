@@ -106,10 +106,28 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
     return checklistCache.get(key) as ChecklistItem[];
   }
 
-  // Look up in decision tree
-  // For now, return the common checklist for all valid selections
-  // This gives users the full document list regardless of loan type
-  const checklist = COMMON_CHECKLIST;
+  // Look up in decision tree with fallback chain
+  let checklist = DECISION_TREE[key as ChecklistKey];
+
+  // Fallback: try without businessType
+  if (!checklist) {
+    const parts = key.split('|');
+    if (parts.length === 5) {
+      checklist = DECISION_TREE[parts.slice(0, 4).join('|') as ChecklistKey];
+    }
+  }
+
+  // Fallback: first matching loan type
+  if (!checklist) {
+    const loanType = key.split('|')[0];
+    const fallback = Object.keys(DECISION_TREE).find(k => k.startsWith(loanType + '|'));
+    if (fallback) checklist = DECISION_TREE[fallback as ChecklistKey];
+  }
+
+  // Final fallback: common checklist
+  if (!checklist) {
+    checklist = COMMON_CHECKLIST;
+  }
 
   if (!checklist || checklist.length === 0) {
     // Return empty array if no matching checklist found

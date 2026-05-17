@@ -9,9 +9,7 @@ import DashboardPage from './pages/DashboardPage'
 import LeadEntryPage from './pages/LeadEntryPage'
 import PipelinePage from './pages/PipelinePage'
 import EligibilityPage from './pages/EligibilityPage'
-import DocumentsPage from './pages/DocumentsPage'
 import ChecklistsPage from './pages/ChecklistsPage'
-import ChecklistPage from './components/ChecklistPage'
 import SanctionPage from './pages/SanctionPage'
 import FeaturesPage from './pages/FeaturesPage'
 import ContactPage from './pages/ContactPage'
@@ -54,19 +52,9 @@ function AppRoutes() {
             <EligibilityPage />
           </ProtectedRoute>
         } />
-        <Route path="/documents" element={
-          <ProtectedRoute>
-            <DocumentsPage />
-          </ProtectedRoute>
-        } />
         <Route path="/checklists" element={
           <ProtectedRoute>
             <ChecklistsPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/loan-checklist" element={
-          <ProtectedRoute>
-            <ChecklistPage />
           </ProtectedRoute>
         } />
         <Route path="/sanction" element={
