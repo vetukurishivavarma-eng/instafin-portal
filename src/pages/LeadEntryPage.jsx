@@ -93,7 +93,7 @@ const validateResidentType = (residentType) => {
   return '';
 };
 
-const validateBusinessType = (businessType) => {
+const validateBusinessType = (businessType, incomeSource) => {
   // Business type is only required for non-salaried
   if (incomeSource === 'non_salaried' && !businessType) return 'Please select a business type';
   return '';
@@ -135,7 +135,7 @@ const validateBusinessType = (businessType) => {
       loanStatus: validateLoanStatus(formData.loanStatus),
       incomeSource: validateIncomeSource(formData.incomeSource),
       residentType: validateResidentType(formData.residentType),
-      businessType: validateBusinessType(formData.businessType)
+      businessType: validateBusinessType(formData.businessType, formData.incomeSource)
     };
 
     setFieldErrors(errors);
