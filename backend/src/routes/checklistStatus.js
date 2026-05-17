@@ -156,6 +156,44 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
   }
 });
 
+// GET /api/checklist-status/file/:leadId/:documentId - Download an uploaded file
+router.get('/file/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { leadId, documentId } = req.params;
+
+    const { data: record } = await supabase
+      .from('lead_checklist_status')
+      .select('file_path, document_name')
+      .eq('lead_id', leadId)
+      .eq('document_id', documentId)
+      .single();
+
+    if (!record || !record.file_path) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      // Production: get signed URL from Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('lead-documents')
+        .createSignedUrl(record.file_path, 3600); // 1 hour expiry
+
+      if (error) throw error;
+      return res.redirect(data.signedUrl);
+    } else {
+      // Development: serve local file
+      const localPath = path.join(uploadsDir, record.file_path);
+      if (!fs.existsSync(localPath)) {
+        return res.status(404).json({ error: 'File not found on disk' });
+      }
+      return res.download(localPath, record.document_name);
+    }
+  } catch (error) {
+    console.error('File download error:', error);
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
 // GET /api/checklist-status/:leadId/pending - Get only pending documents
 router.get('/:leadId/pending', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
