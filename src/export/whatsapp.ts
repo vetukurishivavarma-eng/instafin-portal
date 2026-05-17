@@ -6,6 +6,7 @@
 interface ShareOptions {
   loanType: string;
   items: { name: string; category: string; required: boolean }[];
+  title?: string;
 }
 
 /**
@@ -45,7 +46,7 @@ function getCategoryLabel(category: string): string {
  * Falls back to Web Share API on mobile devices
  */
 export async function shareOnWhatsApp(options: ShareOptions): Promise<boolean> {
-  const { loanType, items } = options;
+  const { loanType, items, title } = options;
 
   if (items.length === 0) {
     console.warn('Cannot share empty checklist');
@@ -64,9 +65,9 @@ export async function shareOnWhatsApp(options: ShareOptions): Promise<boolean> {
 
   // Build the share text
   const lines: string[] = [];
-  lines.push(`📋 *Loan Checklist - ${getLoanTypeLabel(loanType)}*`);
+  lines.push(`📋 *${title || `Loan Checklist - ${getLoanTypeLabel(loanType)}`}*`);
   lines.push('');
-  lines.push('Required Documents:');
+  lines.push(title ? 'Pending Documents:' : 'Required Documents:');
   lines.push('');
 
   Object.entries(groupedItems).forEach(([category, categoryItems]) => {

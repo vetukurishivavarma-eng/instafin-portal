@@ -169,6 +169,7 @@ export default function ChecklistsPage() {
     try {
       await shareOnWhatsApp({
         loanType: selectedLead.loanType,
+        title: `Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType ? selectedLead.loanType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Loan'})`,
         items: pendingItems.map(item => ({
           name: item.name,
           category: item.category,
