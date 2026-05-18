@@ -14,6 +14,7 @@ import SanctionPage from './pages/SanctionPage'
 import FeaturesPage from './pages/FeaturesPage'
 import ContactPage from './pages/ContactPage'
 import BulkUploadPage from './pages/BulkUploadPage'
+import ExecutivePage from './pages/ExecutivePage'
 import './index.css'
 
 // Protected Route wrapper
@@ -77,6 +78,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <BulkUploadPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/executive"
+          element={
+            <ProtectedRoute>
+              <ExecutivePage />
             </ProtectedRoute>
           }
         />

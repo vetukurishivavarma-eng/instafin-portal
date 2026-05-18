@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
@@ -16,9 +17,10 @@ const getStatusBorder = (status) => {
 
 export default function PipelinePage() {
   const { accessToken, refreshAccessToken, isAdmin } = useAuth();
+  const [searchParams] = useSearchParams();
   const [leads, setLeads] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingLead, setEditingLead] = useState(null);
@@ -110,6 +112,7 @@ export default function PipelinePage() {
             <select className="border rounded-xl px-4 py-2" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">All Status</option>
               <option value="New">New</option>
+              <option value="Assigned">Assigned</option>
               <option value="Processing">Processing</option>
               <option value="Sanctioned">Sanctioned</option>
               <option value="Disbursed">Disbursed</option>

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardCharts from '../components/charts/DashboardCharts';
 import API_BASE from '../config/api';
 
 export default function DashboardPage() {
   const { user, isAdmin, accessToken, refreshAccessToken } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalLeads: 0,
     freshLeads: 0,
+    assigned: 0,
     processing: 0,
     sanctioned: 0,
     disbursed: 0,
@@ -50,6 +53,16 @@ export default function DashboardPage() {
     fetchStats();
   }, [accessToken]);
 
+  const StatCard = ({ label, value, gradient, filterStatus }) => (
+    <div
+      onClick={() => navigate(filterStatus ? `/leads?status=${filterStatus}` : '/leads')}
+      className={`bg-gradient-to-br ${gradient} rounded-3xl p-6 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200`}
+    >
+      <p className="text-white/80 text-sm font-medium">{label}</p>
+      <h3 className="text-5xl font-bold text-white mt-2">{value}</h3>
+    </div>
+  );
+
   return (
     <div className="py-12">
       <div className="mb-8">
@@ -64,31 +77,17 @@ export default function DashboardPage() {
       )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-3xl p-6 shadow-lg">
-          <p className="text-blue-100 text-sm font-medium">Total Leads</p>
-          <h3 className="text-5xl font-bold text-white mt-2">{stats.totalLeads.toLocaleString()}</h3>
-        </div>
-        <div className="bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-3xl p-6 shadow-lg">
-          <p className="text-cyan-100 text-sm font-medium">Fresh Leads</p>
-          <h3 className="text-5xl font-bold text-white mt-2">{stats.newLeads || stats.freshLeads}</h3>
-        </div>
-        <div className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-3xl p-6 shadow-lg">
-          <p className="text-yellow-100 text-sm font-medium">Processing</p>
-          <h3 className="text-5xl font-bold text-white mt-2">{stats.processing}</h3>
-        </div>
-        <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-3xl p-6 shadow-lg">
-          <p className="text-green-100 text-sm font-medium">Sanctioned</p>
-          <h3 className="text-5xl font-bold text-white mt-2">{stats.sanctioned}</h3>
-        </div>
+        <StatCard label="Total Leads" value={stats.totalLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus={null} />
+        <StatCard label="Fresh Leads" value={stats.newLeads || stats.freshLeads} gradient="from-cyan-400 to-cyan-600" filterStatus="New" />
+        <StatCard label="Assigned" value={stats.assigned} gradient="from-orange-400 to-orange-600" filterStatus="Assigned" />
+        <StatCard label="Processing" value={stats.processing} gradient="from-yellow-400 to-orange-500" filterStatus="Processing" />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-3xl p-6 shadow-lg">
-          <p className="text-purple-100 text-sm font-medium">Disbursed</p>
-          <h3 className="text-5xl font-bold text-white mt-2">{stats.disbursed}</h3>
-        </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <StatCard label="Sanctioned" value={stats.sanctioned} gradient="from-green-400 to-emerald-600" filterStatus="Sanctioned" />
+        <StatCard label="Disbursed" value={stats.disbursed} gradient="from-purple-500 to-indigo-600" filterStatus="Disbursed" />
         <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-3xl p-6 shadow-lg">
-          <p className="text-emerald-100 text-sm font-medium">Revenue Generated</p>
+          <p className="text-white/80 text-sm font-medium">Revenue Generated</p>
           <h3 className="text-5xl font-bold text-white mt-2">{stats.revenue}</h3>
         </div>
       </div>

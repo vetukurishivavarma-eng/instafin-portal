@@ -357,8 +357,8 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     const stats = {
       totalLeads: leads.length,
       newLeads: leads.filter(l => l.status === 'New').length,
-      processing: leads.filter(l => l.status === 'Processing' || l.status === 'Assigned').length,
       assigned: leads.filter(l => l.status === 'Assigned').length,
+      processing: leads.filter(l => l.status === 'Processing').length,
       sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
       disbursed: leads.filter(l => l.status === 'Disbursed').length,
     };
@@ -384,7 +384,8 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
 
     const distribution = {
       'New': leads.filter(l => l.status === 'New').length,
-      'Processing': leads.filter(l => l.status === 'Processing' || l.status === 'Assigned').length,
+      'Assigned': leads.filter(l => l.status === 'Assigned').length,
+      'Processing': leads.filter(l => l.status === 'Processing').length,
       'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
       'Disbursed': leads.filter(l => l.status === 'Disbursed').length
     };
@@ -478,6 +479,63 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
   } catch (error) {
     console.error('Assign error:', error);
     res.status(500).json({ error: 'Failed to assign lead' });
+  }
+});
+
+// PUT /api/leads/:id/assign-bank - Assign bank to lead
+router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { bankName } = req.body;
+    const leadId = req.params.id;
+
+    if (!bankName) {
+      return res.status(400).json({ error: 'Bank name is required' });
+    }
+
+    // Fetch current lead to get existing assigned_banks
+    const { data: lead, error: fetchError } = await supabase
+      .from('leads')
+      .select('assigned_banks, status')
+      .eq('id', leadId)
+      .single();
+
+    if (fetchError || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Append bank to existing array (avoid duplicates)
+    const existingBanks = lead.assigned_banks || [];
+    if (existingBanks.includes(bankName)) {
+      return res.status(400).json({ error: 'Bank already assigned to this lead' });
+    }
+    const updatedBanks = [...existingBanks, bankName];
+
+    // Update status to 'Processing' if currently 'New' or 'Assigned'
+    const newStatus = (lead.status === 'New' || lead.status === 'Assigned') ? 'Processing' : lead.status;
+
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update({
+        assigned_banks: updatedBanks,
+        status: newStatus
+      })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({
+      message: 'Bank assigned successfully',
+      lead: {
+        id: updatedLead.id,
+        assignedBanks: updatedLead.assigned_banks,
+        status: updatedLead.status
+      }
+    });
+  } catch (error) {
+    console.error('Assign bank error:', error);
+    res.status(500).json({ error: 'Failed to assign bank' });
   }
 });
 
