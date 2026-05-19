@@ -264,8 +264,10 @@ export default function SanctionPage() {
                 setSanctionedAmount(val);
 
                 // Real-time validation
-                const expected = Number(String(selectedLead.expectedAmount).replace(/[^0-9]/g, ''));
+                const rawExpected = selectedLead.expectedAmount;
+                const expected = Number(String(rawExpected).replace(/[^0-9]/g, ''));
                 const sanctioned = Number(val);
+                console.log('Validation:', { rawExpected, expected, val, sanctioned, willError: val && expected && sanctioned > expected });
                 if (val && expected && sanctioned > expected) {
                   setAmountError(`Cannot exceed expected loan amount (₹${expected.toLocaleString()})`);
                 } else {
