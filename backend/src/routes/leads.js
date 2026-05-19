@@ -361,6 +361,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       processing: leads.filter(l => l.status === 'Processing').length,
       sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
       disbursed: leads.filter(l => l.status === 'Disbursed').length,
+      rejected: leads.filter(l => l.status === 'Rejected').length,
     };
 
     res.json(stats);
@@ -387,7 +388,8 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
       'Assigned': leads.filter(l => l.status === 'Assigned').length,
       'Processing': leads.filter(l => l.status === 'Processing').length,
       'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
-      'Disbursed': leads.filter(l => l.status === 'Disbursed').length
+      'Disbursed': leads.filter(l => l.status === 'Disbursed').length,
+      'Rejected': leads.filter(l => l.status === 'Rejected').length
     };
 
     res.json(distribution);

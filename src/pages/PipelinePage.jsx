@@ -10,7 +10,8 @@ const getStatusBorder = (status) => {
     'Processing': 'border-blue-400',
     'Sanctioned': 'border-green-400',
     'Disbursed': 'border-purple-400',
-    'Assigned': 'border-orange-400'
+    'Assigned': 'border-orange-400',
+    'Rejected': 'border-red-400'
   };
   return colors[status] || 'border-gray-200';
 };
@@ -116,6 +117,7 @@ export default function PipelinePage() {
               <option value="Processing">Processing</option>
               <option value="Sanctioned">Sanctioned</option>
               <option value="Disbursed">Disbursed</option>
+              <option value="Rejected">Rejected</option>
             </select>
           </div>
         </div>
