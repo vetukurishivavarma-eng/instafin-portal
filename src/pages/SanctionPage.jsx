@@ -13,6 +13,7 @@ export default function SanctionPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [amountError, setAmountError] = useState('');
 
   useEffect(() => {
     if (!accessToken) return;
@@ -40,6 +41,7 @@ export default function SanctionPage() {
     setLetterUploaded(false);
     setError('');
     setSuccess('');
+    setAmountError('');
   };
 
   const handleFileSelect = (e) => {
@@ -254,11 +256,26 @@ export default function SanctionPage() {
             <input
               type="text"
               placeholder="Enter sanctioned amount (numbers only)"
-              className="w-full border rounded-xl px-4 py-3 text-lg"
+              className={`w-full border rounded-xl px-4 py-3 text-lg ${amountError ? 'border-red-500' : ''}`}
               value={sanctionedAmount}
-              onChange={(e) => setSanctionedAmount(formatAmount(e.target.value))}
+              onChange={(e) => {
+                const val = formatAmount(e.target.value);
+                setSanctionedAmount(val);
+
+                // Real-time validation
+                const expected = Number(String(selectedLead.expectedAmount).replace(/[^0-9]/g, ''));
+                const sanctioned = Number(val);
+                if (val && expected && sanctioned > expected) {
+                  setAmountError(`Cannot exceed expected loan amount (₹${expected.toLocaleString()})`);
+                } else {
+                  setAmountError('');
+                }
+              }}
             />
-            {sanctionedAmount && (
+            {amountError && (
+              <p className="text-sm text-red-500 mt-1">{amountError}</p>
+            )}
+            {sanctionedAmount && !amountError && (
               <p className="text-sm text-gray-500 mt-1">₹{Number(sanctionedAmount).toLocaleString()}</p>
             )}
           </div>
@@ -306,9 +323,9 @@ export default function SanctionPage() {
           <div className="flex gap-4">
             <button
               onClick={handleSanction}
-              disabled={!letterUploaded || !sanctionedAmount || loading}
+              disabled={!letterUploaded || !sanctionedAmount || !!amountError || loading}
               className={`flex-1 px-6 py-3 rounded-xl font-semibold text-white transition-all ${
-                letterUploaded && sanctionedAmount
+                letterUploaded && sanctionedAmount && !amountError
                   ? 'bg-green-700 hover:bg-green-800 shadow-sm hover:shadow-md'
                   : 'bg-gray-300 cursor-not-allowed'
               }`}
