@@ -26,10 +26,7 @@ export default function Layout({ children }) {
               )}
               <Link to="/leads" className={location.pathname === '/leads' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Leads</Link>
               {user?.role === 'admin' && (
-                <>
-                  <Link to="/executive" className={location.pathname === '/executive' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Executive</Link>
-                  <Link to="/bulk-upload" className={location.pathname === '/bulk-upload' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Bulk Upload</Link>
-                </>
+                <Link to="/executive" className={location.pathname === '/executive' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Executive</Link>
               )}
               <Link to="/eligibility" className={location.pathname === '/eligibility' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Eligibility</Link>
               <Link to="/checklists" className={location.pathname === '/checklists' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Checklists</Link>

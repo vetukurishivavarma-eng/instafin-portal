@@ -13,7 +13,6 @@ import ChecklistsPage from './pages/ChecklistsPage'
 import SanctionPage from './pages/SanctionPage'
 import FeaturesPage from './pages/FeaturesPage'
 import ContactPage from './pages/ContactPage'
-import BulkUploadPage from './pages/BulkUploadPage'
 import ExecutivePage from './pages/ExecutivePage'
 import './index.css'
 
@@ -70,14 +69,6 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <LeadEntryPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/bulk-upload"
-          element={
-            <ProtectedRoute>
-              <BulkUploadPage />
             </ProtectedRoute>
           }
         />

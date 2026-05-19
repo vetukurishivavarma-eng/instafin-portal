@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
+import BulkUploadModal from '../components/BulkUploadModal';
 import { LoanType, LoanStatus, IncomeSource, ResidentType, BusinessType } from '../checklist-spec';
 import API_BASE from '../config/api';
 
@@ -32,6 +33,7 @@ export default function LeadEntryPage() {
   const [success, setSuccess] = useState('');
   const [createdLead, setCreatedLead] = useState(null);
   const [selectedLead, setSelectedLead] = useState(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -276,6 +278,14 @@ const validateBusinessType = (businessType, incomeSource) => {
           >
             Manage Leads ({unassignedLeads.length} unassigned)
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowBulkUpload(true)}
+              className="px-4 py-2 rounded-xl font-semibold bg-green-600 text-white hover:bg-green-700"
+            >
+              Bulk Upload
+            </button>
+          )}
         </div>
       </div>
 
@@ -532,6 +542,12 @@ const validateBusinessType = (businessType, incomeSource) => {
           </div>
         </div>
       )}
+
+      <BulkUploadModal
+        isOpen={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        onComplete={() => loadLeads()}
+      />
     </div>
   );
 }
