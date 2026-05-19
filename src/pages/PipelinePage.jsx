@@ -84,9 +84,27 @@ export default function PipelinePage() {
     setLoadingLetter(true);
     setSanctionLetterUrl(null);
     try {
+      const token = accessToken || localStorage.getItem('instafin_token');
+      if (!token) return;
+
       const res = await fetch(`${API_BASE}/checklist-status/${leadId}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
+
+      if (res.status === 401) {
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) return;
+        const retryToken = localStorage.getItem('instafin_token');
+        const retryRes = await fetch(`${API_BASE}/checklist-status/${leadId}`, {
+          headers: { Authorization: `Bearer ${retryToken}` }
+        });
+        const retryData = await retryRes.json();
+        if (retryData && retryData.sanction_letter && retryData.sanction_letter.status === 'uploaded') {
+          setSanctionLetterUrl(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`);
+        }
+        return;
+      }
+
       const data = await res.json();
       if (data && data.sanction_letter && data.sanction_letter.status === 'uploaded') {
         setSanctionLetterUrl(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`);
@@ -103,6 +121,67 @@ export default function PipelinePage() {
     if (lead.status === 'Sanctioned') {
       fetchSanctionLetter(lead.id);
     }
+  };
+
+  const handleDownloadSanctionLetter = async (leadId) => {
+    try {
+      let token = accessToken || localStorage.getItem('instafin_token');
+
+      // If no token, try to refresh
+      if (!token) {
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) {
+          setError('Session expired. Please login again.');
+          return;
+        }
+        token = localStorage.getItem('instafin_token');
+      }
+
+      const res = await fetch(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // If 401, try refreshing token once
+      if (res.status === 401) {
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) {
+          setError('Session expired. Please login again.');
+          return;
+        }
+        token = localStorage.getItem('instafin_token');
+        const retryRes = await fetch(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!retryRes.ok) {
+          setError('Failed to download sanction letter');
+          return;
+        }
+        const blob = await retryRes.blob();
+        downloadBlob(blob, leadId);
+        return;
+      }
+
+      if (!res.ok) {
+        setError('Failed to download sanction letter');
+        return;
+      }
+
+      const blob = await res.blob();
+      downloadBlob(blob, leadId);
+    } catch (err) {
+      setError('Failed to download sanction letter');
+    }
+  };
+
+  const downloadBlob = (blob, leadId) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sanction-letter-${leadId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   };
 
   const filteredLeads = leads.filter(lead => {
@@ -398,17 +477,15 @@ export default function PipelinePage() {
                   {loadingLetter ? (
                     <p className="text-sm text-gray-500">Loading sanction letter...</p>
                   ) : sanctionLetterUrl ? (
-                    <a
-                      href={sanctionLetterUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleDownloadSanctionLetter(viewLead.id)}
                       className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       Download Sanction Letter
-                    </a>
+                    </button>
                   ) : (
                     <p className="text-sm text-gray-500">No sanction letter uploaded</p>
                   )}
