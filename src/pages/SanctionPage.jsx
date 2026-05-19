@@ -87,6 +87,14 @@ export default function SanctionPage() {
   const handleSanction = async () => {
     if (!selectedLead || !sanctionedAmount || !letterUploaded) return;
 
+    // Validate sanctioned amount doesn't exceed expected amount
+    const expected = Number(String(selectedLead.expectedAmount).replace(/[^0-9]/g, ''));
+    const sanctioned = Number(sanctionedAmount);
+    if (expected && sanctioned > expected) {
+      setError(`Sanctioned amount (₹${sanctioned.toLocaleString()}) cannot exceed the expected loan amount (₹${expected.toLocaleString()})`);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
