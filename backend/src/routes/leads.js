@@ -257,12 +257,16 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 // PUT update lead
 router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
+    console.log('Update lead - ID:', req.params.id, 'Body:', req.body);
+
     // Check if lead exists
-    const { data: existingLead } = await supabase
+    const { data: existingLead, error: fetchError } = await supabase
       .from('leads')
       .select('assigned_to, created_by')
       .eq('id', req.params.id)
       .single();
+
+    console.log('Existing lead:', existingLead, 'Fetch error:', fetchError);
 
     if (!existingLead) {
       return res.status(404).json({ error: 'Lead not found' });
