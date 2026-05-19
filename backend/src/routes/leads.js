@@ -61,6 +61,8 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       residentType: lead.resident_type,
       businessType: lead.business_type,
       expectedAmount: lead.expected_amount,
+      sanctionedAmount: lead.sanctioned_amount,
+      disbursedAmount: lead.disbursed_amount || 0,
       assignedBanks: lead.assigned_banks || [],
       status: lead.status,
       assignedTo: lead.assigned_to,
@@ -119,6 +121,8 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       residentType: lead.resident_type,
       businessType: lead.business_type,
       expectedAmount: lead.expected_amount,
+      sanctionedAmount: lead.sanctioned_amount,
+      disbursedAmount: lead.disbursed_amount || 0,
       assignedBanks: lead.assigned_banks || [],
       status: lead.status,
       assignedTo: lead.assigned_to,
@@ -285,6 +289,8 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       residentType: 'resident_type',
       businessType: 'business_type',
       expectedAmount: 'expected_amount',
+      sanctionedAmount: 'sanctioned_amount',
+      disbursedAmount: 'disbursed_amount',
       assignedBanks: 'assigned_banks',
       status: 'status',
       assignedTo: 'assigned_to',
@@ -317,6 +323,9 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       incomeSource: updatedLead.income_source,
       residentType: updatedLead.resident_type,
       businessType: updatedLead.business_type,
+      expectedAmount: updatedLead.expected_amount,
+      sanctionedAmount: updatedLead.sanctioned_amount,
+      disbursedAmount: updatedLead.disbursed_amount,
       status: updatedLead.status
     });
   } catch (error) {
@@ -359,6 +368,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       assigned: leads.filter(l => l.status === 'Assigned').length,
       processing: leads.filter(l => l.status === 'Processing').length,
       sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
+      partiallyDisbursed: leads.filter(l => l.status === 'Partially Disbursed').length,
       disbursed: leads.filter(l => l.status === 'Disbursed').length,
       rejected: leads.filter(l => l.status === 'Rejected').length,
     };
@@ -387,6 +397,7 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
       'Assigned': leads.filter(l => l.status === 'Assigned').length,
       'Processing': leads.filter(l => l.status === 'Processing').length,
       'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
+      'Partially Disbursed': leads.filter(l => l.status === 'Partially Disbursed').length,
       'Disbursed': leads.filter(l => l.status === 'Disbursed').length,
       'Rejected': leads.filter(l => l.status === 'Rejected').length
     };
@@ -537,6 +548,73 @@ router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res)
   } catch (error) {
     console.error('Assign bank error:', error);
     res.status(500).json({ error: 'Failed to assign bank' });
+  }
+});
+
+// PUT /api/leads/:id/disburse - Disburse amount (partial or full)
+router.put('/:id/disburse', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const leadId = req.params.id;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid disbursement amount is required' });
+    }
+
+    // Fetch current lead
+    const { data: lead, error: fetchError } = await supabase
+      .from('leads')
+      .select('id, sanctioned_amount, disbursed_amount, status, customer_name')
+      .eq('id', leadId)
+      .single();
+
+    if (fetchError || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    if (!lead.sanctioned_amount) {
+      return res.status(400).json({ error: 'Lead has no sanctioned amount' });
+    }
+
+    const currentDisbursed = lead.disbursed_amount || 0;
+    const sanctioned = lead.sanctioned_amount;
+    const newTotalDisbursed = currentDisbursed + amount;
+
+    // Cannot exceed sanctioned amount
+    if (newTotalDisbursed > sanctioned) {
+      return res.status(400).json({
+        error: `Cannot disburse ₹${amount.toLocaleString()}. Remaining amount: ₹${(sanctioned - currentDisbursed).toLocaleString()}`
+      });
+    }
+
+    // Determine new status
+    const newStatus = newTotalDisbursed >= sanctioned ? 'Disbursed' : 'Partially Disbursed';
+
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update({
+        disbursed_amount: newTotalDisbursed,
+        status: newStatus
+      })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({
+      message: `₹${amount.toLocaleString()} disbursed successfully`,
+      lead: {
+        id: updatedLead.id,
+        customerName: updatedLead.customer_name,
+        sanctionedAmount: updatedLead.sanctioned_amount,
+        disbursedAmount: updatedLead.disbursed_amount,
+        status: updatedLead.status
+      }
+    });
+  } catch (error) {
+    console.error('Disburse error:', error);
+    res.status(500).json({ error: 'Failed to process disbursement' });
   }
 });
 

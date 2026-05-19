@@ -9,6 +9,7 @@ const getStatusBorder = (status) => {
     'New': 'border-yellow-400',
     'Processing': 'border-blue-400',
     'Sanctioned': 'border-green-400',
+    'Partially Disbursed': 'border-teal-400',
     'Disbursed': 'border-purple-400',
     'Assigned': 'border-orange-400',
     'Rejected': 'border-red-400'
@@ -223,6 +224,7 @@ export default function PipelinePage() {
               <option value="Assigned">Assigned</option>
               <option value="Processing">Processing</option>
               <option value="Sanctioned">Sanctioned</option>
+              <option value="Partially Disbursed">Partially Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
             </select>

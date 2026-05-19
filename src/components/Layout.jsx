@@ -31,6 +31,7 @@ export default function Layout({ children }) {
               <Link to="/eligibility" className={location.pathname === '/eligibility' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Eligibility</Link>
               <Link to="/checklists" className={location.pathname === '/checklists' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Checklists</Link>
               <Link to="/sanction" className={location.pathname === '/sanction' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Sanction</Link>
+              <Link to="/disburse" className={location.pathname === '/disburse' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Disburse</Link>
               <Link to="/features" className={location.pathname === '/features' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Features</Link>
               <Link to="/contact" className={location.pathname === '/contact' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Contact</Link>
               <div className="flex items-center space-x-3">

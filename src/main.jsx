@@ -11,6 +11,7 @@ import PipelinePage from './pages/PipelinePage'
 import EligibilityPage from './pages/EligibilityPage'
 import ChecklistsPage from './pages/ChecklistsPage'
 import SanctionPage from './pages/SanctionPage'
+import DisbursementPage from './pages/DisbursementPage'
 import FeaturesPage from './pages/FeaturesPage'
 import ContactPage from './pages/ContactPage'
 import ExecutivePage from './pages/ExecutivePage'
@@ -60,6 +61,11 @@ function AppRoutes() {
         <Route path="/sanction" element={
           <ProtectedRoute>
             <SanctionPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/disburse" element={
+          <ProtectedRoute>
+            <DisbursementPage />
           </ProtectedRoute>
         } />
         <Route path="/features" element={<FeaturesPage />} />

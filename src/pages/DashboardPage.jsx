@@ -13,6 +13,7 @@ export default function DashboardPage() {
     assigned: 0,
     processing: 0,
     sanctioned: 0,
+    partiallyDisbursed: 0,
     disbursed: 0,
     revenue: '₹0L'
   });
@@ -85,6 +86,7 @@ export default function DashboardPage() {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard label="Sanctioned" value={stats.sanctioned} gradient="from-green-400 to-emerald-600" filterStatus="Sanctioned" />
+        <StatCard label="Partially Disbursed" value={stats.partiallyDisbursed} gradient="from-teal-400 to-cyan-600" filterStatus="Partially Disbursed" />
         <StatCard label="Disbursed" value={stats.disbursed} gradient="from-purple-500 to-indigo-600" filterStatus="Disbursed" />
         <StatCard label="Rejected" value={stats.rejected || 0} gradient="from-red-500 to-red-700" filterStatus="Rejected" />
         <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-3xl p-6 shadow-lg">

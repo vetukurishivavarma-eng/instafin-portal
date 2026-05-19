@@ -89,14 +89,6 @@ export default function SanctionPage() {
   const handleSanction = async () => {
     if (!selectedLead || !sanctionedAmount || !letterUploaded) return;
 
-    // Hard validation - block if amount exceeds expected
-    const expected = Number(String(selectedLead.expectedAmount).replace(/[^0-9]/g, ''));
-    const sanctioned = Number(sanctionedAmount);
-    if (!expected || !sanctioned || sanctioned > expected) {
-      setAmountError(`Cannot exceed expected loan amount (₹${expected.toLocaleString()})`);
-      return;
-    }
-
     setLoading(true);
     setError('');
     setAmountError('');
@@ -110,7 +102,7 @@ export default function SanctionPage() {
         },
         body: JSON.stringify({
           status: 'Sanctioned',
-          expectedAmount: sanctionedAmount
+          sanctionedAmount: Number(sanctionedAmount)
         })
       });
 
@@ -262,23 +254,10 @@ export default function SanctionPage() {
               onChange={(e) => {
                 const val = formatAmount(e.target.value);
                 setSanctionedAmount(val);
-
-                // Real-time validation
-                const rawExpected = selectedLead.expectedAmount;
-                const expected = Number(String(rawExpected).replace(/[^0-9]/g, ''));
-                const sanctioned = Number(val);
-                console.log('Validation:', { rawExpected, expected, val, sanctioned, willError: val && expected && sanctioned > expected });
-                if (val && expected && sanctioned > expected) {
-                  setAmountError(`Cannot exceed expected loan amount (₹${expected.toLocaleString()})`);
-                } else {
-                  setAmountError('');
-                }
+                setAmountError('');
               }}
             />
-            {amountError && (
-              <p className="text-sm text-red-500 mt-1">{amountError}</p>
-            )}
-            {sanctionedAmount && !amountError && (
+            {sanctionedAmount && (
               <p className="text-sm text-gray-500 mt-1">₹{Number(sanctionedAmount).toLocaleString()}</p>
             )}
           </div>
@@ -326,9 +305,9 @@ export default function SanctionPage() {
           <div className="flex gap-4">
             <button
               onClick={handleSanction}
-              disabled={!letterUploaded || !sanctionedAmount || !!amountError || loading}
+              disabled={!letterUploaded || !sanctionedAmount || loading}
               className={`flex-1 px-6 py-3 rounded-xl font-semibold text-white transition-all ${
-                letterUploaded && sanctionedAmount && !amountError
+                letterUploaded && sanctionedAmount
                   ? 'bg-green-700 hover:bg-green-800 shadow-sm hover:shadow-md'
                   : 'bg-gray-300 cursor-not-allowed'
               }`}
