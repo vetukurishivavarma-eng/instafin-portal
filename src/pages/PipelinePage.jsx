@@ -27,6 +27,9 @@ export default function PipelinePage() {
   const [editingLead, setEditingLead] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [viewLead, setViewLead] = useState(null);
+  const [sanctionLetterUrl, setSanctionLetterUrl] = useState(null);
+  const [loadingLetter, setLoadingLetter] = useState(false);
   const intervalRef = useRef(null);
 
   const loadData = async () => {
@@ -76,6 +79,31 @@ export default function PipelinePage() {
       }
     };
   }, [accessToken]);
+
+  const fetchSanctionLetter = async (leadId) => {
+    setLoadingLetter(true);
+    setSanctionLetterUrl(null);
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/${leadId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data && data.sanction_letter && data.sanction_letter.status === 'uploaded') {
+        setSanctionLetterUrl(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sanction letter:', err);
+    } finally {
+      setLoadingLetter(false);
+    }
+  };
+
+  const handleViewLead = (lead) => {
+    setViewLead(lead);
+    if (lead.status === 'Sanctioned') {
+      fetchSanctionLetter(lead.id);
+    }
+  };
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = !searchTerm ||
@@ -130,7 +158,8 @@ export default function PipelinePage() {
             {filteredLeads.map(lead => (
               <div
                 key={lead.id}
-                className={`bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 ${getStatusBorder(lead.status)}`}
+                onClick={() => handleViewLead(lead)}
+                className={`bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 ${getStatusBorder(lead.status)} cursor-pointer`}
               >
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">
@@ -296,6 +325,103 @@ export default function PipelinePage() {
                 className="flex-1 bg-gray-500 text-white py-2 rounded-xl font-semibold hover:bg-gray-600"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Lead Details Modal */}
+      {viewLead && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-900">Lead Details</h3>
+              <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Customer Name</p>
+                  <p className="font-semibold text-lg">{viewLead.customerName}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Mobile</p>
+                  <p className="font-semibold text-lg">{viewLead.mobile}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Loan Type</p>
+                  <p className="font-semibold">{viewLead.loanType || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Expected Amount</p>
+                  <p className="font-semibold">₹{viewLead.expectedAmount?.toLocaleString() || 'N/A'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Status</p>
+                  <StatusBadge status={viewLead.status} />
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Assigned To</p>
+                  <p className="font-semibold">{viewLead.assignedTo || 'Unassigned'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Assigned Banks</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {viewLead.assignedBanks && viewLead.assignedBanks.length > 0 ? (
+                      viewLead.assignedBanks.map((bank, i) => (
+                        <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                      ))
+                    ) : (
+                      <span className="text-gray-400 text-sm">None</span>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Priority</p>
+                  <p className="font-semibold">{viewLead.priority || 'Medium'}</p>
+                </div>
+              </div>
+
+              {viewLead.remarks && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500">Remarks</p>
+                  <p className="font-medium">{viewLead.remarks}</p>
+                </div>
+              )}
+
+              {/* Sanction Letter Section */}
+              {viewLead.status === 'Sanctioned' && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-green-800 mb-2">Sanction Letter</h4>
+                  {loadingLetter ? (
+                    <p className="text-sm text-gray-500">Loading sanction letter...</p>
+                  ) : sanctionLetterUrl ? (
+                    <a
+                      href={sanctionLetterUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download Sanction Letter
+                    </a>
+                  ) : (
+                    <p className="text-sm text-gray-500">No sanction letter uploaded</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}
+                className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
+              >
+                Close
               </button>
             </div>
           </div>
