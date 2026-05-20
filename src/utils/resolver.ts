@@ -134,10 +134,13 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
     return [];
   }
 
-  // Cache the result
-  checklistCache.set(key, checklist);
+  // Filter out any undefined entries (defensive)
+  const filtered = checklist.filter(Boolean);
 
-  return checklist;
+  // Cache the result
+  checklistCache.set(key, filtered);
+
+  return filtered;
 }
 
 /**

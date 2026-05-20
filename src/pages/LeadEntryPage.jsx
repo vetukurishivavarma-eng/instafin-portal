@@ -345,8 +345,9 @@ const validateBusinessType = (businessType, incomeSource) => {
                >
                  <option value="">Select Loan Status *</option>
                  <option value="new">New Loan</option>
-                 <option value="topup_equity">Top-up/Equity</option>
                  <option value="takeover">Takeover</option>
+                 <option value="construction">Construction</option>
+                 <option value="topup_equity">Top-up/Equity</option>
                </select>
                {fieldErrors.loanStatus && <p className="text-red-500 text-sm mt-1">{fieldErrors.loanStatus}</p>}
              </div>
@@ -372,8 +373,9 @@ const validateBusinessType = (businessType, incomeSource) => {
                  onChange={(e) => { setFormData(p => ({ ...p, residentType: e.target.value })); setFieldErrors(prev => ({ ...prev, residentType: '' })); }}
                >
                  <option value="">Select Resident Type *</option>
-                 <option value="nri">NRI</option>
                  <option value="indian_resident">Indian Resident</option>
+                 <option value="nri">NRI</option>
+                 <option value="merchant_navy">Merchant Navy</option>
                </select>
                {fieldErrors.residentType && <p className="text-red-500 text-sm mt-1">{fieldErrors.residentType}</p>}
              </div>

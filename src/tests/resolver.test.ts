@@ -132,8 +132,12 @@ describe('getChecklist', () => {
 
     const checklist = getChecklist(selection);
 
-    // Partnership not in decision tree - should return empty
-    expect(checklist.length).toBe(0);
+    // Partnership now exists in decision tree
+    expect(checklist.length).toBeGreaterThan(0);
+    const categories = checklist.map(item => item.category);
+    expect(categories).toContain('kyc');
+    expect(categories).toContain('business_documents');
+    expect(categories).toContain('property_documents');
   });
 
   it('business_loan + new + non_salaried + indian_resident + proprietor → returns business loan checklist', () => {
@@ -154,7 +158,7 @@ describe('getChecklist', () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it('home_loan + new + non_salaried + indian_resident + llp → returns LLP checklist if exists', () => {
+  it('home_loan + new + non_salaried + indian_resident + llp → returns LLP checklist', () => {
     const selection: Selection = {
       loanType: 'home_loan',
       loanStatus: 'new',
@@ -165,8 +169,12 @@ describe('getChecklist', () => {
 
     const checklist = getChecklist(selection);
 
-    // LLP not in decision tree - may return empty
-    expect(Array.isArray(checklist)).toBe(true);
+    // LLP now exists in decision tree
+    expect(checklist.length).toBeGreaterThan(0);
+    const categories = checklist.map(item => item.category);
+    expect(categories).toContain('kyc');
+    expect(categories).toContain('business_documents');
+    expect(categories).toContain('property_documents');
   });
 });
 

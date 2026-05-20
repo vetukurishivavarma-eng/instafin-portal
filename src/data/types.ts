@@ -6,13 +6,13 @@
 export type LoanType = 'home_loan' | 'lap' | 'mudra' | 'msme' | 'business_loan' | 'personal_loan' | 'education_loan';
 
 // Loan Status - the state/type of the loan application
-export type LoanStatus = 'new' | 'topup_equity' | 'takeover';
+export type LoanStatus = 'new' | 'topup_equity' | 'takeover' | 'construction';
 
 // Income Source - how the applicant earns income
 export type IncomeSource = 'salaried' | 'non_salaried';
 
 // Resident Type - residency status of the applicant
-export type ResidentType = 'nri' | 'indian_resident';
+export type ResidentType = 'nri' | 'indian_resident' | 'merchant_navy';
 
 // Business Type - legal structure of the business (for non-salaried)
 export type BusinessType = 'proprietor' | 'partnership' | 'pvt_ltd' | 'llp';

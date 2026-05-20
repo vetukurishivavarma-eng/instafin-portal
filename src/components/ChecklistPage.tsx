@@ -19,8 +19,9 @@ const LOAN_TYPE_OPTIONS = [
 // Loan status options
 const LOAN_STATUS_OPTIONS = [
   { value: 'new', label: 'New Loan' },
-  { value: 'topup_equity', label: 'Top-up/Equity' },
   { value: 'takeover', label: 'Takeover' },
+  { value: 'construction', label: 'Construction' },
+  { value: 'topup_equity', label: 'Top-up/Equity' },
 ];
 
 // Income source options
@@ -31,8 +32,9 @@ const INCOME_SOURCE_OPTIONS = [
 
 // Resident type options
 const RESIDENT_TYPE_OPTIONS = [
-  { value: 'nri', label: 'NRI' },
   { value: 'indian_resident', label: 'Indian Resident' },
+  { value: 'nri', label: 'NRI' },
+  { value: 'merchant_navy', label: 'Merchant Navy' },
 ];
 
 // Business type options

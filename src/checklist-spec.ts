@@ -4,9 +4,9 @@
  */
 
 export type LoanType = 'home_loan' | 'lap' | 'mudra' | 'msme' | 'business_loan' | 'personal_loan' | 'education_loan';
-export type LoanStatus = 'new' | 'topup_equity' | 'takeover';
+export type LoanStatus = 'new' | 'topup_equity' | 'takeover' | 'construction';
 export type IncomeSource = 'salaried' | 'non_salaried';
-export type ResidentType = 'nri' | 'indian_resident';
+export type ResidentType = 'nri' | 'indian_resident' | 'merchant_navy';
 export type BusinessType = 'proprietor' | 'partnership' | 'pvt_ltd' | 'llp';
 
 export interface Selection {

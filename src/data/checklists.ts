@@ -18,32 +18,58 @@ const createChecklistItem = (
   required,
 });
 
-// KYC Documents - Common across all loan types
+// ============================================================
+// KYC Documents
+// ============================================================
 const kycDocuments = {
   aadhaar: createChecklistItem('kyc_aadhaar', 'Aadhaar Card', 'kyc'),
   pan: createChecklistItem('kyc_pan', 'PAN Card', 'kyc'),
+  addressProof: createChecklistItem('kyc_addr_proof', 'Present Address Proof (if Aadhaar address differs)', 'kyc', false),
   passport: createChecklistItem('kyc_passport', 'Passport (Valid)', 'kyc'),
   voterId: createChecklistItem('kyc_voter', 'Voter ID', 'kyc'),
   drivingLicense: createChecklistItem('kyc_dl', 'Driving License', 'kyc'),
-  photo: createChecklistItem('kyc_photo', 'Passport Size Photo (2 nos)', 'kyc'),
+  photo: createChecklistItem('kyc_photo', 'Passport Size Photo (3 nos)', 'kyc'),
   nriPassport: createChecklistItem('kyc_nri_passport', 'NRI Passport with Valid Visa', 'kyc'),
-  poa: createChecklistItem('kyc_poa', 'Power of Attorney (if applicable)', 'kyc'),
+  poa: createChecklistItem('kyc_poa', 'Power of Attorney (if applicable)', 'kyc', false),
   overseasAddress: createChecklistItem('kyc_overseas_addr', 'Overseas Address Proof', 'kyc'),
+  overseasCreditReport: createChecklistItem('kyc_overseas_credit', 'Overseas Credit Report', 'kyc'),
+  workPermit: createChecklistItem('kyc_work_permit', 'Work Permit', 'kyc'),
+  visa: createChecklistItem('kyc_visa', 'VISA', 'kyc'),
+  cdc: createChecklistItem('kyc_cdc', 'CDC (Continuous Discharge Certificate)', 'kyc'),
+  poaHolderBio: createChecklistItem('kyc_poa_bio', 'Bio-data Form of POA Holder', 'kyc'),
+  poaNotarized: createChecklistItem('kyc_poa_notarized', 'Power of Attorney – Notarized Abroad & Adjudicated in India', 'kyc'),
 };
 
+// ============================================================
 // Income Proofs - Salaried
+// ============================================================
 const incomeProofsSalaried = {
+  salaryAccountStmt12: createChecklistItem('inc_salary_acct_12', 'Salary Account Statement (Last 1 Year)', 'income_proof'),
+  paySlips6: createChecklistItem('inc_payslips_6', 'Pay Slips (Last 6 Months)', 'income_proof'),
+  paySlips12: createChecklistItem('inc_payslips_12', 'Pay Slips (Last 12 Months)', 'income_proof'),
+  offerLetter: createChecklistItem('inc_offer_letter', 'Offer Letter / Previous Relieving Letter', 'income_proof'),
+  form16_2y: createChecklistItem('inc_form16_2y', 'Form 16 (Last 2 Years)', 'income_proof'),
+  companyID: createChecklistItem('inc_company_id', 'Company ID Card', 'income_proof'),
   salarySlips: createChecklistItem('inc_salary_slips', 'Salary Slips (Last 3 Months)', 'income_proof'),
   salarySlips6: createChecklistItem('inc_salary_slips_6', 'Salary Slips (Last 6 Months)', 'income_proof'),
   form16: createChecklistItem('inc_form16', 'Form 16 (Latest)', 'income_proof'),
   itReturns: createChecklistItem('inc_it_returns', 'IT Returns (Last 2 Years)', 'income_proof'),
+  itReturns2_nri: createChecklistItem('inc_it_returns_2_nri', 'Income Tax Returns or W2 (Last 2 Years)', 'income_proof'),
   bankStatements: createChecklistItem('inc_bank_stmt', 'Bank Statements (Last 6 Months)', 'income_proof'),
   bankStatements12: createChecklistItem('inc_bank_stmt_12', 'Bank Statements (Last 12 Months)', 'income_proof'),
   employmentLetter: createChecklistItem('inc_emp_letter', 'Employment Letter / Appointment Letter', 'income_proof'),
-  companyId: createChecklistItem('inc_company_id', 'Company ID Card', 'income_proof'),
+  salaryCertOriginal: createChecklistItem('inc_salary_cert_orig', 'Latest Salary Certificate / Pay Slip – Original (Last 6 Months)', 'income_proof'),
+  employerIdCard: createChecklistItem('inc_employer_id', 'Copy of Identity Card from Current Employer', 'income_proof'),
+  prevEmployerDetails: createChecklistItem('inc_prev_employer', 'Details of Previous Employer', 'income_proof'),
+  overseasBankStmt6: createChecklistItem('inc_overseas_bank_6', 'Bank Details – Previous 6 Months (Overseas + Indian Account)', 'income_proof'),
+  overseasResidenceProof: createChecklistItem('inc_overseas_res', 'Proof of Residence Abroad (Utility Bill / Driving Licence)', 'income_proof'),
+  employmentContract: createChecklistItem('inc_emp_contract', 'Employment Contract', 'income_proof'),
+  creditInfoReport: createChecklistItem('inc_credit_info', 'Credit Information Report', 'income_proof'),
 };
 
-// Income Proofs - Non-Salaried
+// ============================================================
+// Income Proofs - Non-Salaried (kept for non-Home Loan entries)
+// ============================================================
 const incomeProofsNonSalaried = {
   itReturns: createChecklistItem('inc_it_returns', 'IT Returns (Last 2 Years)', 'income_proof'),
   itReturns3: createChecklistItem('inc_it_returns_3', 'IT Returns (Last 3 Years)', 'income_proof'),
@@ -53,7 +79,9 @@ const incomeProofsNonSalaried = {
   incomeCertificate: createChecklistItem('inc_income_cert', 'Income Certificate', 'income_proof'),
 };
 
-// Business Documents
+// ============================================================
+// Business Documents (kept for non-Home Loan entries)
+// ============================================================
 const businessDocuments = {
   gstReturns: createChecklistItem('biz_gst', 'GST Returns (Last 12 Months)', 'business_documents'),
   gstRegistration: createChecklistItem('biz_gst_reg', 'GST Registration Certificate', 'business_documents'),
@@ -66,7 +94,97 @@ const businessDocuments = {
   msmeCert: createChecklistItem('biz_msme', 'MSME Certificate', 'business_documents'),
 };
 
-// Property Documents - for Home Loan and LAP
+// ============================================================
+// Income Proofs - Self Employed (Individual)
+// ============================================================
+const incomeProofsSelfEmployed = {
+  indITReturns3: createChecklistItem('inc_ind_it3', 'Individual / Proprietor IT Returns (Last 3 Years)', 'income_proof'),
+  indITReturns3_partners: createChecklistItem('inc_ind_it3_partners', 'Individual IT Returns – All Partners (Last 3 Years)', 'income_proof'),
+  indITReturns3_directors: createChecklistItem('inc_ind_it3_directors', 'Individual IT Returns – All Directors (Last 3 Years)', 'income_proof'),
+  indSavingsStmt1: createChecklistItem('inc_ind_savings_1', 'Individual Savings Account Statement (Last 1 Year)', 'income_proof'),
+};
+
+// ============================================================
+// Business / Firm Documents
+// ============================================================
+const firmDocuments = {
+  proprietorCurrentStmt1: createChecklistItem('firm_prop_current_1', 'Proprietor Current Account Statement (Last 1 Year)', 'business_documents'),
+  latestProvisional: createChecklistItem('firm_latest_prov', 'Latest Provisional Balance Sheet (if any)', 'business_documents', false),
+  gstRegCert: createChecklistItem('firm_gst_reg', 'GST Registration Certificate', 'business_documents'),
+  gstReturns1: createChecklistItem('firm_gst_returns_1', 'GST Returns (Last 1 Year)', 'business_documents'),
+  udyamCert: createChecklistItem('firm_udyam', 'Udyam Registration Certificate', 'business_documents'),
+  labourCert: createChecklistItem('firm_labour_cert', 'Labour Certificate / Registration Certificate of Proprietor', 'business_documents'),
+  firmPan: createChecklistItem('firm_pan', 'Firm / Company PAN', 'business_documents'),
+  partnershipDeed: createChecklistItem('firm_partnership_deed', 'Registration Certificate & Partnership Deed', 'business_documents'),
+  firmITReturns3: createChecklistItem('firm_it3', 'Firm IT Returns (Last 3 Years) with Balance Sheet & P&L', 'business_documents'),
+  firmCurrentStmt1: createChecklistItem('firm_current_1', 'Firm Current Account Statement (Last 1 Year)', 'business_documents'),
+  regCertAoaMoaPvt: createChecklistItem('firm_reg_pvt', 'Registration Certificate + AOA + MOA (Pvt Ltd) + Incorporation Certificate', 'business_documents'),
+  regCertAoaMoaLLP: createChecklistItem('firm_reg_llp', 'Registration Certificate + AOA + MOA + LLP Agreement', 'business_documents'),
+  companyITReturns3: createChecklistItem('firm_company_it3', 'Company IT Returns (Last 3 Years) with Balance Sheet & P&L', 'business_documents'),
+  companyCurrentStmt1: createChecklistItem('firm_company_current_1', 'Company Current Account Statement (Last 1 Year)', 'business_documents'),
+  llpITReturns3: createChecklistItem('firm_llp_it3', 'LLP IT Returns (Last 3 Years) with Balance Sheet & P&L', 'business_documents'),
+  llpCurrentStmt1: createChecklistItem('firm_llp_current_1', 'LLP Current Account Statement (Last 1 Year)', 'business_documents'),
+  gstReturns1_firm: createChecklistItem('firm_gst_returns', 'GST Returns (Last 1 Year)', 'business_documents'),
+};
+
+// ============================================================
+// Existing Loan Documents (shared)
+// ============================================================
+const existingLoanDocs = {
+  sanctionLetter: createChecklistItem('loan_sanction_letter', 'Loan Sanction Letter (if any)', 'financial_documents', false),
+  loanAcctStmt: createChecklistItem('loan_acct_stmt', 'Loan A/C Statement – Last 1 Year (if any)', 'financial_documents', false),
+};
+
+// ============================================================
+// Property Documents – Home Loan NEW
+// ============================================================
+const propertyNew = {
+  saleAgreement: createChecklistItem('prop_sale_agreement', 'Sale Agreement', 'property_documents'),
+  saleDeedDraft: createChecklistItem('prop_sale_deed_draft', 'Sale Deed Draft', 'property_documents'),
+  linkDocs: createChecklistItem('prop_link_docs', 'Link Documents', 'property_documents'),
+  planProceeding: createChecklistItem('prop_plan_proceeding', 'Plan & Proceedings Copy', 'property_documents'),
+  houseTax: createChecklistItem('prop_house_tax', 'House Tax', 'property_documents'),
+  powerBill: createChecklistItem('prop_power_bill', 'Power Bill', 'property_documents'),
+};
+
+// ============================================================
+// Property Documents – Home Loan TAKEOVER
+// ============================================================
+const propertyTakeover = {
+  docList: createChecklistItem('prop_doc_list', 'List of Documents (from Existing Lender)', 'property_documents'),
+  saleDeedFinal: createChecklistItem('prop_sale_deed_final', 'Sale Deed (Final Registered Deed)', 'property_documents'),
+  linkDocs: createChecklistItem('prop_link_docs', 'Link Documents', 'property_documents'),
+  planProceeding: createChecklistItem('prop_plan_proceeding', 'Plan & Proceedings Copy', 'property_documents'),
+  houseTax: createChecklistItem('prop_house_tax', 'House Tax', 'property_documents'),
+  powerBill: createChecklistItem('prop_power_bill', 'Power Bill', 'property_documents'),
+};
+
+// ============================================================
+// Property Documents – Home Loan CONSTRUCTION
+// ============================================================
+const propertyConstruction = {
+  estimation: createChecklistItem('prop_estimation', 'Estimation (Construction Cost Estimate)', 'property_documents'),
+  saleDeed: createChecklistItem('prop_sale_deed', 'Sale Deed', 'property_documents'),
+  linkDocs: createChecklistItem('prop_link_docs', 'Link Documents', 'property_documents'),
+  planProceeding: createChecklistItem('prop_plan_proceeding', 'Plan & Proceedings Copy', 'property_documents'),
+  houseTax: createChecklistItem('prop_house_tax', 'House Tax', 'property_documents'),
+  powerBill: createChecklistItem('prop_power_bill', 'Power Bill', 'property_documents'),
+};
+
+// ============================================================
+// Property Documents – Home Loan TOP-UP
+// ============================================================
+const propertyTopup = {
+  saleDeed: createChecklistItem('prop_sale_deed', 'Sale Deed', 'property_documents'),
+  linkDocs: createChecklistItem('prop_link_docs', 'Link Documents', 'property_documents'),
+  planProceeding: createChecklistItem('prop_plan_proceeding', 'Plan & Proceedings Copy', 'property_documents'),
+  houseTax: createChecklistItem('prop_house_tax', 'House Tax', 'property_documents'),
+  powerBill: createChecklistItem('prop_power_bill', 'Power Bill', 'property_documents'),
+};
+
+// ============================================================
+// Legacy property documents (kept for non-Home Loan entries)
+// ============================================================
 const propertyDocuments = {
   titleDeed: createChecklistItem('prop_title_deed', 'Title Deed / Original Documents', 'property_documents'),
   saleAgreement: createChecklistItem('prop_sale_agreement', 'Sale Agreement', 'property_documents'),
@@ -84,7 +202,9 @@ const propertyDocuments = {
   noc: createChecklistItem('prop_noc', 'No Objection Certificate (from Society/Builder)', 'property_documents'),
 };
 
-// Financial Documents
+// ============================================================
+// Financial Documents (legacy, kept for non-Home Loan entries)
+// ============================================================
 const financialDocuments = {
   caStatement: createChecklistItem('fin_ca_stmt', 'CA Statement / Certified Financial Statement', 'financial_documents'),
   balanceSheet: createChecklistItem('fin_balance_sheet', 'Balance Sheet (Last 2 Years)', 'financial_documents'),
@@ -95,7 +215,9 @@ const financialDocuments = {
   securityDocuments: createChecklistItem('fin_security', 'Security Documents (if any)', 'financial_documents'),
 };
 
-// Legal Documents
+// ============================================================
+// Legal Documents (legacy, kept for non-Home Loan entries)
+// ============================================================
 const legalDocuments = {
   noc: createChecklistItem('legal_noc', 'No Objection Certificate', 'legal_documents'),
   approvalLetter: createChecklistItem('legal_approval', 'Approval Letter from Concerned Authority', 'legal_documents'),
@@ -107,98 +229,589 @@ const legalDocuments = {
   builderNoc: createChecklistItem('legal_builder_noc', 'Builder NOC', 'legal_documents'),
 };
 
-// Decision tree: loanType|loanStatus|incomeSource|residentType|businessType?
-export const DECISION_TREE: DecisionTree = {
-  // ============ HOME LOAN ============
+// ============================================================
+// DECISION TREE
+// Key format: loanType|loanStatus|incomeSource|residentType|businessType?
+// ============================================================
 
-  // Home Loan | New | Salaried | NRI
-  'home_loan|new|salaried|nri': [
-    kycDocuments.pan,
-    kycDocuments.aadhaar,
-    kycDocuments.nriPassport,
-    kycDocuments.photo,
-    incomeProofsSalaried.salarySlips6,
-    incomeProofsSalaried.form16,
-    incomeProofsSalaried.itReturns,
-    incomeProofsSalaried.bankStatements12,
-    incomeProofsSalaried.employmentLetter,
-    propertyDocuments.titleDeed,
-    propertyDocuments.saleAgreement,
-    propertyDocuments.encumbrance,
-    propertyDocuments.approvalPlan,
-    propertyDocuments.paymentReceipts,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    legalDocuments.legalOpinion,
-    legalDocuments.societyNoc,
+// Helper: property docs by loan subtype for Home Loan
+const hlPropertyDocs = {
+  new: [
+    propertyNew.saleAgreement,
+    propertyNew.saleDeedDraft,
+    propertyNew.linkDocs,
+    propertyNew.planProceeding,
+    propertyNew.houseTax,
+    propertyNew.powerBill,
   ],
+  takeover: [
+    propertyTakeover.docList,
+    propertyTakeover.saleDeedFinal,
+    propertyTakeover.linkDocs,
+    propertyTakeover.planProceeding,
+    propertyTakeover.houseTax,
+    propertyTakeover.powerBill,
+  ],
+  construction: [
+    propertyConstruction.estimation,
+    propertyConstruction.saleDeed,
+    propertyConstruction.linkDocs,
+    propertyConstruction.planProceeding,
+    propertyConstruction.houseTax,
+    propertyConstruction.powerBill,
+  ],
+  topup_equity: [
+    propertyTopup.saleDeed,
+    propertyTopup.linkDocs,
+    propertyTopup.planProceeding,
+    propertyTopup.houseTax,
+    propertyTopup.powerBill,
+  ],
+};
+
+// Helper: common existing loan docs
+const hlExistingLoans = [existingLoanDocs.sanctionLetter, existingLoanDocs.loanAcctStmt];
+
+export const DECISION_TREE: DecisionTree = {
+  // ============================================================
+  // HOME LOAN — NEW (7 profiles)
+  // ============================================================
 
   // Home Loan | New | Salaried | Indian Resident
   'home_loan|new|salaried|indian_resident': [
     kycDocuments.aadhaar,
     kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.companyID,
     kycDocuments.photo,
-    incomeProofsSalaried.salarySlips,
-    incomeProofsSalaried.form16,
-    incomeProofsSalaried.itReturns,
-    incomeProofsSalaried.bankStatements,
-    propertyDocuments.titleDeed,
-    propertyDocuments.saleAgreement,
-    propertyDocuments.encumbrance,
-    propertyDocuments.approvalPlan,
-    propertyDocuments.propertyTax,
-    propertyDocuments.khata,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    legalDocuments.legalOpinion,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips6,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.form16_2y,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.new,
   ],
 
-  // Home Loan | New | Non-Salaried | Indian Resident | Proprietor
+  // Home Loan | New | Salaried | NRI
+  'home_loan|new|salaried|nri': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.companyID,
+    kycDocuments.workPermit,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.overseasAddress,
+    kycDocuments.overseasCreditReport,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips12,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.itReturns2_nri,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.new,
+  ],
+
+  // Home Loan | New | Salaried | Merchant Navy
+  'home_loan|new|salaried|merchant_navy': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.workPermit,
+    kycDocuments.employmentContract,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryCertOriginal,
+    incomeProofsSalaried.employerIdCard,
+    incomeProofsSalaried.prevEmployerDetails,
+    incomeProofsSalaried.overseasBankStmt6,
+    incomeProofsSalaried.overseasResidenceProof,
+    kycDocuments.cdc,
+    kycDocuments.poaHolderBio,
+    kycDocuments.poaNotarized,
+    incomeProofsSalaried.creditInfoReport,
+    ...hlPropertyDocs.new,
+  ],
+
+  // Home Loan | New | Self Employed | Proprietorship
   'home_loan|new|non_salaried|indian_resident|proprietor': [
     kycDocuments.aadhaar,
     kycDocuments.pan,
+    kycDocuments.addressProof,
     kycDocuments.photo,
-    incomeProofsNonSalaried.itReturns3,
-    incomeProofsNonSalaried.auditReport,
-    incomeProofsNonSalaried.bankStatements,
-    businessDocuments.gstReturns,
-    businessDocuments.udyamAadhaar,
-    propertyDocuments.titleDeed,
-    propertyDocuments.saleAgreement,
-    propertyDocuments.encumbrance,
-    propertyDocuments.approvalPlan,
-    propertyDocuments.propertyTax,
-    financialDocuments.balanceSheet,
-    financialDocuments.profitLoss,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    legalDocuments.legalOpinion,
+    incomeProofsSelfEmployed.indITReturns3,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    firmDocuments.proprietorCurrentStmt1,
+    firmDocuments.latestProvisional,
+    firmDocuments.gstRegCert,
+    firmDocuments.gstReturns1,
+    firmDocuments.udyamCert,
+    firmDocuments.labourCert,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.new,
   ],
 
-  // Home Loan | New | Non-Salaried | Indian Resident | Pvt Ltd
+  // Home Loan | New | Self Employed | Partnership Firm
+  'home_loan|new|non_salaried|indian_resident|partnership': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_partners,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.partnershipDeed,
+    firmDocuments.firmITReturns3,
+    firmDocuments.firmCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.new,
+  ],
+
+  // Home Loan | New | Self Employed | Pvt Ltd
   'home_loan|new|non_salaried|indian_resident|pvt_ltd': [
     kycDocuments.aadhaar,
     kycDocuments.pan,
+    kycDocuments.addressProof,
     kycDocuments.photo,
-    incomeProofsNonSalaried.itReturns3,
-    incomeProofsNonSalaried.bankStatements,
-    businessDocuments.gstReturns,
-    businessDocuments.gstRegistration,
-    businessDocuments.moaAoa,
-    propertyDocuments.titleDeed,
-    propertyDocuments.saleAgreement,
-    propertyDocuments.encumbrance,
-    propertyDocuments.approvalPlan,
-    propertyDocuments.propertyTax,
-    financialDocuments.balanceSheet,
-    financialDocuments.profitLoss,
-    financialDocuments.cashFlow,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    legalDocuments.legalOpinion,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaPvt,
+    firmDocuments.companyITReturns3,
+    firmDocuments.companyCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.new,
   ],
 
-  // ============ LAP (Loan Against Property) ============
+  // Home Loan | New | Self Employed | LLP
+  'home_loan|new|non_salaried|indian_resident|llp': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaLLP,
+    firmDocuments.llpITReturns3,
+    firmDocuments.llpCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.new,
+  ],
+
+  // ============================================================
+  // HOME LOAN — TAKEOVER (7 profiles)
+  // ============================================================
+
+  // Home Loan | Takeover | Salaried | Indian Resident
+  'home_loan|takeover|salaried|indian_resident': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.companyID,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips6,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.form16_2y,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // Home Loan | Takeover | Salaried | NRI
+  'home_loan|takeover|salaried|nri': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.companyID,
+    kycDocuments.workPermit,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.overseasAddress,
+    kycDocuments.overseasCreditReport,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips12,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.itReturns2_nri,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // Home Loan | Takeover | Salaried | Merchant Navy
+  'home_loan|takeover|salaried|merchant_navy': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.workPermit,
+    kycDocuments.employmentContract,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryCertOriginal,
+    incomeProofsSalaried.employerIdCard,
+    incomeProofsSalaried.prevEmployerDetails,
+    incomeProofsSalaried.overseasBankStmt6,
+    incomeProofsSalaried.overseasResidenceProof,
+    kycDocuments.cdc,
+    kycDocuments.poaHolderBio,
+    kycDocuments.poaNotarized,
+    incomeProofsSalaried.creditInfoReport,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // Home Loan | Takeover | Self Employed | Proprietorship
+  'home_loan|takeover|non_salaried|indian_resident|proprietor': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    firmDocuments.proprietorCurrentStmt1,
+    firmDocuments.latestProvisional,
+    firmDocuments.gstRegCert,
+    firmDocuments.gstReturns1,
+    firmDocuments.udyamCert,
+    firmDocuments.labourCert,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // Home Loan | Takeover | Self Employed | Partnership Firm
+  'home_loan|takeover|non_salaried|indian_resident|partnership': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_partners,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.partnershipDeed,
+    firmDocuments.firmITReturns3,
+    firmDocuments.firmCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // Home Loan | Takeover | Self Employed | Pvt Ltd
+  'home_loan|takeover|non_salaried|indian_resident|pvt_ltd': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaPvt,
+    firmDocuments.companyITReturns3,
+    firmDocuments.companyCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // Home Loan | Takeover | Self Employed | LLP
+  'home_loan|takeover|non_salaried|indian_resident|llp': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaLLP,
+    firmDocuments.llpITReturns3,
+    firmDocuments.llpCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.takeover,
+  ],
+
+  // ============================================================
+  // HOME LOAN — CONSTRUCTION (7 profiles)
+  // ============================================================
+
+  // Home Loan | Construction | Salaried | Indian Resident
+  'home_loan|construction|salaried|indian_resident': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.companyID,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips6,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.form16_2y,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // Home Loan | Construction | Salaried | NRI
+  'home_loan|construction|salaried|nri': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.companyID,
+    kycDocuments.workPermit,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.overseasAddress,
+    kycDocuments.overseasCreditReport,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips12,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.itReturns2_nri,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // Home Loan | Construction | Salaried | Merchant Navy
+  'home_loan|construction|salaried|merchant_navy': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.workPermit,
+    kycDocuments.employmentContract,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryCertOriginal,
+    incomeProofsSalaried.employerIdCard,
+    incomeProofsSalaried.prevEmployerDetails,
+    incomeProofsSalaried.overseasBankStmt6,
+    incomeProofsSalaried.overseasResidenceProof,
+    kycDocuments.cdc,
+    kycDocuments.poaHolderBio,
+    kycDocuments.poaNotarized,
+    incomeProofsSalaried.creditInfoReport,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // Home Loan | Construction | Self Employed | Proprietorship
+  'home_loan|construction|non_salaried|indian_resident|proprietor': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    firmDocuments.proprietorCurrentStmt1,
+    firmDocuments.latestProvisional,
+    firmDocuments.gstRegCert,
+    firmDocuments.gstReturns1,
+    firmDocuments.udyamCert,
+    firmDocuments.labourCert,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // Home Loan | Construction | Self Employed | Partnership Firm
+  'home_loan|construction|non_salaried|indian_resident|partnership': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_partners,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.partnershipDeed,
+    firmDocuments.firmITReturns3,
+    firmDocuments.firmCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // Home Loan | Construction | Self Employed | Pvt Ltd
+  'home_loan|construction|non_salaried|indian_resident|pvt_ltd': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaPvt,
+    firmDocuments.companyITReturns3,
+    firmDocuments.companyCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // Home Loan | Construction | Self Employed | LLP
+  'home_loan|construction|non_salaried|indian_resident|llp': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaLLP,
+    firmDocuments.llpITReturns3,
+    firmDocuments.llpCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.construction,
+  ],
+
+  // ============================================================
+  // HOME LOAN — TOP-UP (7 profiles)
+  // ============================================================
+
+  // Home Loan | Top-Up | Salaried | Indian Resident
+  'home_loan|topup_equity|salaried|indian_resident': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.companyID,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips6,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.form16_2y,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // Home Loan | Top-Up | Salaried | NRI
+  'home_loan|topup_equity|salaried|nri': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.companyID,
+    kycDocuments.workPermit,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.overseasAddress,
+    kycDocuments.overseasCreditReport,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips12,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.itReturns2_nri,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // Home Loan | Top-Up | Salaried | Merchant Navy
+  'home_loan|topup_equity|salaried|merchant_navy': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.workPermit,
+    kycDocuments.employmentContract,
+    kycDocuments.photo,
+    incomeProofsSalaried.salaryCertOriginal,
+    incomeProofsSalaried.employerIdCard,
+    incomeProofsSalaried.prevEmployerDetails,
+    incomeProofsSalaried.overseasBankStmt6,
+    incomeProofsSalaried.overseasResidenceProof,
+    kycDocuments.cdc,
+    kycDocuments.poaHolderBio,
+    kycDocuments.poaNotarized,
+    incomeProofsSalaried.creditInfoReport,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // Home Loan | Top-Up | Self Employed | Proprietorship
+  'home_loan|topup_equity|non_salaried|indian_resident|proprietor': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    firmDocuments.proprietorCurrentStmt1,
+    firmDocuments.latestProvisional,
+    firmDocuments.gstRegCert,
+    firmDocuments.gstReturns1,
+    firmDocuments.udyamCert,
+    firmDocuments.labourCert,
+    ...hlExistingLoans,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // Home Loan | Top-Up | Self Employed | Partnership Firm
+  'home_loan|topup_equity|non_salaried|indian_resident|partnership': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_partners,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.partnershipDeed,
+    firmDocuments.firmITReturns3,
+    firmDocuments.firmCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // Home Loan | Top-Up | Self Employed | Pvt Ltd
+  'home_loan|topup_equity|non_salaried|indian_resident|pvt_ltd': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaPvt,
+    firmDocuments.companyITReturns3,
+    firmDocuments.companyCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // Home Loan | Top-Up | Self Employed | LLP
+  'home_loan|topup_equity|non_salaried|indian_resident|llp': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    ...hlExistingLoans,
+    firmDocuments.firmPan,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    firmDocuments.regCertAoaMoaLLP,
+    firmDocuments.llpITReturns3,
+    firmDocuments.llpCurrentStmt1,
+    firmDocuments.gstReturns1_firm,
+    ...hlPropertyDocs.topup_equity,
+  ],
+
+  // ============================================================
+  // LAP (Loan Against Property) — existing entries preserved
+  // ============================================================
 
   // LAP | New | Salaried | NRI
   'lap|new|salaried|nri': [
@@ -245,7 +858,31 @@ export const DECISION_TREE: DecisionTree = {
     legalDocuments.noc,
   ],
 
-  // ============ Business Loan ============
+  // LAP | New | Non-Salaried | Indian Resident | Proprietor
+  'lap|new|non_salaried|indian_resident|proprietor': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.photo,
+    incomeProofsNonSalaried.itReturns3,
+    incomeProofsNonSalaried.bankStatements,
+    businessDocuments.gstReturns,
+    businessDocuments.udyamAadhaar,
+    propertyDocuments.titleDeed,
+    propertyDocuments.registeredSale,
+    propertyDocuments.encumbrance,
+    propertyDocuments.approvalPlan,
+    propertyDocuments.propertyTax,
+    financialDocuments.balanceSheet,
+    financialDocuments.profitLoss,
+    financialDocuments.creditReport,
+    financialDocuments.existingLoans,
+    legalDocuments.legalOpinion,
+    legalDocuments.noc,
+  ],
+
+  // ============================================================
+  // Business Loan — existing entries preserved
+  // ============================================================
 
   // Business Loan | New | Salaried | Indian Resident
   'business_loan|new|salaried|indian_resident': [
@@ -256,7 +893,7 @@ export const DECISION_TREE: DecisionTree = {
     incomeProofsSalaried.form16,
     incomeProofsSalaried.itReturns,
     incomeProofsSalaried.bankStatements,
-    propertyDocuments.titleDeed, // If providing property as collateral
+    propertyDocuments.titleDeed,
     financialDocuments.creditReport,
     financialDocuments.existingLoans,
     legalDocuments.undertaking,
@@ -283,7 +920,29 @@ export const DECISION_TREE: DecisionTree = {
     legalDocuments.undertaking,
   ],
 
-  // ============ MSME / Mudra ============
+  // Business Loan | New | Non-Salaried | Indian Resident | Pvt Ltd
+  'business_loan|new|non_salaried|indian_resident|pvt_ltd': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    incomeProofsNonSalaried.itReturns3,
+    incomeProofsNonSalaried.bankStatements,
+    businessDocuments.gstReturns,
+    businessDocuments.gstRegistration,
+    businessDocuments.moaAoa,
+    financialDocuments.balanceSheet,
+    financialDocuments.profitLoss,
+    financialDocuments.cashFlow,
+    financialDocuments.caStatement,
+    financialDocuments.creditReport,
+    financialDocuments.existingLoans,
+    propertyDocuments.titleDeed,
+    legalDocuments.legalOpinion,
+    legalDocuments.undertaking,
+  ],
+
+  // ============================================================
+  // MSME / Mudra — existing entries preserved
+  // ============================================================
 
   // MSME | Mudra | New | Non-Salaried | Indian Resident | Proprietor
   'msme|mudra|new|non_salaried|indian_resident|proprietor': [
@@ -302,50 +961,6 @@ export const DECISION_TREE: DecisionTree = {
     financialDocuments.profitLoss,
     financialDocuments.creditReport,
     financialDocuments.existingLoans,
-    legalDocuments.undertaking,
-  ],
-
-  // ============ Additional common combinations ============
-
-  // LAP | New | Non-Salaried | Indian Resident | Proprietor
-  'lap|new|non_salaried|indian_resident|proprietor': [
-    kycDocuments.aadhaar,
-    kycDocuments.pan,
-    kycDocuments.photo,
-    incomeProofsNonSalaried.itReturns3,
-    incomeProofsNonSalaried.bankStatements,
-    businessDocuments.gstReturns,
-    businessDocuments.udyamAadhaar,
-    propertyDocuments.titleDeed,
-    propertyDocuments.registeredSale,
-    propertyDocuments.encumbrance,
-    propertyDocuments.approvalPlan,
-    propertyDocuments.propertyTax,
-    financialDocuments.balanceSheet,
-    financialDocuments.profitLoss,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    legalDocuments.legalOpinion,
-    legalDocuments.noc,
-  ],
-
-  // Business Loan | New | Non-Salaried | Indian Resident | Pvt Ltd
-  'business_loan|new|non_salaried|indian_resident|pvt_ltd': [
-    kycDocuments.aadhaar,
-    kycDocuments.pan,
-    incomeProofsNonSalaried.itReturns3,
-    incomeProofsNonSalaried.bankStatements,
-    businessDocuments.gstReturns,
-    businessDocuments.gstRegistration,
-    businessDocuments.moaAoa,
-    financialDocuments.balanceSheet,
-    financialDocuments.profitLoss,
-    financialDocuments.cashFlow,
-    financialDocuments.caStatement,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    propertyDocuments.titleDeed,
-    legalDocuments.legalOpinion,
     legalDocuments.undertaking,
   ],
 };
