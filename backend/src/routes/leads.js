@@ -2,10 +2,15 @@ import express from 'express';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import leadBanksRouter from './leadBanks.js';
+import { deriveLeadStatus, computeLeadAggregates } from '../utils/statusDerivation.js';
 
 const router = express.Router();
 
 router.use(authenticate);
+
+// Mount bank-wise routes as sub-router
+router.use('/:leadId/banks', leadBanksRouter);
 
 // GET all leads with search, filter and pagination
 router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
@@ -49,29 +54,72 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     if (error) throw error;
 
+    // Fetch lead_banks for all returned leads to compute derived statuses
+    const leadIds = leads.map(l => l.id);
+    let banksByLeadId = {};
+    if (leadIds.length > 0) {
+      const { data: allBanks } = await supabase
+        .from('lead_banks')
+        .select('*')
+        .in('lead_id', leadIds);
+
+      if (allBanks) {
+        for (const bank of allBanks) {
+          if (!banksByLeadId[bank.lead_id]) banksByLeadId[bank.lead_id] = [];
+          banksByLeadId[bank.lead_id].push(bank);
+        }
+      }
+    }
+
     // Map database fields to API response
-    const mappedLeads = leads.map(lead => ({
-      id: lead.id,
-      customerName: lead.customer_name,
-      mobile: lead.mobile,
-      email: lead.email,
-      loanType: lead.loan_type,
-      loanStatus: lead.loan_status,
-      incomeSource: lead.income_source,
-      residentType: lead.resident_type,
-      businessType: lead.business_type,
-      expectedAmount: lead.expected_amount,
-      sanctionedAmount: lead.sanctioned_amount,
-      disbursedAmount: lead.disbursed_amount || 0,
-      assignedBanks: lead.assigned_banks || [],
-      status: lead.status,
-      assignedTo: lead.assigned_to,
-      department: lead.department,
-      priority: lead.priority,
-      followUp: lead.follow_up,
-      remarks: lead.remarks,
-      createdAt: lead.created_at
-    }));
+    const mappedLeads = leads.map(lead => {
+      const banks = banksByLeadId[lead.id] || [];
+      let status = lead.status;
+      let sanctionedAmount = lead.sanctioned_amount;
+      let disbursedAmount = lead.disbursed_amount || 0;
+
+      // Override with derived values if lead_banks records exist
+      if (banks.length > 0) {
+        const bankStatuses = banks.map(b => b.status);
+        const derived = deriveLeadStatus(bankStatuses);
+        const agg = computeLeadAggregates(banks);
+        if (derived) status = derived;
+        sanctionedAmount = agg.totalSanctioned || sanctionedAmount;
+        disbursedAmount = agg.totalDisbursed;
+      }
+
+      return {
+        id: lead.id,
+        customerName: lead.customer_name,
+        mobile: lead.mobile,
+        email: lead.email,
+        loanType: lead.loan_type,
+        loanStatus: lead.loan_status,
+        incomeSource: lead.income_source,
+        residentType: lead.resident_type,
+        businessType: lead.business_type,
+        expectedAmount: lead.expected_amount,
+        sanctionedAmount,
+        disbursedAmount,
+        assignedBanks: lead.assigned_banks || [],
+        status,
+        assignedTo: lead.assigned_to,
+        department: lead.department,
+        priority: lead.priority,
+        followUp: lead.follow_up,
+        remarks: lead.remarks,
+        createdAt: lead.created_at,
+        bankDetails: banks.map(b => ({
+          id: b.id,
+          bankName: b.bank_name,
+          status: b.status,
+          sanctionedAmount: b.sanctioned_amount,
+          disbursedAmount: b.disbursed_amount,
+          sanctionLetterPath: b.sanction_letter_path,
+          remarks: b.remarks
+        }))
+      };
+    });
 
     // Build response - include pagination only if limit was specified
     const response = { data: mappedLeads };
@@ -110,6 +158,26 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // Fetch bank-wise records for derived status
+    const { data: banks } = await supabase
+      .from('lead_banks')
+      .select('*')
+      .eq('lead_id', lead.id)
+      .order('created_at', { ascending: true });
+
+    let status = lead.status;
+    let sanctionedAmount = lead.sanctioned_amount;
+    let disbursedAmount = lead.disbursed_amount || 0;
+
+    if (banks && banks.length > 0) {
+      const bankStatuses = banks.map(b => b.status);
+      const derived = deriveLeadStatus(bankStatuses);
+      const agg = computeLeadAggregates(banks);
+      if (derived) status = derived;
+      sanctionedAmount = agg.totalSanctioned || sanctionedAmount;
+      disbursedAmount = agg.totalDisbursed;
+    }
+
     res.json({
       id: lead.id,
       customerName: lead.customer_name,
@@ -121,16 +189,25 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       residentType: lead.resident_type,
       businessType: lead.business_type,
       expectedAmount: lead.expected_amount,
-      sanctionedAmount: lead.sanctioned_amount,
-      disbursedAmount: lead.disbursed_amount || 0,
+      sanctionedAmount,
+      disbursedAmount,
       assignedBanks: lead.assigned_banks || [],
-      status: lead.status,
+      status,
       assignedTo: lead.assigned_to,
       department: lead.department,
       priority: lead.priority,
       followUp: lead.follow_up,
       remarks: lead.remarks,
-      createdAt: lead.created_at
+      createdAt: lead.created_at,
+      bankDetails: (banks || []).map(b => ({
+        id: b.id,
+        bankName: b.bank_name,
+        status: b.status,
+        sanctionedAmount: b.sanctioned_amount,
+        disbursedAmount: b.disbursed_amount,
+        sanctionLetterPath: b.sanction_letter_path,
+        remarks: b.remarks
+      }))
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
@@ -536,6 +613,20 @@ router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res)
       .single();
 
     if (updateError) throw updateError;
+
+    // Also create a lead_banks record for bank-wise tracking
+    const { error: bankRowError } = await supabase
+      .from('lead_banks')
+      .insert({
+        lead_id: leadId,
+        bank_name: bankName,
+        status: 'Processing'
+      });
+
+    // Ignore duplicate errors (bank may already have a lead_banks row)
+    if (bankRowError && bankRowError.code !== '23505') {
+      console.error('Failed to create lead_banks row:', bankRowError);
+    }
 
     res.json({
       message: 'Bank assigned successfully',
