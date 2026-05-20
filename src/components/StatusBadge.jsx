@@ -12,8 +12,6 @@ export default function StatusBadge({ status }) {
       case "sanctioned":
       case "Sanctioned":
         return "bg-green-50 text-green-700 border-green-200";
-      case "Partially Sanctioned":
-        return "bg-lime-50 text-lime-700 border-lime-200";
       case "Partially Disbursed":
         return "bg-teal-50 text-teal-700 border-teal-200";
       case "disbursed":

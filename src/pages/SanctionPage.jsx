@@ -26,9 +26,7 @@ export default function SanctionPage() {
       const data = await res.json();
       const allLeads = data.data || data || [];
       // Show leads that have at least one processing bank
-      setLeads(allLeads.filter(l =>
-        l.status === 'Processing' || l.status === 'Partially Sanctioned'
-      ));
+      setLeads(allLeads.filter(l => l.status === 'Processing'));
     } catch (err) {
       setError('Failed to load leads');
     }

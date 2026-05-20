@@ -35,8 +35,8 @@ export function deriveLeadStatus(bankStatuses) {
     return 'Disbursed';
   }
 
-  // Some banks sanctioned, some still processing
-  if (sanctioned > 0 && processing > 0) return 'Partially Sanctioned';
+  // Some banks sanctioned, some still processing — keep as Processing
+  if (sanctioned > 0 && processing > 0) return 'Processing';
 
   // All non-rejected banks sanctioned (none processing, none disbursed yet)
   if (sanctioned > 0 && sanctioned === total - rejected) return 'Sanctioned';
