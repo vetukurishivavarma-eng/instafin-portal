@@ -199,6 +199,20 @@ router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), as
   try {
     const { leadId, documentId } = req.params;
 
+    console.log(`DELETE checklist-status: leadId=${leadId}, documentId=${documentId}`);
+
+    // Verify lead still exists first
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', leadId)
+      .single();
+
+    if (leadErr || !lead) {
+      console.error('Lead not found for delete:', leadErr);
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
     // Get the record first to find the file path
     const { data: record } = await supabase
       .from('lead_checklist_status')
@@ -227,7 +241,7 @@ router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), as
       }
     }
 
-    // Delete the DB record
+    // Delete ONLY the checklist status record (NOT the lead)
     const { error } = await supabase
       .from('lead_checklist_status')
       .delete()
@@ -236,6 +250,19 @@ router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), as
 
     if (error) throw error;
 
+    // Verify lead still exists after delete
+    const { data: leadAfter } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', leadId)
+      .single();
+
+    if (!leadAfter) {
+      console.error('CRITICAL: Lead was deleted after checklist status delete! Possible cascade delete.');
+      return res.status(500).json({ error: 'Lead was unexpectedly deleted - check DB cascade settings' });
+    }
+
+    console.log(`DELETE checklist-status success: leadId=${leadId} still exists`);
     res.json({ success: true, message: 'Document deleted' });
   } catch (error) {
     console.error('Delete document error:', error);
