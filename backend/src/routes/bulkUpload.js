@@ -280,10 +280,16 @@ router.post('/process', authorize('admin'), async (req, res) => {
             business_type: ['businessType', 'business_type', 'Business Type', 'BUSINESS TYPE'],
             referral_code: ['referralCode', 'referral_code', 'Referral Code', 'REFERRAL CODE']
           };
+          // Normalize enum values to match decision tree keys
+          const normalizeEnum = (val) => {
+            if (!val) return val;
+            return val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          };
+          const enumFields = ['loan_type', 'loan_status', 'income_source', 'resident_type', 'business_type'];
           for (const [dbCol, variants] of Object.entries(fieldMap)) {
             const value = variants.map(v => lead[v]).find(v => v != null && v !== '');
             if (value != null && value !== '') {
-              insertData[dbCol] = dbCol === 'mobile' ? value.toString() : value;
+              insertData[dbCol] = dbCol === 'mobile' ? value.toString() : (enumFields.includes(dbCol) ? normalizeEnum(value) : value);
             }
           }
           insertData.status = 'New';

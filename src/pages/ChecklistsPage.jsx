@@ -59,14 +59,20 @@ export default function ChecklistsPage() {
     }
   };
 
+  // Normalize lead field values to match decision tree keys
+  const normalizeValue = (val) => {
+    if (!val) return val;
+    return val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  };
+
   // Load checklist for lead using decision tree resolver
   const loadChecklistForLead = (lead) => {
     const selection = {
-      loanType: lead.loanType,
-      loanStatus: lead.loanStatus || 'new',
-      incomeSource: lead.incomeSource,
-      residentType: lead.residentType,
-      businessType: lead.businessType
+      loanType: normalizeValue(lead.loanType),
+      loanStatus: normalizeValue(lead.loanStatus) || 'new',
+      incomeSource: normalizeValue(lead.incomeSource),
+      residentType: normalizeValue(lead.residentType),
+      businessType: normalizeValue(lead.businessType)
     };
 
     const items = getChecklist(selection);
