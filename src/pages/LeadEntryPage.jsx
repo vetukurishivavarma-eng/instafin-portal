@@ -358,7 +358,7 @@ const validateBusinessType = (businessType, incomeSource) => {
                <select
                  className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.incomeSource ? 'border-red-500' : ''}`}
                  value={formData.incomeSource}
-                 onChange={(e) => { setFormData(p => ({ ...p, incomeSource: e.target.value })); setFieldErrors(prev => ({ ...prev, incomeSource: '' })); }}
+                 onChange={(e) => { setFormData(p => ({ ...p, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : p.businessType })); setFieldErrors(prev => ({ ...prev, incomeSource: '' })); }}
                >
                  <option value="">Select Income Source *</option>
                  <option value="salaried">Salaried</option>
@@ -382,6 +382,7 @@ const validateBusinessType = (businessType, incomeSource) => {
            </div>
 
            <div className="grid md:grid-cols-2 gap-6 mb-6">
+             {formData.incomeSource !== 'salaried' && (
              <div>
                <select
                  className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.businessType ? 'border-red-500' : ''}`}
@@ -396,6 +397,7 @@ const validateBusinessType = (businessType, incomeSource) => {
                </select>
                {fieldErrors.businessType && <p className="text-red-500 text-sm mt-1">{fieldErrors.businessType}</p>}
              </div>
+             )}
              <div>
                <input
                  type="text"

@@ -19,6 +19,8 @@ export default function ChecklistsPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(null);
+  const [deletingDoc, setDeletingDoc] = useState(null);
+  const [viewDoc, setViewDoc] = useState(null);
 
   // Fetch leads
   useEffect(() => {
@@ -78,11 +80,15 @@ export default function ChecklistsPage() {
     })
     .then(r => r.json())
     .then(data => {
-      // Convert to simple map: { documentId: 'uploaded' | 'pending' }
+      // Convert to simple map: { documentId: { status, filePath, documentName } }
       const statusMap = {};
       if (data && typeof data === 'object') {
         Object.entries(data).forEach(([docId, info]) => {
-          statusMap[docId] = info.status || 'pending';
+          statusMap[docId] = {
+            status: info.status || 'pending',
+            filePath: info.filePath || null,
+            documentName: info.documentName || null
+          };
         });
       }
       setChecklistStatuses(statusMap);
@@ -112,7 +118,7 @@ export default function ChecklistsPage() {
       });
 
       if (res.ok) {
-        setChecklistStatuses(prev => ({ ...prev, [documentId]: 'uploaded' }));
+        fetchChecklistStatuses(selectedLead.id);
         setSuccess(`${documentName} uploaded successfully!`);
         setTimeout(() => setSuccess(''), 3000);
       } else {
@@ -127,6 +133,65 @@ export default function ChecklistsPage() {
     } finally {
       setUploadingDoc(null);
     }
+  };
+
+  // Handle document deletion
+  const handleDeleteDocument = async (documentId, documentName) => {
+    if (!selectedLead || !window.confirm(`Delete "${documentName}"? This cannot be undone.`)) return;
+
+    setDeletingDoc(documentId);
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/${selectedLead.id}/${documentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      if (res.ok) {
+        setChecklistStatuses(prev => ({ ...prev, [documentId]: { status: 'pending', filePath: null, documentName: null } }));
+        setSuccess(`${documentName} deleted successfully!`);
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const errData = await res.json();
+        setError(errData.error || 'Delete failed');
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('Delete failed');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setDeletingDoc(null);
+    }
+  };
+
+  // Handle view document
+  const handleViewDocument = (documentId) => {
+    const fileUrl = `${API_BASE}/checklist-status/file/${selectedLead.id}/${documentId}`;
+    setViewDoc({ url: fileUrl, id: documentId });
+  };
+
+  // Share via email
+  const handleShareEmail = () => {
+    const pendingItems = checklistItems.filter(item => {
+      const statusEntry = checklistStatuses[item.id];
+      const status = statusEntry?.status || 'pending';
+      return status === 'pending' && item.required;
+    });
+
+    if (pendingItems.length === 0) {
+      setSuccess('All required documents have been uploaded!');
+      setTimeout(() => setSuccess(''), 3000);
+      return;
+    }
+
+    const subject = encodeURIComponent(`Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType || 'Loan'})`);
+    const body = encodeURIComponent(
+      `Dear ${selectedLead.customerName},\n\n` +
+      `Please submit the following pending documents for your ${selectedLead.loanType || 'loan'} application:\n\n` +
+      pendingItems.map((item, i) => `${i + 1}. ${item.name} (${item.category.replace(/_/g, ' ')})`).join('\n') +
+      `\n\nPlease upload these at your earliest convenience.\n\nThank you.`
+    );
+
+    window.open(`mailto:?subject=${subject}&body=${body}`);
   };
 
   // Download checklist as PDF
@@ -155,7 +220,7 @@ export default function ChecklistsPage() {
   // Share pending documents via WhatsApp
   const handleSharePendingWhatsApp = async () => {
     const pendingItems = checklistItems.filter(item => {
-      const status = checklistStatuses[item.id] || 'pending';
+      const status = checklistStatuses[item.id]?.status || 'pending';
       return status === 'pending' && item.required;
     });
 
@@ -186,9 +251,9 @@ export default function ChecklistsPage() {
   };
 
   // Compute stats
-  const uploadedCount = checklistItems.filter(item => checklistStatuses[item.id] === 'uploaded').length;
+  const uploadedCount = checklistItems.filter(item => checklistStatuses[item.id]?.status === 'uploaded').length;
   const pendingRequiredCount = checklistItems.filter(item =>
-    item.required && (checklistStatuses[item.id] || 'pending') === 'pending'
+    item.required && (checklistStatuses[item.id]?.status || 'pending') === 'pending'
   ).length;
 
   return (
@@ -322,9 +387,11 @@ export default function ChecklistsPage() {
                         </div>
                         <ul className="divide-y divide-gray-100">
                           {items.map(item => {
-                            const status = checklistStatuses[item.id] || 'pending';
+                            const statusEntry = checklistStatuses[item.id];
+                            const status = statusEntry?.status || 'pending';
                             const isUploaded = status === 'uploaded';
                             const isUploading = uploadingDoc === item.id;
+                            const isDeleting = deletingDoc === item.id;
 
                             return (
                               <li key={item.id} className={`px-5 py-4 flex items-center gap-3 ${isUploaded ? 'bg-green-50' : ''}`}>
@@ -361,12 +428,24 @@ export default function ChecklistsPage() {
                                   </span>
                                 </div>
 
-                                {/* Upload button or Uploaded badge */}
-                                <div className="flex-shrink-0">
+                                {/* Upload/View/Delete buttons */}
+                                <div className="flex-shrink-0 flex items-center gap-2">
                                   {isUploaded ? (
-                                    <span className="text-xs text-green-700 font-semibold bg-green-100 px-3 py-1.5 rounded-lg">
-                                      Uploaded
-                                    </span>
+                                    <>
+                                      <button
+                                        onClick={() => handleViewDocument(item.id)}
+                                        className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteDocument(item.id, item.name)}
+                                        disabled={isDeleting}
+                                        className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                                      >
+                                        {isDeleting ? '...' : 'Delete'}
+                                      </button>
+                                    </>
                                   ) : (
                                     <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg font-medium ${
                                       isUploading
@@ -476,6 +555,22 @@ export default function ChecklistsPage() {
               )}
             </button>
 
+            {/* Share via Email */}
+            <button
+              onClick={handleShareEmail}
+              disabled={checklistItems.length === 0 || pendingRequiredCount === 0}
+              className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
+                checklistItems.length === 0 || pendingRequiredCount === 0
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+              }`}
+            >
+              <svg className="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Share via Email
+            </button>
+
             {/* Share Pending via WhatsApp */}
             <button
               onClick={handleSharePendingWhatsApp}
@@ -500,6 +595,40 @@ export default function ChecklistsPage() {
       {!selectedLead && leads.length > 0 && (
         <div className="text-center py-8 text-gray-500">
           Please select a lead to view checklist and upload documents.
+        </div>
+      )}
+
+      {/* View Document Modal */}
+      {viewDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setViewDoc(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-6 py-4 border-b">
+              <h3 className="text-lg font-bold text-gray-900">Uploaded Document</h3>
+              <div className="flex items-center gap-3">
+                <a
+                  href={viewDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Open in new tab
+                </a>
+                <button
+                  onClick={() => setViewDoc(null)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <iframe
+                src={viewDoc.url}
+                title="Document Preview"
+                className="w-full h-[70vh] border rounded-lg"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

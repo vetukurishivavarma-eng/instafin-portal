@@ -194,6 +194,55 @@ router.get('/file/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), 
   }
 });
 
+// DELETE /api/checklist-status/:leadId/:documentId - Delete an uploaded document
+router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { leadId, documentId } = req.params;
+
+    // Get the record first to find the file path
+    const { data: record } = await supabase
+      .from('lead_checklist_status')
+      .select('file_path')
+      .eq('lead_id', leadId)
+      .eq('document_id', documentId)
+      .single();
+
+    if (!record) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    // Delete file from storage
+    if (record.file_path) {
+      if (process.env.NODE_ENV === 'production') {
+        try {
+          await supabase.storage.from('lead-documents').remove([record.file_path]);
+        } catch (e) {
+          console.warn('Failed to delete file from storage:', e.message);
+        }
+      } else {
+        const localPath = path.join(uploadsDir, record.file_path);
+        if (fs.existsSync(localPath)) {
+          fs.unlinkSync(localPath);
+        }
+      }
+    }
+
+    // Delete the DB record
+    const { error } = await supabase
+      .from('lead_checklist_status')
+      .delete()
+      .eq('lead_id', leadId)
+      .eq('document_id', documentId);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Document deleted' });
+  } catch (error) {
+    console.error('Delete document error:', error);
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
 // GET /api/checklist-status/:leadId/pending - Get only pending documents
 router.get('/:leadId/pending', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
