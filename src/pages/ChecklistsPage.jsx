@@ -164,12 +164,24 @@ export default function ChecklistsPage() {
   };
 
   // Handle view document
-  const handleViewDocument = (documentId) => {
-    const fileUrl = `${API_BASE}/checklist-status/file/${selectedLead.id}/${documentId}`;
-    setViewDoc({ url: fileUrl, id: documentId });
+  const handleViewDocument = async (documentId) => {
+    setViewDoc({ url: null, id: documentId, loading: true });
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${selectedLead.id}/${documentId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch file');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setViewDoc({ url: blobUrl, id: documentId, loading: false });
+    } catch (err) {
+      setError('Failed to load document');
+      setTimeout(() => setError(''), 5000);
+      setViewDoc(null);
+    }
   };
 
-  // Share via email
+  // Share via email (opens Gmail compose)
   const handleShareEmail = () => {
     const pendingItems = checklistItems.filter(item => {
       const statusEntry = checklistStatuses[item.id];
@@ -183,15 +195,15 @@ export default function ChecklistsPage() {
       return;
     }
 
-    const subject = encodeURIComponent(`Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType || 'Loan'})`);
-    const body = encodeURIComponent(
+    const subject = `Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType || 'Loan'})`;
+    const body =
       `Dear ${selectedLead.customerName},\n\n` +
       `Please submit the following pending documents for your ${selectedLead.loanType || 'loan'} application:\n\n` +
       pendingItems.map((item, i) => `${i + 1}. ${item.name} (${item.category.replace(/_/g, ' ')})`).join('\n') +
-      `\n\nPlease upload these at your earliest convenience.\n\nThank you.`
-    );
+      `\n\nPlease upload these at your earliest convenience.\n\nThank you.`;
 
-    window.open(`mailto:?subject=${subject}&body=${body}`);
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(gmailUrl, '_blank');
   };
 
   // Download checklist as PDF
@@ -600,21 +612,23 @@ export default function ChecklistsPage() {
 
       {/* View Document Modal */}
       {viewDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setViewDoc(null)}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}>
           <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center px-6 py-4 border-b">
               <h3 className="text-lg font-bold text-gray-900">Uploaded Document</h3>
               <div className="flex items-center gap-3">
-                <a
-                  href={viewDoc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Open in new tab
-                </a>
+                {viewDoc.url && (
+                  <a
+                    href={viewDoc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Open in new tab
+                  </a>
+                )}
                 <button
-                  onClick={() => setViewDoc(null)}
+                  onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}
                   className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
                 >
                   &times;
@@ -622,11 +636,15 @@ export default function ChecklistsPage() {
               </div>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <iframe
-                src={viewDoc.url}
-                title="Document Preview"
-                className="w-full h-[70vh] border rounded-lg"
-              />
+              {viewDoc.loading ? (
+                <div className="flex items-center justify-center h-[70vh] text-gray-500">Loading document...</div>
+              ) : (
+                <iframe
+                  src={viewDoc.url}
+                  title="Document Preview"
+                  className="w-full h-[70vh] border rounded-lg"
+                />
+              )}
             </div>
           </div>
         </div>
