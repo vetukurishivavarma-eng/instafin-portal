@@ -152,7 +152,7 @@ router.post('/preview', authorize('admin'), upload.single('file'), async (req, r
     console.log('Data rows:', JSON.stringify(data, null, 2));
 
     for (const row of data) {
-      const mobile = row.mobile || row.Mobile || row['Mobile No'];
+      const mobile = row.mobile || row.Mobile || row['Mobile No'] || row['MOBILE NO'] || row.MOBILE;
       console.log('Processing row with mobile:', mobile);
 
       if (!mobile) {
@@ -198,7 +198,7 @@ router.post('/preview', authorize('admin'), upload.single('file'), async (req, r
           changes.push({
             leadId: existing.id,
             mobile: mobile,
-            customerName: row.customerName || row.Customer_Name || existing.customer_name,
+            customerName: row.customerName || row.Customer_Name || row['Customer Name'] || row['CUSTOMER NAME'] || existing.customer_name,
             changes: rowChanges
           });
         }
