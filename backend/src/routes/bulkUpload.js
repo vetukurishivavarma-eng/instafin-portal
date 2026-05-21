@@ -25,32 +25,64 @@ const columnMapping = {
   'customerName': 'customer_name',
   'customer_name': 'customer_name',
   'Customer Name': 'customer_name',
+  'CUSTOMER NAME': 'customer_name',
+  'Customer_name': 'customer_name',
   'mobile': 'mobile',
   'Mobile': 'mobile',
   'Mobile No': 'mobile',
+  'MOBILE NO': 'mobile',
+  'MOBILE': 'mobile',
   'email': 'email',
   'Email': 'email',
+  'EMAIL': 'email',
   'loanType': 'loan_type',
   'loan_type': 'loan_type',
   'Loan Type': 'loan_type',
+  'LOAN TYPE': 'loan_type',
   'expectedAmount': 'expected_amount',
   'expected_amount': 'expected_amount',
   'Expected Amount': 'expected_amount',
+  'EXPECTED AMOUNT': 'expected_amount',
   'status': 'status',
   'Status': 'status',
+  'STATUS': 'status',
+  'loanStatus': 'loan_status',
+  'loan_status': 'loan_status',
+  'Loan Status': 'loan_status',
+  'LOAN STATUS': 'loan_status',
+  'incomeSource': 'income_source',
+  'income_source': 'income_source',
+  'Income Source': 'income_source',
+  'INCOME SOURCE': 'income_source',
+  'residentType': 'resident_type',
+  'resident_type': 'resident_type',
+  'Resident Type': 'resident_type',
+  'RESIDENT TYPE': 'resident_type',
+  'businessType': 'business_type',
+  'business_type': 'business_type',
+  'Business Type': 'business_type',
+  'BUSINESS TYPE': 'business_type',
+  'referralCode': 'referral_code',
+  'referral_code': 'referral_code',
+  'Referral Code': 'referral_code',
+  'REFERRAL CODE': 'referral_code',
   'assignedTo': 'assigned_to',
   'assigned_to': 'assigned_to',
   'Assigned To': 'assigned_to',
+  'ASSIGNED TO': 'assigned_to',
   'department': 'department',
   'Department': 'department',
+  'DEPARTMENT': 'department',
   'priority': 'priority',
   'Priority': 'priority',
+  'PRIORITY': 'priority',
   'followUp': 'follow_up',
   'follow_up': 'follow_up',
-  'follow_up': 'follow_up',
   'Follow Up': 'follow_up',
+  'FOLLOW UP': 'follow_up',
   'remarks': 'remarks',
-  'Remarks': 'remarks'
+  'Remarks': 'remarks',
+  'REMARKS': 'remarks'
 };
 
 // Preview bulk upload - analyze data without saving
@@ -236,11 +268,16 @@ router.post('/process', authorize('admin'), async (req, res) => {
           const insertData = {};
 
           // Map fields - handle various Excel column name formats
-          if (lead.customerName || lead.Customer_Name || lead['CUSTOMER NAME']) insertData.customer_name = lead.customerName || lead.Customer_Name || lead['CUSTOMER NAME'];
-          if (lead.mobile || lead.Mobile || lead['Mobile No']) insertData.mobile = (lead.mobile || lead.Mobile || lead['Mobile No']).toString();
-          if (lead.email || lead.Email) insertData.email = lead.email || lead.Email;
-          if (lead.loanType || lead['Loan Type'] || lead['Loan Type']) insertData.loan_type = lead.loanType || lead['Loan Type'] || lead['Loan Type'];
-          if (lead.expectedAmount || lead['Expected Amount']) insertData.expected_amount = lead.expectedAmount || lead['Expected Amount'];
+          if (lead.customerName || lead.Customer_Name || lead['Customer Name'] || lead['CUSTOMER NAME']) insertData.customer_name = lead.customerName || lead.Customer_Name || lead['Customer Name'] || lead['CUSTOMER NAME'];
+          if (lead.mobile || lead.Mobile || lead['Mobile No'] || lead['MOBILE NO'] || lead.MOBILE) insertData.mobile = (lead.mobile || lead.Mobile || lead['Mobile No'] || lead['MOBILE NO'] || lead.MOBILE).toString();
+          if (lead.email || lead.Email || lead.EMAIL) insertData.email = lead.email || lead.Email || lead.EMAIL;
+          if (lead.loanType || lead['Loan Type'] || lead['LOAN TYPE']) insertData.loan_type = lead.loanType || lead['Loan Type'] || lead['LOAN TYPE'];
+          if (lead.expectedAmount || lead['Expected Amount'] || lead['EXPECTED AMOUNT']) insertData.expected_amount = lead.expectedAmount || lead['Expected Amount'] || lead['EXPECTED AMOUNT'];
+          if (lead.loanStatus || lead['Loan Status'] || lead['LOAN STATUS']) insertData.loan_status = lead.loanStatus || lead['Loan Status'] || lead['LOAN STATUS'];
+          if (lead.incomeSource || lead['Income Source'] || lead['INCOME SOURCE']) insertData.income_source = lead.incomeSource || lead['Income Source'] || lead['INCOME SOURCE'];
+          if (lead.residentType || lead['Resident Type'] || lead['RESIDENT TYPE']) insertData.resident_type = lead.residentType || lead['Resident Type'] || lead['RESIDENT TYPE'];
+          if (lead.businessType || lead['Business Type'] || lead['BUSINESS TYPE']) insertData.business_type = lead.businessType || lead['Business Type'] || lead['BUSINESS TYPE'];
+          if (lead.referralCode || lead['Referral Code'] || lead['REFERRAL CODE']) insertData.referral_code = lead.referralCode || lead['Referral Code'] || lead['REFERRAL CODE'];
           insertData.status = 'New';
 
           insertData.created_at = new Date().toISOString();
