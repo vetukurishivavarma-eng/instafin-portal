@@ -28,10 +28,11 @@ export default function EligibilityPage() {
       .then(r => r.json())
       .then(data => {
         const allLeads = data.data || [];
-        // Filter: Home Loan, LAP, Education Loan only
-        const eligible = allLeads.filter(l =>
-          ['home_loan', 'lap', 'education_loan'].includes(l.loanType)
-        );
+        // Filter: Home Loan, LAP, Education Loan only (normalize case)
+        const eligible = allLeads.filter(l => {
+          const lt = (l.loanType || '').toLowerCase().replace(/\s+/g, '_');
+          return ['home_loan', 'lap', 'education_loan'].includes(lt);
+        });
         setLeads(eligible);
       })
       .catch(() => {});
