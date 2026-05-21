@@ -372,3 +372,198 @@ export async function downloadPDF(
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+// ============================================================
+// Eligibility Report PDF
+// ============================================================
+
+interface EligibilityData {
+  applicantName: string;
+  loanType: string;
+  mobile: string;
+  pf: number;
+  incomeTax: number;
+  professionTax: number;
+  totalDeductions: number;
+  grossSalary: number;
+  netSalary: number;
+  rentalIncome: number;
+  netIncome: number;
+  emiNmiPercent: number;
+  bankEmis: { bank: string; emi: number }[];
+  totalExistingEmis: number;
+  emiAvailable: number;
+  principal: number;
+  rate: number;
+  period: number;
+  emiPerLac: number;
+  eligibleAmount: number;
+}
+
+const eligStyles = StyleSheet.create({
+  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, lineHeight: 1.5 },
+  header: { marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#2563eb', paddingBottom: 10 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 },
+  subtitle: { fontSize: 12, color: '#475569', marginBottom: 2 },
+  section: { marginBottom: 14 },
+  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#2563eb', marginBottom: 6, backgroundColor: '#eff6ff', padding: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3, paddingLeft: 8 },
+  rowLabel: { color: '#475569' },
+  rowValue: { color: '#1e293b', fontWeight: 'bold' },
+  divider: { borderBottomWidth: 0.5, borderBottomColor: '#e2e8f0', marginVertical: 8 },
+  eligibleBox: { marginTop: 10, padding: 16, borderRadius: 8, alignItems: 'center' },
+  eligibleYes: { backgroundColor: '#dbeafe' },
+  eligibleNo: { backgroundColor: '#fee2e2' },
+  eligibleLabel: { fontSize: 10, color: '#475569', marginBottom: 4 },
+  eligibleAmountYes: { fontSize: 28, fontWeight: 'bold', color: '#1d4ed8' },
+  eligibleAmountNo: { fontSize: 24, fontWeight: 'bold', color: '#dc2626' },
+  eligibleNote: { fontSize: 9, color: '#dc2626', marginTop: 4 },
+  footer: { position: 'absolute', bottom: 30, left: 40, right: 40, borderTopWidth: 0.5, borderTopColor: '#cbd5e1', paddingTop: 10, flexDirection: 'row', justifyContent: 'space-between' },
+  footerText: { fontSize: 9, color: '#94a3b8' },
+});
+
+const EligibilityPDF: React.FC<{ data: EligibilityData }> = ({ data }) => {
+  const isEligible = data.eligibleAmount > 0;
+  const fmt = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const fmtDec = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <Document>
+      <Page size="A4" style={eligStyles.page}>
+        <View style={eligStyles.header}>
+          <Text style={eligStyles.title}>Eligibility Report</Text>
+          <Text style={eligStyles.subtitle}>{data.applicantName} | {data.loanType} {data.mobile ? `| ${data.mobile}` : ''}</Text>
+        </View>
+
+        {/* Income */}
+        <View style={eligStyles.section}>
+          <Text style={eligStyles.sectionTitle}>Income Details</Text>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Gross Salary (Monthly)</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.grossSalary)}</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Proposed Rental Income</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.rentalIncome)}</Text>
+          </View>
+        </View>
+
+        {/* Statutory Deductions */}
+        <View style={eligStyles.section}>
+          <Text style={eligStyles.sectionTitle}>Statutory Deductions</Text>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Provident Fund</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.pf)}</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Income Tax</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.incomeTax)}</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Profession Tax</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.professionTax)}</Text>
+          </View>
+          <View style={eligStyles.divider} />
+          <View style={eligStyles.row}>
+            <Text style={{ ...eligStyles.rowLabel, fontWeight: 'bold' }}>Total Deductions</Text>
+            <Text style={eligStyles.rowValue}>{fmtDec(data.totalDeductions)}</Text>
+          </View>
+        </View>
+
+        {/* Net Income */}
+        <View style={eligStyles.section}>
+          <Text style={eligStyles.sectionTitle}>Net Income</Text>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Net Salary</Text>
+            <Text style={eligStyles.rowValue}>{fmtDec(data.netSalary)}</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Rental Income</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.rentalIncome)}</Text>
+          </View>
+          <View style={eligStyles.divider} />
+          <View style={eligStyles.row}>
+            <Text style={{ ...eligStyles.rowLabel, fontWeight: 'bold' }}>Net Income</Text>
+            <Text style={{ ...eligStyles.rowValue, color: '#16a34a' }}>{fmtDec(data.netIncome)}</Text>
+          </View>
+        </View>
+
+        {/* EMI Details */}
+        <View style={eligStyles.section}>
+          <Text style={eligStyles.sectionTitle}>EMI Details</Text>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>EMI/NMI % (as per NAI)</Text>
+            <Text style={eligStyles.rowValue}>{data.emiNmiPercent}%</Text>
+          </View>
+          {data.bankEmis.filter(b => b.bank || b.emi > 0).map((b, i) => (
+            <View key={i} style={eligStyles.row}>
+              <Text style={eligStyles.rowLabel}>{b.bank || `Bank ${i + 1}`}</Text>
+              <Text style={eligStyles.rowValue}>{fmt(b.emi)}</Text>
+            </View>
+          ))}
+          <View style={eligStyles.divider} />
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Total Existing EMIs</Text>
+            <Text style={eligStyles.rowValue}>{fmtDec(data.totalExistingEmis)}</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={{ ...eligStyles.rowLabel, fontWeight: 'bold' }}>EMI Available (approx.)</Text>
+            <Text style={{ ...eligStyles.rowValue, color: data.emiAvailable < 0 ? '#dc2626' : '#1e293b' }}>{fmtDec(data.emiAvailable)}</Text>
+          </View>
+        </View>
+
+        {/* Loan Parameters */}
+        <View style={eligStyles.section}>
+          <Text style={eligStyles.sectionTitle}>Loan Parameters</Text>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Principal</Text>
+            <Text style={eligStyles.rowValue}>{fmt(data.principal)}</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Rate</Text>
+            <Text style={eligStyles.rowValue}>{data.rate}% p.a.</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>Period</Text>
+            <Text style={eligStyles.rowValue}>{data.period} months</Text>
+          </View>
+          <View style={eligStyles.row}>
+            <Text style={eligStyles.rowLabel}>EMI per LAC</Text>
+            <Text style={eligStyles.rowValue}>{fmtDec(data.emiPerLac)}</Text>
+          </View>
+        </View>
+
+        {/* Eligible Amount */}
+        <View style={[eligStyles.eligibleBox, isEligible ? eligStyles.eligibleYes : eligStyles.eligibleNo]}>
+          <Text style={eligStyles.eligibleLabel}>ELIGIBLE LOAN AMOUNT (as per Income)</Text>
+          {isEligible ? (
+            <Text style={eligStyles.eligibleAmountYes}>{fmt(Math.round(data.eligibleAmount))}</Text>
+          ) : (
+            <>
+              <Text style={eligStyles.eligibleAmountNo}>NOT ELIGIBLE</Text>
+              <Text style={eligStyles.eligibleNote}>Existing EMIs exceed available EMI capacity</Text>
+            </>
+          )}
+        </View>
+
+        <View style={eligStyles.footer} fixed>
+          <Text style={eligStyles.footerText}>Generated on {formatDate(new Date())}</Text>
+          <Text style={eligStyles.footerText}>InstaFin Portal</Text>
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+export async function downloadEligibilityPDF(data: EligibilityData): Promise<void> {
+  const { pdf } = await import('@react-pdf/renderer');
+  const blob = await pdf(<EligibilityPDF data={data} />).toBlob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `eligibility-report-${data.applicantName.replace(/\s+/g, '-')}-${formatDate(new Date()).replace(/\//g, '-')}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
