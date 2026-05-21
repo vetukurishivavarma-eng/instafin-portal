@@ -267,17 +267,25 @@ router.post('/process', authorize('admin'), async (req, res) => {
         try {
           const insertData = {};
 
-          // Map fields - handle various Excel column name formats
-          if (lead.customerName || lead.Customer_Name || lead['Customer Name'] || lead['CUSTOMER NAME']) insertData.customer_name = lead.customerName || lead.Customer_Name || lead['Customer Name'] || lead['CUSTOMER NAME'];
-          if (lead.mobile || lead.Mobile || lead['Mobile No'] || lead['MOBILE NO'] || lead.MOBILE) insertData.mobile = (lead.mobile || lead.Mobile || lead['Mobile No'] || lead['MOBILE NO'] || lead.MOBILE).toString();
-          if (lead.email || lead.Email || lead.EMAIL) insertData.email = lead.email || lead.Email || lead.EMAIL;
-          if (lead.loanType || lead['Loan Type'] || lead['LOAN TYPE']) insertData.loan_type = lead.loanType || lead['Loan Type'] || lead['LOAN TYPE'];
-          if (lead.expectedAmount || lead['Expected Amount'] || lead['EXPECTED AMOUNT']) insertData.expected_amount = lead.expectedAmount || lead['Expected Amount'] || lead['EXPECTED AMOUNT'];
-          if (lead.loanStatus || lead['Loan Status'] || lead['LOAN STATUS']) insertData.loan_status = lead.loanStatus || lead['Loan Status'] || lead['LOAN STATUS'];
-          if (lead.incomeSource || lead['Income Source'] || lead['INCOME SOURCE']) insertData.income_source = lead.incomeSource || lead['Income Source'] || lead['INCOME SOURCE'];
-          if (lead.residentType || lead['Resident Type'] || lead['RESIDENT TYPE']) insertData.resident_type = lead.residentType || lead['Resident Type'] || lead['RESIDENT TYPE'];
-          if (lead.businessType || lead['Business Type'] || lead['BUSINESS TYPE']) insertData.business_type = lead.businessType || lead['Business Type'] || lead['BUSINESS TYPE'];
-          if (lead.referralCode || lead['Referral Code'] || lead['REFERRAL CODE']) insertData.referral_code = lead.referralCode || lead['Referral Code'] || lead['REFERRAL CODE'];
+          // Map fields using columnMapping for consistent header handling
+          const fieldMap = {
+            customer_name: ['customerName', 'customer_name', 'Customer Name', 'CUSTOMER NAME'],
+            mobile: ['mobile', 'Mobile', 'Mobile No', 'MOBILE NO', 'MOBILE'],
+            email: ['email', 'Email', 'EMAIL'],
+            loan_type: ['loanType', 'loan_type', 'Loan Type', 'LOAN TYPE'],
+            expected_amount: ['expectedAmount', 'expected_amount', 'Expected Amount', 'EXPECTED AMOUNT'],
+            loan_status: ['loanStatus', 'loan_status', 'Loan Status', 'LOAN STATUS'],
+            income_source: ['incomeSource', 'income_source', 'Income Source', 'INCOME SOURCE'],
+            resident_type: ['residentType', 'resident_type', 'Resident Type', 'RESIDENT TYPE'],
+            business_type: ['businessType', 'business_type', 'Business Type', 'BUSINESS TYPE'],
+            referral_code: ['referralCode', 'referral_code', 'Referral Code', 'REFERRAL CODE']
+          };
+          for (const [dbCol, variants] of Object.entries(fieldMap)) {
+            const value = variants.map(v => lead[v]).find(v => v != null && v !== '');
+            if (value != null && value !== '') {
+              insertData[dbCol] = dbCol === 'mobile' ? value.toString() : value;
+            }
+          }
           insertData.status = 'New';
 
           insertData.created_at = new Date().toISOString();
