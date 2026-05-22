@@ -810,7 +810,7 @@ router.post('/:id/summarize', authorize('admin', 'executive', 'dsa'), async (req
       let mimeType = 'application/pdf';
 
       // Detect Mime Type
-      const ext = path.extname(doc.document_name || fileName).toLowerCase();
+      const ext = path.extname(fileName).toLowerCase();
       if (ext === '.pdf') mimeType = 'application/pdf';
       else if (ext === '.png') mimeType = 'image/png';
       else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
@@ -862,32 +862,27 @@ router.post('/:id/summarize', authorize('admin', 'executive', 'dsa'), async (req
     // 4. Generate user context prompt
     const promptText = `
 You are an expert financial analyst, credit assessor, and underwriting agent at InstaFin Portal.
-Your task is to analyze the attached documents and the metadata of the loan applicant:
+Your task is to analyze the attached documents and extract the exact details and facts from them:
 - Customer Name: ${lead.customer_name}
 - Mobile: ${lead.mobile || 'N/A'}
 - Email: ${lead.email || 'N/A'}
 - Loan Type: ${lead.loan_type || 'N/A'}
 - Expected Amount: ${lead.expected_amount || 'N/A'}
-- Income Source: ${lead.income_source || 'N/A'}
-- Resident Type: ${lead.resident_type || 'N/A'}
-- Business Type: ${lead.business_type || 'N/A'}
 
 Uploaded Documents Context:
 ${documentDescriptions.join('\n')}
 
 INSTRUCTIONS:
-1. Do NOT write essay-style paragraphs, long narratives, or conversational fluff.
-2. You must understand each document and extract the main values, key facts, and figures in a clean, highly structured, document-by-document format.
-3. Every section header MUST start with "## " followed by an emoji and the document or section title so it can be parsed beautifully.
-4. Under each header, present the extracted values as a concise list of bullet points using "- **Key**: Value" format.
-5. Strictly adhere to the following outline. Do not combine or skip sections.
+1. DO NOT write any conversational fluff, long narratives, or essay-style paragraphs.
+2. DO NOT write any overall underwriter summary, executive underwriting summary, credit risk score/risk profiling, or credit recommendation. The user strictly wants ONLY the raw data extracted from the documents, nothing else.
+3. For each uploaded document in the list, create a distinct header starting with "## " followed by an emoji and the document title (e.g., "## 🪪 Aadhaar Card (KYC)" or "## 💳 PAN Card (KYC)" or "## 🏦 Bank Statement (Financials)" or "## 💼 Income & Business Proof").
+4. Under each document header, extract and list the exact key-value facts from that document in a clean, highly structured bullet-point format using "- **Key**: Value" pairs.
+5. If the document is missing or not uploaded, DO NOT include its section.
 
-## 👤 Underwriting Executive Summary
-- **Overall Credit Viability**: [1-sentence viability summary of applicant]
-- **Key Findings**: [Top 2 main takeaways across all documents]
+Outline of document sections to generate:
 
 ## 🪪 Aadhaar Card (KYC)
-*(Include this section only if Aadhaar is in the Uploaded Documents list. Extract these exact keys as bullet points)*
+*(Include only if Aadhaar is present. Extract these exact keys as bullet points)*
 - **Document Type**: Aadhaar Card
 - **Full Name**: [Extracted Full Name]
 - **DOB**: [Extracted Date of Birth]
@@ -898,7 +893,7 @@ INSTRUCTIONS:
 - **Verification Note**: [1 sentence concise check against applicant name "${lead.customer_name}"]
 
 ## 💳 PAN Card (KYC)
-*(Include this section only if PAN Card is in the Uploaded Documents list. Extract these exact keys as bullet points)*
+*(Include only if PAN is present. Extract these exact keys as bullet points)*
 - **Document Type**: PAN Card
 - **Full Name**: [Extracted Full Name]
 - **PAN Number**: [Extracted PAN Number (format: XXXXX1234X)]
@@ -907,7 +902,7 @@ INSTRUCTIONS:
 - **Verification Note**: [1 sentence concise check against applicant name "${lead.customer_name}"]
 
 ## 🏦 Bank Statement (Financials)
-*(Include this section only if Bank Statement/Passbook is in the Uploaded Documents list. Extract these exact keys as bullet points)*
+*(Include only if Bank Statement/Passbook is present. Extract these exact keys as bullet points)*
 - **Document Type**: Bank Statement
 - **Bank Name**: [Extracted Bank Name]
 - **Account Holder**: [Extracted Account Holder Name]
@@ -920,7 +915,7 @@ INSTRUCTIONS:
 - **Verification Note**: [1 sentence concise assessment of cash flow stability]
 
 ## 💼 Income & Business Proof
-*(Include this section only if Business Proof, GST Registration, ITR, or Salary Slips are in the Uploaded Documents list. Extract these exact keys as bullet points)*
+*(Include only if GST, ITR, or Salary Slips are present. Extract these exact keys as bullet points)*
 - **Document Type**: [e.g., GST Registration / ITR / Salary Slip]
 - **Business/Company Name**: [Extracted Employer or Registered Business Name]
 - **GSTIN / Registration Number**: [Extracted Registration Number if applicable]
@@ -928,16 +923,6 @@ INSTRUCTIONS:
 - **Net Monthly Income**: [Extracted Net Income]
 - **Legitimacy Status**: [Matched / Valid]
 - **Verification Note**: [1 sentence summary of business activity/salaried employment proof]
-
-## ⚠️ Credit Risk Profiling & Discrepancies
-- **Discrepancy Check**: [No major discrepancies found / Explicitly list specific mismatches or concerns]
-- **Risk Score**: [Low / Medium / High based on document consistency and balance health]
-- **Pending Actions**: [No action required / List missing pages or unverified fields]
-
-## 🎯 Credit Recommendation
-- **Decision Status**: [APPROVED / CONDITIONALLY APPROVED / REJECTED]
-- **Recommended Loan Amount**: [Estimated Amount based on eligibility]
-- **Eligibility Justification**: [1-2 sentences concise justification based on cash flows and KYC verification]
 
 CRITICAL TECHNICAL INSTRUCTION:
 At the very end of your response, append a structured JSON block inside a \`\`\`json \`\`\` code block (ensure it is the ONLY JSON code block in your entire output). 
@@ -1020,10 +1005,6 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
     } else {
       console.warn('GEMINI_API_KEY environment variable is not set. Generating mock analysis for testing.');
       summaryText = `
-## 👤 Underwriting Executive Summary
-- **Overall Credit Viability**: Applicant displays stable initial credentials for the requested ${lead.loan_type || 'Loan'}.
-- **Key Findings**: Verification successful under mock environment. Set the Gemini API key to enable live AI analysis.
-
 ## 🪪 Aadhaar Card (KYC)
 - **Document Type**: Aadhaar Card
 - **Full Name**: ${lead.customer_name}
@@ -1062,16 +1043,6 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
 - **Net Monthly Income**: ₹45,000
 - **Legitimacy Status**: Matched
 - **Verification Note**: Income source verified as ${lead.income_source || 'salaried'}.
-
-## ⚠️ Credit Risk Profiling & Discrepancies
-- **Discrepancy Check**: No major discrepancies found in mock simulation.
-- **Risk Score**: Low
-- **Pending Actions**: No action required. Please configure GEMINI_API_KEY for live document parsing.
-
-## 🎯 Credit Recommendation
-- **Decision Status**: CONDITIONALLY APPROVED
-- **Recommended Loan Amount**: ${lead.expected_amount || 'Requested Amount'}
-- **Eligibility Justification**: Applicant meets primary income criteria. Pending actual live document scan to finalize underwriting.
 
 \`\`\`json
 {
