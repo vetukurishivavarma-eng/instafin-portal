@@ -903,8 +903,43 @@ Provide a clear final recommendation:
     let summaryText = "";
 
     if (apiKey) {
-      console.log('Calling Gemini API to summarize lead profile...');
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      console.log('Querying available Gemini models...');
+      let modelName = 'gemini-2.5-flash'; // Safe default for 2026
+
+      try {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const listResponse = await fetch(listUrl);
+        if (listResponse.ok) {
+          const listData = await listResponse.json();
+          const availableModels = listData.models || [];
+          
+          // Try to find a model that supports generateContent and contains 'flash'
+          const flashModel = availableModels.find(m => 
+            m.supportedGenerationMethods?.includes('generateContent') && 
+            m.name?.toLowerCase().includes('flash')
+          );
+          
+          if (flashModel) {
+            modelName = flashModel.name.replace('models/', '');
+            console.log(`Dynamically selected active Flash model: ${modelName}`);
+          } else {
+            const anyModel = availableModels.find(m => 
+              m.supportedGenerationMethods?.includes('generateContent')
+            );
+            if (anyModel) {
+              modelName = anyModel.name.replace('models/', '');
+              console.log(`Dynamically selected active model: ${modelName}`);
+            }
+          }
+        } else {
+          console.warn(`Could not list models (status ${listResponse.status}), using default model.`);
+        }
+      } catch (listErr) {
+        console.warn('Could not query active Gemini models list, using default:', listErr.message);
+      }
+
+      console.log(`Calling Gemini API to summarize lead profile using model ${modelName}...`);
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
       const response = await fetch(geminiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
