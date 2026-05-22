@@ -862,7 +862,7 @@ router.post('/:id/summarize', authorize('admin', 'executive', 'dsa'), async (req
     // 4. Generate user context prompt
     const promptText = `
 You are an expert financial analyst, credit assessor, and underwriting agent at InstaFin Portal.
-Analyze the attached documents and the metadata of the loan applicant:
+Your task is to analyze the attached documents and the metadata of the loan applicant:
 - Customer Name: ${lead.customer_name}
 - Mobile: ${lead.mobile || 'N/A'}
 - Email: ${lead.email || 'N/A'}
@@ -875,27 +875,71 @@ Analyze the attached documents and the metadata of the loan applicant:
 Uploaded Documents Context:
 ${documentDescriptions.join('\n')}
 
-Verify if the documents match the applicant's details. Generate a premium, comprehensive underwriter profile summary in markdown format with clear headings. Keep the style modern, professional, and thorough. Use the following structured outline:
+INSTRUCTIONS:
+1. Do NOT write essay-style paragraphs, long narratives, or conversational fluff.
+2. You must understand each document and extract the main values, key facts, and figures in a clean, highly structured, document-by-document format.
+3. Every section header MUST start with "## " followed by an emoji and the document or section title so it can be parsed beautifully.
+4. Under each header, present the extracted values as a concise list of bullet points using "- **Key**: Value" format.
+5. Strictly adhere to the following outline. Do not combine or skip sections.
 
 ## 👤 Underwriting Executive Summary
-Provide a 3-4 sentence paragraph highlighting the overall viability of the applicant for this loan and key findings.
+- **Overall Credit Viability**: [1-sentence viability summary of applicant]
+- **Key Findings**: [Top 2 main takeaways across all documents]
 
-## 📄 Document Verification & Legitimacy
-Detail the legitimacy of each document. Specify if the uploaded files (Aadhaar, PAN, Bank Statements, or Business Proof) appear correct, match the name "${lead.customer_name}", and have valid details.
+## 🪪 Aadhaar Card (KYC)
+*(Include this section only if Aadhaar is in the Uploaded Documents list. Extract these exact keys as bullet points)*
+- **Document Type**: Aadhaar Card
+- **Full Name**: [Extracted Full Name]
+- **DOB**: [Extracted Date of Birth]
+- **Gender**: [Extracted Gender]
+- **Aadhaar Number**: [Extracted Aadhaar Number (format: XXXX XXXX XXXX or masked)]
+- **Address**: [Extracted Address]
+- **Legitimacy Status**: [Matched / Spelling Mismatch / Suspicious / Valid]
+- **Verification Note**: [1 sentence concise check against applicant name "${lead.customer_name}"]
 
-## 💼 Financial & Income Assessment
-Estimate their annual or monthly income based on salary slips, GST certificates, balance sheets, or bank statement transactions. Assess their income stability (e.g. check for continuous employment, regular deposits, healthy average balances, and non-bounced transactions).
+## 💳 PAN Card (KYC)
+*(Include this section only if PAN Card is in the Uploaded Documents list. Extract these exact keys as bullet points)*
+- **Document Type**: PAN Card
+- **Full Name**: [Extracted Full Name]
+- **PAN Number**: [Extracted PAN Number (format: XXXXX1234X)]
+- **DOB**: [Extracted Date of Birth]
+- **Legitimacy Status**: [Matched / Valid]
+- **Verification Note**: [1 sentence concise check against applicant name "${lead.customer_name}"]
 
-## ⚠️ Risk Profiling & Discrepancies
-Highlight any potential risks, low balances, missing documents, name spelling mismatches, or concerns that need manual intervention. If none, explicitly state "No major discrepancies found."
+## 🏦 Bank Statement (Financials)
+*(Include this section only if Bank Statement/Passbook is in the Uploaded Documents list. Extract these exact keys as bullet points)*
+- **Document Type**: Bank Statement
+- **Bank Name**: [Extracted Bank Name]
+- **Account Holder**: [Extracted Account Holder Name]
+- **Statement Period**: [Extracted Date Range]
+- **Average Balance**: [Extracted Average Balance Amount]
+- **Total Credits**: [Extracted total credits / income deposits]
+- **Total Debits**: [Extracted total debits]
+- **Bounces / Penalties**: [Extracted count of bounces or "None"]
+- **Legitimacy Status**: [Matched / Valid / High Consistency]
+- **Verification Note**: [1 sentence concise assessment of cash flow stability]
+
+## 💼 Income & Business Proof
+*(Include this section only if Business Proof, GST Registration, ITR, or Salary Slips are in the Uploaded Documents list. Extract these exact keys as bullet points)*
+- **Document Type**: [e.g., GST Registration / ITR / Salary Slip]
+- **Business/Company Name**: [Extracted Employer or Registered Business Name]
+- **GSTIN / Registration Number**: [Extracted Registration Number if applicable]
+- **Gross Monthly Income**: [Extracted Gross Income or Turnover]
+- **Net Monthly Income**: [Extracted Net Income]
+- **Legitimacy Status**: [Matched / Valid]
+- **Verification Note**: [1 sentence summary of business activity/salaried employment proof]
+
+## ⚠️ Credit Risk Profiling & Discrepancies
+- **Discrepancy Check**: [No major discrepancies found / Explicitly list specific mismatches or concerns]
+- **Risk Score**: [Low / Medium / High based on document consistency and balance health]
+- **Pending Actions**: [No action required / List missing pages or unverified fields]
 
 ## 🎯 Credit Recommendation
-Provide a clear final recommendation:
-- **Status**: [APPROVED / CONDITIONALLY APPROVED / REJECTED]
+- **Decision Status**: [APPROVED / CONDITIONALLY APPROVED / REJECTED]
 - **Recommended Loan Amount**: [Estimated Amount based on eligibility]
-- **Justification**: Detailed reasoning based on document verification and cash flows.
+- **Eligibility Justification**: [1-2 sentences concise justification based on cash flows and KYC verification]
 
-CRITICAL INSTRUCTION:
+CRITICAL TECHNICAL INSTRUCTION:
 At the very end of your response, append a structured JSON block inside a \`\`\`json \`\`\` code block (ensure it is the ONLY JSON code block in your entire output). 
 This JSON block MUST contain the following structured fields extracted from the documents:
 {
@@ -977,25 +1021,57 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
       console.warn('GEMINI_API_KEY environment variable is not set. Generating mock analysis for testing.');
       summaryText = `
 ## 👤 Underwriting Executive Summary
-This is a **MOCK ANALYSIS** because the \`GEMINI_API_KEY\` environment variable has not been configured. To enable live AI profiling, please set your Gemini API key in the server environment variables.
-Based on the metadata, the applicant **${lead.customer_name}** is applying for a **${lead.loan_type || 'Loan'}** of **${lead.expected_amount || 'unspecified amount'}**.
+- **Overall Credit Viability**: Applicant displays stable initial credentials for the requested ${lead.loan_type || 'Loan'}.
+- **Key Findings**: Verification successful under mock environment. Set the Gemini API key to enable live AI analysis.
 
-## 📄 Document Verification & Legitimacy
-*   **KYC / Identity Proofs**: Mock verification of uploaded documents. Names on files are assumed to correspond to **${lead.customer_name}**.
-*   **Income/Business Proofs**: Plausibility check successful.
+## 🪪 Aadhaar Card (KYC)
+- **Document Type**: Aadhaar Card
+- **Full Name**: ${lead.customer_name}
+- **DOB**: 15/08/1990
+- **Gender**: Male
+- **Aadhaar Number**: XXXX XXXX 1234
+- **Address**: 123, High Street, Sector 5, Bengaluru, Karnataka - 560001
+- **Legitimacy Status**: Matched
+- **Verification Note**: Mock verified. Name matches the loan application perfectly.
 
-## 💼 Financial & Income Assessment
-*   **Income Stream**: Categorized as **${lead.income_source || 'Unknown'}**.
-*   **Monthly Cash Flow**: Indicated stability and strong average balances, satisfying the debt-service ratio requirements.
+## 💳 PAN Card (KYC)
+- **Document Type**: PAN Card
+- **Full Name**: ${lead.customer_name}
+- **PAN Number**: ABCDE1234F
+- **DOB**: 15/08/1990
+- **Legitimacy Status**: Matched
+- **Verification Note**: Mock verified. Legitimate PAN record assumed.
 
-## ⚠️ Risk Profiling & Discrepancies
-*   No significant risks detected in mock inspection.
-*   *Note: Please configure \`GEMINI_API_KEY\` on your deployment server to inspect document contents (PDFs/images).*
+## 🏦 Bank Statement (Financials)
+- **Document Type**: Bank Statement
+- **Bank Name**: State Bank of India
+- **Account Holder**: ${lead.customer_name}
+- **Statement Period**: 01/10/2025 to 31/03/2026
+- **Average Balance**: ₹45,000
+- **Total Credits**: ₹3,00,000
+- **Total Debits**: ₹2,80,000
+- **Bounces / Penalties**: None
+- **Legitimacy Status**: High Consistency
+- **Verification Note**: Regular cash inflows matching standard income profile.
+
+## 💼 Income & Business Proof
+- **Document Type**: Salary Slip / Income Proof
+- **Business/Company Name**: InstaFin Partners Ltd
+- **GSTIN / Registration Number**: N/A (Salaried Employee)
+- **Gross Monthly Income**: ₹50,000
+- **Net Monthly Income**: ₹45,000
+- **Legitimacy Status**: Matched
+- **Verification Note**: Income source verified as ${lead.income_source || 'salaried'}.
+
+## ⚠️ Credit Risk Profiling & Discrepancies
+- **Discrepancy Check**: No major discrepancies found in mock simulation.
+- **Risk Score**: Low
+- **Pending Actions**: No action required. Please configure GEMINI_API_KEY for live document parsing.
 
 ## 🎯 Credit Recommendation
-*   **Status**: **CONDITIONALLY APPROVED** (Pending actual AI integration)
-*   **Recommended Loan Amount**: ${lead.expected_amount || 'Requested Amount'}
-*   **Justification**: Lead profiles as a low-to-medium credit risk based on standard applicant parameters.
+- **Decision Status**: CONDITIONALLY APPROVED
+- **Recommended Loan Amount**: ${lead.expected_amount || 'Requested Amount'}
+- **Eligibility Justification**: Applicant meets primary income criteria. Pending actual live document scan to finalize underwriting.
 
 \`\`\`json
 {
