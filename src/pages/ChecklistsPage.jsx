@@ -21,6 +21,9 @@ export default function ChecklistsPage() {
   const [uploadingDoc, setUploadingDoc] = useState(null);
   const [deletingDoc, setDeletingDoc] = useState(null);
   const [viewDoc, setViewDoc] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
 
   // Fetch leads
   useEffect(() => {
@@ -45,6 +48,61 @@ export default function ChecklistsPage() {
     });
   };
 
+  // Fetch existing summary for a lead
+  const fetchSummary = (leadId) => {
+    setSummaryLoading(true);
+    setSummaryError('');
+    fetch(`${API_BASE}/leads/${leadId}/summary`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.hasSummary) {
+        setSummary(data.summary);
+      } else {
+        setSummary(null);
+      }
+      setSummaryLoading(false);
+    })
+    .catch(err => {
+      console.error('Failed to load summary:', err);
+      setSummaryLoading(false);
+    });
+  };
+
+  // Generate new AI profile summary
+  const handleSummarize = () => {
+    if (!selectedLead) return;
+    setSummaryLoading(true);
+    setSummaryError('');
+    fetch(`${API_BASE}/leads/${selectedLead.id}/summarize`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(async (res) => {
+      const data = await res.json();
+      if (res.ok) {
+        setSummary(data.summary);
+        // Refresh statuses and lead list so derived statuses update
+        fetchChecklistStatuses(selectedLead.id);
+        fetchLeads();
+        setSuccess('Documents successfully analyzed and lead profile summarized!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setSummaryError(data.error || 'Failed to analyze documents');
+      }
+      setSummaryLoading(false);
+    })
+    .catch(err => {
+      console.error('Summarize error:', err);
+      setSummaryError('Failed to analyze documents');
+      setSummaryLoading(false);
+    });
+  };
+
   // Handle lead selection
   const handleLeadSelect = (leadId) => {
     const lead = leads.find(l => String(l.id) === String(leadId));
@@ -52,10 +110,12 @@ export default function ChecklistsPage() {
       setSelectedLead(lead);
       loadChecklistForLead(lead);
       fetchChecklistStatuses(lead.id);
+      fetchSummary(lead.id);
     } else {
       setSelectedLead(null);
       setChecklistItems([]);
       setChecklistStatuses({});
+      setSummary(null);
     }
   };
 
@@ -77,6 +137,46 @@ export default function ChecklistsPage() {
 
     const items = getChecklist(selection);
     setChecklistItems(items);
+  };
+
+  // Helper to parse markdown bold text **bold**
+  const parseBoldText = (text) => {
+    if (typeof text !== 'string') return text;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  // Helper to render markdown text beautifully with basic HTML styles
+  const renderSummary = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, index) => {
+      if (line.startsWith('### ')) {
+        return <h4 key={index} className="text-md font-bold text-gray-800 mt-4 mb-2">{line.replace('### ', '')}</h4>;
+      }
+      if (line.startsWith('## ')) {
+        return <h3 key={index} className="text-lg font-bold text-indigo-900 mt-5 mb-3 border-b border-indigo-50 pb-1">{line.replace('## ', '')}</h3>;
+      }
+      if (line.startsWith('# ')) {
+        return <h2 key={index} className="text-xl font-bold text-indigo-950 mt-6 mb-4">{line.replace('# ', '')}</h2>;
+      }
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        const cleanLine = line.replace(/^[-*]\s+/, '');
+        return (
+          <li key={index} className="ml-6 list-disc text-gray-700 my-1">
+            {parseBoldText(cleanLine)}
+          </li>
+        );
+      }
+      if (line.trim() === '') {
+        return <div key={index} className="h-2" />;
+      }
+      return <p key={index} className="text-gray-700 my-1 leading-relaxed">{parseBoldText(line)}</p>;
+    });
   };
 
   // Fetch checklist statuses from the new API
@@ -354,149 +454,235 @@ export default function ChecklistsPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Checklist with Upload */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Required Documents ({checklistItems.filter(d => d.required).length})
-              </h3>
-              <div className="flex gap-3 text-sm">
-                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium">
-                  {uploadedCount} Uploaded
-                </span>
-                <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full font-medium">
-                  {pendingRequiredCount} Pending
-                </span>
+          </div>          {/* Checklist and Upload Section in Grid */}
+          <div className="grid lg:grid-cols-12 gap-8 items-start">
+            {/* Left Column: Checklist with Upload */}
+            <div className="lg:col-span-7 bg-white rounded-3xl shadow-xl p-6 border border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Required Documents ({checklistItems.filter(d => d.required).length})
+                </h3>
+                <div className="flex gap-3 text-sm">
+                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium">
+                    {uploadedCount} Uploaded
+                  </span>
+                  <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full font-medium">
+                    {pendingRequiredCount} Pending
+                  </span>
+                </div>
               </div>
+
+              {checklistItems.length === 0 && (
+                <p className="text-gray-500 text-center py-8">No checklist data available. Please ensure lead has all required information.</p>
+              )}
+
+              {checklistItems.length > 0 && (
+                <div className="space-y-6">
+                  {/* Group by category */}
+                  {(() => {
+                    const categoryOrder = ['kyc', 'income_proof', 'business_documents', 'property_documents', 'financial_documents', 'legal_documents', 'others'];
+                    const categoryLabels = {
+                      kyc: 'KYC Documents',
+                      income_proof: 'Income Proof',
+                      business_documents: 'Business Documents',
+                      property_documents: 'Property Documents',
+                      financial_documents: 'Financial Documents',
+                      legal_documents: 'Legal Documents',
+                      others: 'Others'
+                    };
+
+                    return categoryOrder.map(category => {
+                      const items = checklistItems.filter(item => item.category === category);
+                      if (items.length === 0) return null;
+
+                      return (
+                        <div key={category} className="border border-gray-200 rounded-xl overflow-hidden">
+                          <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                            <h4 className="font-semibold text-gray-900">{categoryLabels[category] || category}</h4>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {items.filter(i => i.required).length} required, {items.filter(i => !i.required).length} optional
+                            </p>
+                          </div>
+                          <ul className="divide-y divide-gray-100">
+                            {items.map(item => {
+                              const statusEntry = checklistStatuses[item.id];
+                              const status = statusEntry?.status || 'pending';
+                              const isUploaded = status === 'uploaded';
+                              const isUploading = uploadingDoc === item.id;
+                              const isDeleting = deletingDoc === item.id;
+
+                              return (
+                                <li key={item.id} className={`px-5 py-4 flex items-center gap-3 ${isUploaded ? 'bg-green-50' : ''}`}>
+                                  {/* Status icon */}
+                                  <div className="flex-shrink-0">
+                                    {isUploaded ? (
+                                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                    ) : item.required ? (
+                                      <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                  </div>
+
+                                  {/* Document name */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium ${isUploaded ? 'text-green-800' : item.required ? 'text-gray-900' : 'text-gray-700'}`}>
+                                      {item.name}
+                                    </p>
+                                  </div>
+
+                                  {/* Required/Optional badge */}
+                                  <div className="flex-shrink-0">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      item.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {item.required ? 'Required' : 'Optional'}
+                                    </span>
+                                  </div>
+
+                                  {/* Upload/View/Delete buttons */}
+                                  <div className="flex-shrink-0 flex items-center gap-2">
+                                    {isUploaded ? (
+                                      <>
+                                        <button
+                                          onClick={() => handleViewDocument(item.id)}
+                                          className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
+                                        >
+                                          View
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteDocument(item.id, item.name)}
+                                          disabled={isDeleting}
+                                          className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                                        >
+                                          {isDeleting ? '...' : 'Delete'}
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg font-medium ${
+                                        isUploading
+                                          ? 'bg-gray-300 text-gray-500 cursor-wait'
+                                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                                      }`}>
+                                        {isUploading ? 'Uploading...' : 'Upload'}
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                          disabled={isUploading}
+                                          onChange={(e) => {
+                                            if (e.target.files[0]) {
+                                              handleFileUpload(item.id, item.name, e.target.files[0]);
+                                            }
+                                          }}
+                                        />
+                                      </label>
+                                    )}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
             </div>
 
-            {checklistItems.length === 0 && (
-              <p className="text-gray-500 text-center py-8">No checklist data available. Please ensure lead has all required information.</p>
-            )}
+            {/* Right Column: AI Underwriter Assistant */}
+            <div className="lg:col-span-5 flex flex-col gap-6">
+              <div className="bg-white rounded-3xl shadow-xl border border-indigo-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 px-6 py-5 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white bg-opacity-10 rounded-xl">
+                      <svg className={`w-6 h-6 text-white ${summaryLoading ? 'animate-spin' : 'animate-pulse'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg leading-tight">AI Underwriter</h3>
+                      <p className="text-xs text-indigo-200">Real-time profile & document analysis</p>
+                    </div>
+                  </div>
+                  {uploadedCount > 0 && !summaryLoading && (
+                    <button
+                      onClick={handleSummarize}
+                      className="text-xs font-semibold bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      {summary ? 'Re-Analyze' : 'Analyze'}
+                    </button>
+                  )}
+                </div>
 
-            {checklistItems.length > 0 && (
-              <div className="space-y-6">
-                {/* Group by category */}
-                {(() => {
-                  const categoryOrder = ['kyc', 'income_proof', 'business_documents', 'property_documents', 'financial_documents', 'legal_documents', 'others'];
-                  const categoryLabels = {
-                    kyc: 'KYC Documents',
-                    income_proof: 'Income Proof',
-                    business_documents: 'Business Documents',
-                    property_documents: 'Property Documents',
-                    financial_documents: 'Financial Documents',
-                    legal_documents: 'Legal Documents',
-                    others: 'Others'
-                  };
+                <div className="p-6 font-sans">
+                  {summaryError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-2xl mb-4">
+                      {summaryError}
+                    </div>
+                  )}
 
-                  return categoryOrder.map(category => {
-                    const items = checklistItems.filter(item => item.category === category);
-                    if (items.length === 0) return null;
-
-                    return (
-                      <div key={category} className="border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
-                          <h4 className="font-semibold text-gray-900">{categoryLabels[category] || category}</h4>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {items.filter(i => i.required).length} required, {items.filter(i => !i.required).length} optional
-                          </p>
-                        </div>
-                        <ul className="divide-y divide-gray-100">
-                          {items.map(item => {
-                            const statusEntry = checklistStatuses[item.id];
-                            const status = statusEntry?.status || 'pending';
-                            const isUploaded = status === 'uploaded';
-                            const isUploading = uploadingDoc === item.id;
-                            const isDeleting = deletingDoc === item.id;
-
-                            return (
-                              <li key={item.id} className={`px-5 py-4 flex items-center gap-3 ${isUploaded ? 'bg-green-50' : ''}`}>
-                                {/* Status icon */}
-                                <div className="flex-shrink-0">
-                                  {isUploaded ? (
-                                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                  ) : item.required ? (
-                                    <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                  )}
-                                </div>
-
-                                {/* Document name */}
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${isUploaded ? 'text-green-800' : item.required ? 'text-gray-900' : 'text-gray-700'}`}>
-                                    {item.name}
-                                  </p>
-                                </div>
-
-                                {/* Required/Optional badge */}
-                                <div className="flex-shrink-0">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                    item.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'
-                                  }`}>
-                                    {item.required ? 'Required' : 'Optional'}
-                                  </span>
-                                </div>
-
-                                {/* Upload/View/Delete buttons */}
-                                <div className="flex-shrink-0 flex items-center gap-2">
-                                  {isUploaded ? (
-                                    <>
-                                      <button
-                                        onClick={() => handleViewDocument(item.id)}
-                                        className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
-                                      >
-                                        View
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteDocument(item.id, item.name)}
-                                        disabled={isDeleting}
-                                        className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
-                                      >
-                                        {isDeleting ? '...' : 'Delete'}
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg font-medium ${
-                                      isUploading
-                                        ? 'bg-gray-300 text-gray-500 cursor-wait'
-                                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                                    }`}>
-                                      {isUploading ? 'Uploading...' : 'Upload'}
-                                      <input
-                                        type="file"
-                                        className="hidden"
-                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                        disabled={isUploading}
-                                        onChange={(e) => {
-                                          if (e.target.files[0]) {
-                                            handleFileUpload(item.id, item.name, e.target.files[0]);
-                                          }
-                                        }}
-                                      />
-                                    </label>
-                                  )}
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
+                  {summaryLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="relative w-16 h-16 mb-4">
+                        <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
+                        <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
                       </div>
-                    );
-                  });
-                })()}
+                      <p className="font-semibold text-gray-900">Analyzing Uploaded Files...</p>
+                      <p className="text-xs text-gray-500 mt-1 max-w-[250px]">Gemini is parsing documents, verifying data integrity, and conducting credit risk checks...</p>
+                    </div>
+                  ) : summary ? (
+                    <div className="prose max-w-none text-sm max-h-[500px] overflow-y-auto pr-2 scrollbar-thin">
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-4 text-xs text-indigo-800 flex items-start gap-2.5">
+                        <svg className="w-5 h-5 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <strong>AI Inspection Complete.</strong> The generated credit risk analysis and verification report has been permanently saved to Supabase storage.
+                        </div>
+                      </div>
+                      {renderSummary(summary)}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 flex flex-col items-center">
+                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-400">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h4 className="font-bold text-gray-900 mb-1">No Profile Summary Generated</h4>
+                      <p className="text-xs text-gray-500 max-w-xs mb-6">
+                        {uploadedCount === 0 
+                          ? "Please upload documents first in the checklist on the left before executing AI profile summarization."
+                          : "All documents are uploaded! Click the button below to have Gemini automatically analyze and summarize this lead's credit profile."}
+                      </p>
+                      <button
+                        onClick={handleSummarize}
+                        disabled={uploadedCount === 0}
+                        className={`w-full py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
+                          uploadedCount === 0
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:shadow-lg'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Analyze Documents & Summarize
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
           </div>
-
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-4">
             {/* Download PDF */}

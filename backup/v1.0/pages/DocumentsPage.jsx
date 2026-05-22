@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import API_BASE from '../config/api';
+
+const API_BASE = 'http://localhost:3001/api';
 
 export default function DocumentsPage() {
   const { accessToken, isAdmin, refreshAccessToken } = useAuth();
@@ -57,33 +58,22 @@ export default function DocumentsPage() {
     setError('');
     fetchWithAuth(`${API_BASE}/leads`)
       .then(r => r.json())
-      .then(data => {
-        console.log('Leads loaded:', data.data?.length || 0);
-        setLeads(data.data || []);
-      })
-      .catch(err => console.error('Failed to load leads:', err));
+      .then(data => setLeads(data.data || []))
+      .catch(() => {});
   }, [accessToken]);
 
   useEffect(() => {
-    console.log('Checklist effect - selectedLoan:', selectedLoan, 'accessToken:', !!accessToken);
     if (!selectedLoan || !accessToken) {
       setChecklist([]);
       return;
     }
     fetchWithAuth(`${API_BASE}/documents/checklist?loanType=${encodeURIComponent(selectedLoan)}`)
       .then(r => r.json())
-      .then(data => {
-        console.log('Checklist loaded:', data.length, 'items');
-        setChecklist(Array.isArray(data) ? data : []);
-      })
-      .catch(err => {
-        console.error('Checklist error:', err);
-        setChecklist([]);
-      });
+      .then(data => setChecklist(Array.isArray(data) ? data : []))
+      .catch(() => setChecklist([]));
   }, [selectedLoan, accessToken]);
 
   useEffect(() => {
-    console.log('Uploaded docs effect - selectedLead:', selectedLead, 'accessToken:', !!accessToken);
     if (!selectedLead || !accessToken) {
       setUploadedDocs([]);
       return;
@@ -91,14 +81,10 @@ export default function DocumentsPage() {
     fetchWithAuth(`${API_BASE}/documents/lead/${selectedLead}`)
       .then(r => r.json())
       .then(data => {
-        console.log('Uploaded docs loaded:', data.length, 'items', data);
-        const docs = Array.isArray(data) ? data.map(d => d.documentType || d.document_name || d.name) : [];
+        const docs = Array.isArray(data) ? data.map(d => d.documentName) : [];
         setUploadedDocs(docs);
       })
-      .catch(err => {
-        console.error('Uploaded docs error:', err);
-        setUploadedDocs([]);
-      });
+      .catch(() => setUploadedDocs([]));
   }, [selectedLead, accessToken]);
 
   const handleFileUpload = async (documentName, file) => {
@@ -109,7 +95,7 @@ export default function DocumentsPage() {
     setUploadLoading(true);
     const formData = new FormData();
     formData.append('leadId', selectedLead);
-    formData.append('documentType', documentName);
+    formData.append('documentName', documentName);
     formData.append('file', file);
 
     try {
@@ -167,7 +153,7 @@ export default function DocumentsPage() {
               disabled={!!(selectedLead && selectedLoan)}
             >
               <option value="">Select Loan Type</option>
-              <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option><option>Education Loan</option>
+              <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option><option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option>
             </select>
             {selectedLead && (
               <button

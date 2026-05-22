@@ -1,4 +1,6 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
@@ -706,6 +708,281 @@ router.put('/:id/disburse', authorize('admin', 'executive'), async (req, res) =>
   } catch (error) {
     console.error('Disburse error:', error);
     res.status(500).json({ error: 'Failed to process disbursement' });
+  }
+});
+
+// Local uploads directory (same as in checklistStatus.js)
+const uploadsDir = path.join(process.cwd(), 'uploads');
+const summariesDir = path.join(uploadsDir, 'summaries');
+if (!fs.existsSync(summariesDir)) {
+  fs.mkdirSync(summariesDir, { recursive: true });
+}
+
+// GET /api/leads/:id/summary - Retrieve existing profile summary
+router.get('/:id/summary', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const fileName = `summaries/${leadId}-summary.txt`;
+
+    if (process.env.NODE_ENV === 'production') {
+      // Production: check in Supabase Storage
+      try {
+        const { data, error } = await supabase.storage
+          .from('lead-documents')
+          .download(fileName);
+
+        if (error) {
+          // If file not found or storage error, check local as fallback
+          const localPath = path.join(summariesDir, `${leadId}-summary.txt`);
+          if (fs.existsSync(localPath)) {
+            const summary = fs.readFileSync(localPath, 'utf8');
+            return res.json({ hasSummary: true, summary });
+          }
+          return res.json({ hasSummary: false });
+        }
+
+        if (data) {
+          let summary;
+          if (typeof data.text === 'function') {
+            summary = await data.text();
+          } else {
+            summary = data.toString('utf8');
+          }
+          return res.json({ hasSummary: true, summary });
+        }
+      } catch (err) {
+        console.warn('Failed to retrieve summary from Supabase storage:', err.message);
+      }
+    }
+
+    // Development or fallback: read from local file
+    const localPath = path.join(summariesDir, `${leadId}-summary.txt`);
+    if (fs.existsSync(localPath)) {
+      const summary = fs.readFileSync(localPath, 'utf8');
+      return res.json({ hasSummary: true, summary });
+    }
+
+    res.json({ hasSummary: false });
+  } catch (error) {
+    console.error('Error fetching summary:', error);
+    res.status(500).json({ error: 'Failed to fetch lead summary' });
+  }
+});
+
+// POST /api/leads/:id/summarize - Generate profile summary via Gemini API
+router.post('/:id/summarize', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const leadId = req.params.id;
+
+    // 1. Fetch lead details for context
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .single();
+
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // 2. Fetch all uploaded files for this lead
+    const { data: uploads, error: uploadsErr } = await supabase
+      .from('lead_checklist_status')
+      .select('*')
+      .eq('lead_id', leadId)
+      .eq('status', 'uploaded');
+
+    if (uploadsErr) throw uploadsErr;
+
+    if (!uploads || uploads.length === 0) {
+      return res.status(400).json({ error: 'No documents uploaded yet. Please upload at least one document first.' });
+    }
+
+    // 3. Prepare parts for Gemini Multimodal API
+    const contentsParts = [];
+    const documentDescriptions = [];
+
+    for (const doc of uploads) {
+      const fileName = doc.file_path;
+      if (!fileName) continue;
+
+      let fileBuffer;
+      let mimeType = 'application/pdf';
+
+      // Detect Mime Type
+      const ext = path.extname(doc.document_name || fileName).toLowerCase();
+      if (ext === '.pdf') mimeType = 'application/pdf';
+      else if (ext === '.png') mimeType = 'image/png';
+      else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+      else {
+        // Skip base64 parsing for unsupported file types (like Word)
+        documentDescriptions.push(`Document: "${doc.document_name}" (unsupported file type for visual rendering, listed for reference)`);
+        continue;
+      }
+
+      try {
+        const localPath = path.join(uploadsDir, fileName);
+        if (fs.existsSync(localPath)) {
+          fileBuffer = fs.readFileSync(localPath);
+        } else {
+          // Production: Download from Supabase Storage
+          const { data, error } = await supabase.storage
+            .from('lead-documents')
+            .download(fileName);
+
+          if (error) {
+            console.warn(`Could not download ${fileName} from Supabase:`, error.message);
+            continue;
+          }
+
+          if (data) {
+            if (typeof data.arrayBuffer === 'function') {
+              const arrayBuffer = await data.arrayBuffer();
+              fileBuffer = Buffer.from(arrayBuffer);
+            } else {
+              fileBuffer = Buffer.from(data);
+            }
+          }
+        }
+
+        if (fileBuffer) {
+          contentsParts.push({
+            inlineData: {
+              mimeType,
+              data: fileBuffer.toString('base64')
+            }
+          });
+          documentDescriptions.push(`Document: "${doc.document_name}" (uploaded, format: ${mimeType})`);
+        }
+      } catch (err) {
+        console.error(`Error reading file ${fileName}:`, err);
+      }
+    }
+
+    // 4. Generate user context prompt
+    const promptText = `
+You are an expert financial analyst, credit assessor, and underwriting agent at InstaFin Portal.
+Analyze the attached documents and the metadata of the loan applicant:
+- Customer Name: ${lead.customer_name}
+- Mobile: ${lead.mobile || 'N/A'}
+- Email: ${lead.email || 'N/A'}
+- Loan Type: ${lead.loan_type || 'N/A'}
+- Expected Amount: ${lead.expected_amount || 'N/A'}
+- Income Source: ${lead.income_source || 'N/A'}
+- Resident Type: ${lead.resident_type || 'N/A'}
+- Business Type: ${lead.business_type || 'N/A'}
+
+Uploaded Documents Context:
+${documentDescriptions.join('\n')}
+
+Verify if the documents match the applicant's details. Generate a premium, comprehensive underwriter profile summary in markdown format with clear headings. Keep the style modern, professional, and thorough. Use the following structured outline:
+
+## 👤 Underwriting Executive Summary
+Provide a 3-4 sentence paragraph highlighting the overall viability of the applicant for this loan and key findings.
+
+## 📄 Document Verification & Legitimacy
+Detail the legitimacy of each document. Specify if the uploaded files (Aadhaar, PAN, Bank Statements, or Business Proof) appear correct, match the name "${lead.customer_name}", and have valid details.
+
+## 💼 Financial & Income Assessment
+Estimate their annual or monthly income based on salary slips, GST certificates, balance sheets, or bank statement transactions. Assess their income stability (e.g. check for continuous employment, regular deposits, healthy average balances, and non-bounced transactions).
+
+## ⚠️ Risk Profiling & Discrepancies
+Highlight any potential risks, low balances, missing documents, name spelling mismatches, or concerns that need manual intervention. If none, explicitly state "No major discrepancies found."
+
+## 🎯 Credit Recommendation
+Provide a clear final recommendation:
+- **Status**: [APPROVED / CONDITIONALLY APPROVED / REJECTED]
+- **Recommended Loan Amount**: [Estimated Amount based on eligibility]
+- **Justification**: Detailed reasoning based on document verification and cash flows.
+`;
+
+    contentsParts.unshift({ text: promptText });
+
+    // 5. Call Gemini API
+    const apiKey = process.env.GEMINI_API_KEY;
+    let summaryText = "";
+
+    if (apiKey) {
+      console.log('Calling Gemini API to summarize lead profile...');
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: contentsParts }]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Gemini API Error details:', errorText);
+        throw new Error(`Gemini API returned status ${response.status}`);
+      }
+
+      const resData = await response.json();
+      summaryText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "Failed to parse summary from AI candidate.";
+    } else {
+      console.warn('GEMINI_API_KEY environment variable is not set. Generating mock analysis for testing.');
+      summaryText = `
+## 👤 Underwriting Executive Summary
+This is a **MOCK ANALYSIS** because the \`GEMINI_API_KEY\` environment variable has not been configured. To enable live AI profiling, please set your Gemini API key in the server environment variables.
+Based on the metadata, the applicant **${lead.customer_name}** is applying for a **${lead.loan_type || 'Loan'}** of **${lead.expected_amount || 'unspecified amount'}**.
+
+## 📄 Document Verification & Legitimacy
+*   **KYC / Identity Proofs**: Mock verification of uploaded documents. Names on files are assumed to correspond to **${lead.customer_name}**.
+*   **Income/Business Proofs**: Plausibility check successful.
+
+## 💼 Financial & Income Assessment
+*   **Income Stream**: Categorized as **${lead.income_source || 'Unknown'}**.
+*   **Monthly Cash Flow**: Indicated stability and strong average balances, satisfying the debt-service ratio requirements.
+
+## ⚠️ Risk Profiling & Discrepancies
+*   No significant risks detected in mock inspection.
+*   *Note: Please configure \`GEMINI_API_KEY\` on your deployment server to inspect document contents (PDFs/images).*
+
+## 🎯 Credit Recommendation
+*   **Status**: **CONDITIONALLY APPROVED** (Pending actual AI integration)
+*   **Recommended Loan Amount**: ${lead.expected_amount || 'Requested Amount'}
+*   **Justification**: Lead profiles as a low-to-medium credit risk based on standard applicant parameters.
+`;
+    }
+
+    // 6. Save the summary persistently
+    const fileName = `summaries/${leadId}-summary.txt`;
+
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const fileBuffer = Buffer.from(summaryText, 'utf8');
+        const { error: uploadError } = await supabase.storage
+          .from('lead-documents')
+          .upload(fileName, fileBuffer, {
+            contentType: 'text/plain',
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+      } catch (storageErr) {
+        console.warn('Failed to upload summary to Supabase storage, saving locally:', storageErr.message);
+        const localPath = path.join(summariesDir, `${leadId}-summary.txt`);
+        fs.writeFileSync(localPath, summaryText, 'utf8');
+      }
+    } else {
+      const localPath = path.join(summariesDir, `${leadId}-summary.txt`);
+      fs.writeFileSync(localPath, summaryText, 'utf8');
+    }
+
+    // 7. Update lead status to 'Processing' if currently 'New' or 'Assigned'
+    if (lead.status === 'New' || lead.status === 'Assigned') {
+      await supabase
+        .from('leads')
+        .update({ status: 'Processing' })
+        .eq('id', leadId);
+    }
+
+    res.json({ success: true, summary: summaryText });
+  } catch (error) {
+    console.error('Error generating summary:', error);
+    res.status(500).json({ error: error.message || 'Failed to analyze documents' });
   }
 });
 
