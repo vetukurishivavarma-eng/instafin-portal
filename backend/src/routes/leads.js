@@ -945,12 +945,13 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
     contentsParts.unshift({ text: promptText });
 
     // 5. Call Gemini API
+    // 5. Call Gemini API with retries and model fallbacks
     const apiKey = process.env.GEMINI_API_KEY;
     let summaryText = "";
 
     if (apiKey) {
       console.log('Querying available Gemini models...');
-      let modelName = 'gemini-2.5-flash'; // Safe default for 2026
+      let discoveredModel = null;
 
       try {
         const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
@@ -966,42 +967,88 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
           );
           
           if (flashModel) {
-            modelName = flashModel.name.replace('models/', '');
-            console.log(`Dynamically selected active Flash model: ${modelName}`);
+            discoveredModel = flashModel.name.replace('models/', '');
+            console.log(`Dynamically selected active Flash model: ${discoveredModel}`);
           } else {
             const anyModel = availableModels.find(m => 
               m.supportedGenerationMethods?.includes('generateContent')
             );
             if (anyModel) {
-              modelName = anyModel.name.replace('models/', '');
-              console.log(`Dynamically selected active model: ${modelName}`);
+              discoveredModel = anyModel.name.replace('models/', '');
+              console.log(`Dynamically selected active model: ${discoveredModel}`);
             }
           }
-        } else {
-          console.warn(`Could not list models (status ${listResponse.status}), using default model.`);
         }
       } catch (listErr) {
-        console.warn('Could not query active Gemini models list, using default:', listErr.message);
+        console.warn('Could not query active Gemini models list:', listErr.message);
       }
 
-      console.log(`Calling Gemini API to summarize lead profile using model ${modelName}...`);
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: contentsParts }]
-        })
-      });
+      // List of candidate models to try in sequence if one experiences demand spikes/errors
+      const candidateModels = [];
+      if (discoveredModel) candidateModels.push(discoveredModel);
+      candidateModels.push('gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro');
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Gemini API Error details:', errorText);
-        throw new Error(`Gemini API returned status ${response.status}`);
+      // Unique candidate list
+      const uniqueModels = [...new Set(candidateModels)];
+
+      let success = false;
+      let lastErrorText = "";
+
+      for (const model of uniqueModels) {
+        if (success) break;
+        console.log(`Attempting document analysis with Gemini model: ${model}`);
+
+        // Try up to 3 times with exponential backoff for transient errors (503/429)
+        const maxRetries = 3;
+        for (let retry = 0; retry < maxRetries; retry++) {
+          try {
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const response = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: contentsParts }]
+              })
+            });
+
+            if (response.ok) {
+              const resData = await response.json();
+              summaryText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (summaryText) {
+                console.log(`Successfully completed document analysis using model: ${model}`);
+                success = true;
+                break;
+              } else {
+                throw new Error("Empty candidates response from Gemini API.");
+              }
+            }
+
+            const errorText = await response.text();
+            lastErrorText = `Model ${model} returned status ${response.status}: ${errorText}`;
+            console.warn(`Attempt with ${model} failed (status ${response.status}). Details: ${errorText}`);
+
+            // If it's a 503 (Service Unavailable) or 429 (Rate Limit), wait and retry
+            if (response.status === 503 || response.status === 429) {
+              const delay = Math.pow(2, retry) * 1500; // 1.5s, 3s, 6s
+              console.log(`Spike in demand detected (status ${response.status}). Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+              // Non-retryable error (e.g. 400 Bad Request, 403 Invalid API Key), try next model
+              break;
+            }
+          } catch (err) {
+            lastErrorText = err.message;
+            console.error(`Error on model ${model} (attempt ${retry + 1}):`, err.message);
+            const delay = Math.pow(2, retry) * 1500;
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
 
-      const resData = await response.json();
-      summaryText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "Failed to parse summary from AI candidate.";
+      if (!success) {
+        console.error('All Gemini candidate models and retries failed. Throwing descriptive error.');
+        throw new Error(`Gemini API is currently overloaded or experiencing high demand. Please try again in a few seconds. (Details: ${lastErrorText})`);
+      }
     } else {
       console.warn('GEMINI_API_KEY environment variable is not set. Generating mock analysis for testing.');
       summaryText = `
