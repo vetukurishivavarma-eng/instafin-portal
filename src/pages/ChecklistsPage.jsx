@@ -4,7 +4,7 @@ import API_BASE from '../config/api';
 import { getChecklist } from '../utils/resolver';
 import { Selection } from '../checklist-spec';
 import ChecklistDisplay from '../components/ChecklistDisplay';
-import { downloadPDF } from '../export/pdf';
+import { downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
 
 export default function ChecklistsPage() {
@@ -24,6 +24,9 @@ export default function ChecklistsPage() {
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
+  const [extractedProfile, setExtractedProfile] = useState(null);
+  const [croppedPhoto, setCroppedPhoto] = useState(null);
+  const [isGeneratingProfilePDF, setIsGeneratingProfilePDF] = useState(false);
 
   // Fetch leads
   useEffect(() => {
@@ -101,6 +104,129 @@ export default function ChecklistsPage() {
       setSummaryError('Failed to analyze documents');
       setSummaryLoading(false);
     });
+  };
+
+  // Crop face photo from Aadhaar or PAN using canvas
+  const cropAadhaarPhoto = async (boundingBox) => {
+    if (!selectedLead || !boundingBox) return;
+
+    // Find if Aadhaar or PAN is uploaded
+    const uploadedDocs = Object.keys(checklistStatuses).filter(id => 
+      checklistStatuses[id]?.status === 'uploaded' && 
+      (id.toLowerCase().includes('aadhaar') || id.toLowerCase().includes('pan'))
+    );
+
+    if (uploadedDocs.length === 0) {
+      console.log('No uploaded Aadhaar/PAN found for cropping.');
+      return;
+    }
+
+    const docId = uploadedDocs.find(id => id.toLowerCase().includes('aadhaar')) || uploadedDocs[0];
+
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${selectedLead.id}/${docId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch file for cropping');
+      const blob = await res.blob();
+      const imgUrl = URL.createObjectURL(blob);
+
+      const img = new window.Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          const [ymin, xmin, ymax, xmax] = boundingBox;
+          const imgWidth = img.naturalWidth;
+          const imgHeight = img.naturalHeight;
+
+          const x = (xmin / 1000) * imgWidth;
+          const y = (ymin / 1000) * imgHeight;
+          const width = ((xmax - xmin) / 1000) * imgWidth;
+          const height = ((ymax - ymin) / 1000) * imgHeight;
+
+          canvas.width = width;
+          canvas.height = height;
+
+          ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+
+          const base64Url = canvas.toDataURL('image/jpeg', 0.9);
+          setCroppedPhoto(base64Url);
+          URL.revokeObjectURL(imgUrl);
+        } catch (cropErr) {
+          console.error('Error during canvas crop:', cropErr);
+          URL.revokeObjectURL(imgUrl);
+        }
+      };
+      img.onerror = () => {
+        console.error('Failed to load image for cropping (might be a PDF)');
+        URL.revokeObjectURL(imgUrl);
+      };
+      img.src = imgUrl;
+    } catch (err) {
+      console.error('Failed to crop photo:', err);
+    }
+  };
+
+  // Parse summary for structured JSON and trigger cropping
+  useEffect(() => {
+    if (!summary) {
+      setExtractedProfile(null);
+      setCroppedPhoto(null);
+      return;
+    }
+
+    try {
+      const jsonMatch = summary.match(/```json([\s\S]*?)```/);
+      if (jsonMatch && jsonMatch[1]) {
+        const parsed = JSON.parse(jsonMatch[1].trim());
+        setExtractedProfile(parsed.extracted_details || null);
+        
+        if (parsed.face_bounding_box && selectedLead) {
+          cropAadhaarPhoto(parsed.face_bounding_box);
+        } else {
+          setCroppedPhoto(null);
+        }
+      } else {
+        setExtractedProfile(null);
+        setCroppedPhoto(null);
+      }
+    } catch (err) {
+      console.error('Failed to parse JSON from summary:', err);
+      setExtractedProfile(null);
+      setCroppedPhoto(null);
+    }
+  }, [summary, selectedLead, checklistStatuses]);
+
+  // Download underwriting report
+  const handleDownloadProfilePDF = async () => {
+    if (!selectedLead || !summary) return;
+    setIsGeneratingProfilePDF(true);
+    try {
+      const details = extractedProfile || {};
+      const leadData = {
+        id: selectedLead.id,
+        customerName: selectedLead.customerName,
+        mobile: selectedLead.mobile,
+        email: selectedLead.email,
+        loanType: selectedLead.loanType,
+        expectedAmount: selectedLead.expectedAmount,
+        status: selectedLead.status
+      };
+      
+      await downloadProfilePDF(leadData, details, summary, croppedPhoto || null);
+      
+      setSuccess('Underwriting report downloaded successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Failed to generate profile PDF:', err);
+      setError('Failed to generate Underwriting PDF Report');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setIsGeneratingProfilePDF(false);
+    }
   };
 
   // Handle lead selection
@@ -648,7 +774,77 @@ export default function ChecklistsPage() {
                           <strong>AI Inspection Complete.</strong> The generated credit risk analysis and verification report has been permanently saved to Supabase storage.
                         </div>
                       </div>
+
+                      {extractedProfile && (
+                        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-4">
+                          <div className="flex items-center justify-between mb-3 pb-2 border-b border-indigo-100">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-2 w-2 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                              </span>
+                              <h4 className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider">AI Verified KYC Profile</h4>
+                            </div>
+                            {croppedPhoto && (
+                              <div className="h-10 w-10 rounded-lg overflow-hidden border border-indigo-200 bg-white">
+                                <img src={croppedPhoto} alt="Extracted Applicant" className="h-full w-full object-cover" />
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="space-y-2 text-xs text-gray-700">
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">Full Name</span>
+                              <span className="col-span-2 font-semibold text-gray-900">{extractedProfile.full_name || 'N/A'}</span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">DOB / Gender</span>
+                              <span className="col-span-2 font-semibold text-gray-900">
+                                {extractedProfile.dob || 'N/A'} {extractedProfile.gender ? `(${extractedProfile.gender})` : ''}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">Aadhaar No</span>
+                              <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile.aadhaar_number || 'N/A'}</span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">PAN Number</span>
+                              <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile.pan_number || 'N/A'}</span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">Address</span>
+                              <span className="col-span-2 text-gray-600 leading-normal">{extractedProfile.address || 'N/A'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {renderSummary(summary)}
+
+                      <div className="mt-4 pt-4 border-t border-indigo-100">
+                        <button
+                          onClick={handleDownloadProfilePDF}
+                          disabled={isGeneratingProfilePDF}
+                          className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                        >
+                          {isGeneratingProfilePDF ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Generating Underwriting Report...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              Download Underwriting Report (PDF)
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center py-12 flex flex-col items-center">

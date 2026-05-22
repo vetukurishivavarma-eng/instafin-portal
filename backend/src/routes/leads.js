@@ -894,6 +894,23 @@ Provide a clear final recommendation:
 - **Status**: [APPROVED / CONDITIONALLY APPROVED / REJECTED]
 - **Recommended Loan Amount**: [Estimated Amount based on eligibility]
 - **Justification**: Detailed reasoning based on document verification and cash flows.
+
+CRITICAL INSTRUCTION:
+At the very end of your response, append a structured JSON block inside a \`\`\`json \`\`\` code block (ensure it is the ONLY JSON code block in your entire output). 
+This JSON block MUST contain the following structured fields extracted from the documents:
+{
+  "extracted_details": {
+    "full_name": "Applicant's full name as written on identity proof",
+    "dob": "Date of Birth (DD/MM/YYYY) if available",
+    "gender": "Male / Female / Other",
+    "aadhaar_number": "Aadhaar number if present (format: XXXX XXXX XXXX or masked)",
+    "pan_number": "PAN number if present (format: XXXXX1234X)",
+    "address": "Full residential address as written on Aadhaar/proof"
+  },
+  "face_bounding_box": [ymin, xmin, ymax, xmax]
+}
+
+Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN card, or standard ID proof. Return the face_bounding_box normalized coordinates from 0 to 1000 as [ymin, xmin, ymax, xmax] (e.g., [200, 150, 450, 400]). If no face/photo is found or it is not an image/PDF, return null for face_bounding_box.
 `;
 
     contentsParts.unshift({ text: promptText });
@@ -979,6 +996,20 @@ Based on the metadata, the applicant **${lead.customer_name}** is applying for a
 *   **Status**: **CONDITIONALLY APPROVED** (Pending actual AI integration)
 *   **Recommended Loan Amount**: ${lead.expected_amount || 'Requested Amount'}
 *   **Justification**: Lead profiles as a low-to-medium credit risk based on standard applicant parameters.
+
+\`\`\`json
+{
+  "extracted_details": {
+    "full_name": "${lead.customer_name}",
+    "dob": "15/08/1990",
+    "gender": "Male",
+    "aadhaar_number": "XXXX XXXX 1234",
+    "pan_number": "ABCDE1234F",
+    "address": "123, High Street, Sector 5, Bengaluru, Karnataka - 560001"
+  },
+  "face_bounding_box": [220, 150, 520, 420]
+}
+\`\`\`
 `;
     }
 
