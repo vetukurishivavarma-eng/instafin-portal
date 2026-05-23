@@ -20,6 +20,10 @@ export default function EligibilityPage() {
   const [rate, setRate] = useState('');
   const [period, setPeriod] = useState('');
 
+  // Co-applicant fields
+  const [hasCoapplicant, setHasCoapplicant] = useState(false);
+  const [coapplicantGrossSalary, setCoapplicantGrossSalary] = useState('');
+
   // Fetch leads on mount
   useEffect(() => {
     if (!accessToken) return;
@@ -43,8 +47,9 @@ export default function EligibilityPage() {
   const num = (v) => parseFloat(v) || 0;
 
   // ---- FORMULAS ----
+  const coapplicantGross = hasCoapplicant ? num(coapplicantGrossSalary) : 0;
   const totalDeductions = num(pf) + num(incomeTax) + num(professionTax);
-  const netSalary = num(grossSalary) - totalDeductions;
+  const netSalary = (num(grossSalary) + coapplicantGross) - totalDeductions;
   const netIncome = netSalary + num(rentalIncome);
   const totalExistingEmis = bankEmis.reduce((sum, b) => sum + num(b.emi), 0);
   const emiAvailable = (netIncome * num(emiNmiPercent) / 100) - totalExistingEmis;
@@ -77,17 +82,33 @@ export default function EligibilityPage() {
 
   const selectedLead = leads.find(l => String(l.id) === String(selectedLeadId));
 
+  useEffect(() => {
+    if (selectedLead) {
+      if (selectedLead.hasCoapplicant) {
+        setHasCoapplicant(true);
+      } else {
+        setHasCoapplicant(false);
+      }
+      setCoapplicantGrossSalary('');
+    } else {
+      setHasCoapplicant(false);
+      setCoapplicantGrossSalary('');
+    }
+  }, [selectedLeadId, leads]);
+
   // Share eligibility via WhatsApp
   const handleShareWhatsApp = () => {
     const name = selectedLead?.customerName || 'Applicant';
     const loanType = selectedLead?.loanType?.replace(/_/g, ' ') || '';
     const eligible = eligibleAmount > 0 ? formatNum(Math.round(eligibleAmount)) : 'Not Eligible';
+    const coapplicantText = hasCoapplicant ? `Co-applicant Gross: ${formatNum(coapplicantGross)}\n` : '';
 
     const msg =
       `*Eligibility Report - ${name}*\n` +
       `${loanType ? `Loan Type: ${loanType}\n` : ''}\n` +
       `*Income Details:*\n` +
       `Gross Salary: ${formatNum(num(grossSalary))}\n` +
+      coapplicantText +
       `Total Deductions: ${formatDecimal(totalDeductions)}\n` +
       `Net Salary: ${formatDecimal(netSalary)}\n` +
       `Rental Income: ${formatNum(num(rentalIncome))}\n` +
@@ -131,6 +152,8 @@ export default function EligibilityPage() {
         period: num(period),
         emiPerLac,
         eligibleAmount,
+        hasCoapplicant,
+        coapplicantGross,
       });
     } catch (err) {
       console.error('PDF download failed:', err);
@@ -195,14 +218,48 @@ export default function EligibilityPage() {
           {/* Income */}
           <div className="bg-white rounded-2xl shadow-md p-6">
             <h2 className="text-lg font-bold text-blue-700 mb-4">Income</h2>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
                 <label className="text-sm text-gray-600 mb-1 block">Gross Salary (Monthly)</label>
-                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-4 py-2.5" value={grossSalary} onChange={handleNumInput(setGrossSalary)} placeholder="0" />
+                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" value={grossSalary} onChange={handleNumInput(setGrossSalary)} placeholder="0" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 mb-1 block">Proposed Rental Income</label>
-                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-4 py-2.5" value={rentalIncome} onChange={handleNumInput(setRentalIncome)} placeholder="0" />
+                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" value={rentalIncome} onChange={handleNumInput(setRentalIncome)} placeholder="0" />
+              </div>
+
+              {/* Co-applicant checkbox and monthly gross input */}
+              <div className="pt-2 border-t border-gray-100">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                    checked={hasCoapplicant}
+                    onChange={(e) => {
+                      setHasCoapplicant(e.target.checked);
+                      if (!e.target.checked) setCoapplicantGrossSalary('');
+                    }}
+                  />
+                  <span className="text-sm font-semibold text-gray-700 group-hover:text-blue-750 transition-colors">
+                    Include Co-applicant Income
+                  </span>
+                </label>
+
+                {hasCoapplicant && (
+                  <div className="mt-3 p-4 bg-gradient-to-r from-blue-50/70 to-indigo-50/50 rounded-2xl border border-blue-100/50 animate-fade-in-up">
+                    <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                      Co-applicant Monthly Gross Salary * {selectedLead?.coapplicantName ? `(${selectedLead.coapplicantName})` : ''}
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="w-full border rounded-xl px-3 py-2 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-sm font-medium"
+                      value={coapplicantGrossSalary}
+                      onChange={handleNumInput(setCoapplicantGrossSalary)}
+                      placeholder="Enter gross monthly income"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

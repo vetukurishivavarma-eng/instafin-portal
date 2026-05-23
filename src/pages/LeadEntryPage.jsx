@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import BulkUploadModal from '../components/BulkUploadModal';
-import { LoanType, LoanStatus, IncomeSource, ResidentType, BusinessType } from '../checklist-spec';
 import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
@@ -18,7 +17,10 @@ export default function LeadEntryPage() {
     businessType: '',
     expectedAmount: '',
     referralCode: '',
-    assignedBanks: []
+    assignedBanks: [],
+    hasCoapplicant: false,
+    coapplicantName: '',
+    coapplicantIncomeSource: 'salaried'
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [assignData, setAssignData] = useState({
@@ -101,6 +103,13 @@ const validateBusinessType = (businessType, incomeSource) => {
   return '';
 };
 
+const validateCoapplicantName = (name, hasCo) => {
+  if (!hasCo) return '';
+  if (!name || !name.trim()) return 'Co-applicant name is required';
+  if (/[0-9]/.test(name)) return 'Name cannot contain numbers';
+  return '';
+};
+
   const handleNameChange = (e) => {
     const value = e.target.value.replace(/[0-9]/g, '');
     setFormData(prev => ({ ...prev, customerName: value }));
@@ -137,7 +146,8 @@ const validateBusinessType = (businessType, incomeSource) => {
       loanStatus: validateLoanStatus(formData.loanStatus),
       incomeSource: validateIncomeSource(formData.incomeSource),
       residentType: validateResidentType(formData.residentType),
-      businessType: validateBusinessType(formData.businessType, formData.incomeSource)
+      businessType: validateBusinessType(formData.businessType, formData.incomeSource),
+      coapplicantName: validateCoapplicantName(formData.coapplicantName, formData.hasCoapplicant)
     };
 
     setFieldErrors(errors);
@@ -166,7 +176,21 @@ const validateBusinessType = (businessType, incomeSource) => {
       setCreatedLead(lead);
       setSuccess(`Lead created successfully!`);
       loadLeads();
-      setFormData({ customerName: '', mobile: '', loanType: '', loanStatus: '', incomeSource: '', residentType: '', businessType: '', expectedAmount: '', referralCode: '', assignedBanks: [] });
+      setFormData({ 
+        customerName: '', 
+        mobile: '', 
+        loanType: '', 
+        loanStatus: '', 
+        incomeSource: '', 
+        residentType: '', 
+        businessType: '', 
+        expectedAmount: '', 
+        referralCode: '', 
+        assignedBanks: [],
+        hasCoapplicant: false,
+        coapplicantName: '',
+        coapplicantIncomeSource: 'salaried'
+      });
       setFieldErrors({});
     } catch (err) {
       setError('Failed to create lead');
@@ -259,29 +283,29 @@ const validateBusinessType = (businessType, incomeSource) => {
   }
 
   return (
-    <div className="py-12">
+    <div className="py-12 px-6 min-h-screen bg-gradient-mesh animate-fade-in-up">
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Staff Lead Entry Portal</h1>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Staff Lead Entry Portal</h1>
           <p className="text-gray-500">Internal lead capture portal for staff and appointed DSAs.</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('new')}
-            className={`px-4 py-2 rounded-xl font-semibold ${activeTab === 'new' ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-700'}`}
+            className={`px-4 py-2 rounded-xl font-semibold transition-all duration-300 hover-lift ${activeTab === 'new' ? 'bg-blue-700 text-white shadow-md shadow-blue-500/20' : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-gray-50'}`}
           >
             Add New Lead
           </button>
           <button
             onClick={() => setActiveTab('manage')}
-            className={`px-4 py-2 rounded-xl font-semibold ${activeTab === 'manage' ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-700'}`}
+            className={`px-4 py-2 rounded-xl font-semibold transition-all duration-300 hover-lift ${activeTab === 'manage' ? 'bg-blue-700 text-white shadow-md shadow-blue-500/20' : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-gray-50'}`}
           >
             Manage Leads ({unassignedLeads.length} unassigned)
           </button>
           {isAdmin && (
             <button
               onClick={() => setShowBulkUpload(true)}
-              className="px-4 py-2 rounded-xl font-semibold bg-green-600 text-white hover:bg-green-700"
+              className="px-4 py-2 rounded-xl font-semibold bg-green-600 text-white hover:bg-green-700 hover-lift shadow-md shadow-green-500/20 transition-all"
             >
               Bulk Upload
             </button>
@@ -289,17 +313,17 @@ const validateBusinessType = (businessType, incomeSource) => {
         </div>
       </div>
 
-      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6">{error}</div>}
-      {success && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6">{success}</div>}
+      {error && <div className="bg-red-100/80 backdrop-blur-sm border border-red-300 text-red-700 px-4 py-3 rounded-2xl mb-6 shadow-sm">{error}</div>}
+      {success && <div className="bg-green-100/80 backdrop-blur-sm border border-green-300 text-green-700 px-4 py-3 rounded-2xl mb-6 shadow-sm">{success}</div>}
 
       {activeTab === 'new' && (
-        <div className="bg-white rounded-3xl shadow-xl p-8 border">
-<div className="grid md:grid-cols-2 gap-6 mb-6">
+        <div className="glass-card rounded-3xl p-8 border border-white/40 shadow-xl transition-all mb-8">
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
              <div>
                <input
                  type="text"
                  placeholder="Customer Name *"
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.customerName ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.customerName ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.customerName}
                  onChange={handleNameChange}
                  maxLength={50}
@@ -310,7 +334,7 @@ const validateBusinessType = (businessType, incomeSource) => {
                <input
                  type="tel"
                  placeholder="Mobile Number * (10 digits)"
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.mobile ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.mobile ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.mobile}
                  onChange={handleMobileChange}
                  maxLength={10}
@@ -322,7 +346,7 @@ const validateBusinessType = (businessType, incomeSource) => {
            <div className="grid md:grid-cols-2 gap-6 mb-6">
              <div>
                <select
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.loanType ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.loanType ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.loanType}
                  onChange={(e) => { setFormData(p => ({ ...p, loanType: e.target.value })); setFieldErrors(prev => ({ ...prev, loanType: '' })); }}
                >
@@ -339,7 +363,7 @@ const validateBusinessType = (businessType, incomeSource) => {
              </div>
              <div>
                <select
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.loanStatus ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.loanStatus ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.loanStatus}
                  onChange={(e) => { setFormData(p => ({ ...p, loanStatus: e.target.value })); setFieldErrors(prev => ({ ...prev, loanStatus: '' })); }}
                >
@@ -356,7 +380,7 @@ const validateBusinessType = (businessType, incomeSource) => {
            <div className="grid md:grid-cols-2 gap-6 mb-6">
              <div>
                <select
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.incomeSource ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.incomeSource ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.incomeSource}
                  onChange={(e) => { setFormData(p => ({ ...p, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : p.businessType })); setFieldErrors(prev => ({ ...prev, incomeSource: '' })); }}
                >
@@ -368,7 +392,7 @@ const validateBusinessType = (businessType, incomeSource) => {
              </div>
              <div>
                <select
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.residentType ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.residentType ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.residentType}
                  onChange={(e) => { setFormData(p => ({ ...p, residentType: e.target.value })); setFieldErrors(prev => ({ ...prev, residentType: '' })); }}
                >
@@ -385,7 +409,7 @@ const validateBusinessType = (businessType, incomeSource) => {
              {formData.incomeSource !== 'salaried' && (
              <div>
                <select
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.businessType ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.businessType ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.businessType}
                  onChange={(e) => { setFormData(p => ({ ...p, businessType: e.target.value })); setFieldErrors(prev => ({ ...prev, businessType: '' })); }}
                >
@@ -402,7 +426,7 @@ const validateBusinessType = (businessType, incomeSource) => {
                <input
                  type="text"
                  placeholder="Expected Loan Amount *"
-                 className={`border rounded-2xl px-4 py-3 w-full ${fieldErrors.expectedAmount ? 'border-red-500' : ''}`}
+                 className={`border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.expectedAmount ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                  value={formData.expectedAmount}
                  onChange={handleAmountChange}
                />
@@ -412,19 +436,74 @@ const validateBusinessType = (businessType, incomeSource) => {
                <input
                  type="text"
                  placeholder="Referral Code (Optional)"
-                 className="border rounded-2xl px-4 py-3 w-full"
+                 className="border rounded-2xl px-4 py-3 w-full transition-all focus:ring-2 focus:ring-blue-200 border-gray-200 focus:border-blue-500"
                  value={formData.referralCode || ''}
                  onChange={(e) => setFormData(prev => ({ ...prev, referralCode: e.target.value.toUpperCase() }))}
                />
              </div>
            </div>
 
-          <button onClick={handleSaveLead} disabled={loading} className="bg-blue-700 text-white px-6 py-3 rounded-2xl font-semibold disabled:opacity-50">
-            {loading ? 'Saving...' : 'Save Lead'}
-          </button>
+           {/* Coapplicant Checkbox */}
+           <div className="mb-6">
+             <label className="flex items-center gap-3 cursor-pointer select-none group">
+               <input
+                 type="checkbox"
+                 className="w-5 h-5 rounded-lg border-gray-300 text-blue-700 focus:ring-blue-500 cursor-pointer group-hover:scale-105 transition-all"
+                 checked={formData.hasCoapplicant}
+                 onChange={(e) => setFormData(p => ({ 
+                   ...p, 
+                   hasCoapplicant: e.target.checked,
+                   coapplicantName: e.target.checked ? p.coapplicantName : '',
+                   coapplicantIncomeSource: e.target.checked ? p.coapplicantIncomeSource || 'salaried' : ''
+                 }))}
+               />
+               <span className="font-semibold text-gray-700 text-base group-hover:text-blue-750 transition-colors">Add a Co-applicant for this loan</span>
+             </label>
+           </div>
 
-          {createdLead && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-3xl p-6 mt-6">
+           {/* Coapplicant Fields (sliding card) */}
+           {formData.hasCoapplicant && (
+             <div className="grid md:grid-cols-2 gap-6 p-6 bg-gradient-to-r from-blue-50/70 to-indigo-50/50 rounded-3xl border border-blue-100/50 mb-6 animate-fade-in-up">
+               <div>
+                 <label className="text-sm font-semibold text-gray-600 mb-1.5 block">Co-applicant Name *</label>
+                 <input
+                   type="text"
+                   placeholder="Co-applicant Full Name"
+                   className={`border rounded-2xl px-4 py-3 w-full bg-white transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.coapplicantName ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
+                   value={formData.coapplicantName}
+                   onChange={(e) => {
+                     const val = e.target.value.replace(/[0-9]/g, '');
+                     setFormData(p => ({ ...p, coapplicantName: val }));
+                     setFieldErrors(p => ({ ...p, coapplicantName: '' }));
+                   }}
+                   maxLength={50}
+                 />
+                 {fieldErrors.coapplicantName && <p className="text-red-500 text-sm mt-1">{fieldErrors.coapplicantName}</p>}
+               </div>
+               <div>
+                 <label className="text-sm font-semibold text-gray-600 mb-1.5 block">Co-applicant Income Source *</label>
+                 <select
+                   className="border rounded-2xl px-4 py-3 w-full bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                   value={formData.coapplicantIncomeSource}
+                   onChange={(e) => setFormData(p => ({ ...p, coapplicantIncomeSource: e.target.value }))}
+                 >
+                   <option value="salaried">Salaried</option>
+                   <option value="non_salaried">Self employed</option>
+                 </select>
+               </div>
+             </div>
+           )}
+
+           <button 
+             onClick={handleSaveLead} 
+             disabled={loading} 
+             className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-850 text-white px-8 py-3 rounded-2xl font-semibold disabled:opacity-50 hover-lift shadow-md shadow-blue-500/10 transition-all"
+           >
+             {loading ? 'Saving...' : 'Save Lead'}
+           </button>
+
+           {createdLead && (
+             <div className="bg-indigo-50/50 border border-indigo-200/50 rounded-3xl p-6 mt-6 animate-fade-in-up">
               <h3 className="text-xl font-bold text-indigo-700 mb-4">Assign to Executive</h3>
               <div className="grid md:grid-cols-3 gap-5 mb-5">
                 <select className="border rounded-2xl px-4 py-3" value={assignData.assignedTo} onChange={(e) => setAssignData(p => ({...p, assignedTo: e.target.value}))}>
@@ -463,8 +542,17 @@ const validateBusinessType = (businessType, incomeSource) => {
                   </thead>
                   <tbody>
                     {unassignedLeads.map(lead => (
-                      <tr key={lead.id} className="border-t hover:bg-gray-50">
-                        <td className="p-4 font-medium">{lead.customerName}</td>
+                      <tr key={lead.id} className="border-t hover:bg-gray-50/50 transition-colors">
+                        <td className="p-4 font-medium">
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-semibold">{lead.customerName}</span>
+                            {lead.hasCoapplicant && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-650 bg-blue-50/70 border border-blue-100/50 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm shadow-blue-500/5 animate-pulse">
+                                👥 Co-applicant: {lead.coapplicantName}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-4">{lead.mobile}</td>
                         <td className="p-4">{lead.loanType}</td>
                         <td className="p-4">{lead.expectedAmount}</td>
@@ -494,8 +582,17 @@ const validateBusinessType = (businessType, incomeSource) => {
                   </thead>
                   <tbody>
                     {assignedLeads.map(lead => (
-                      <tr key={lead.id} className="border-t hover:bg-gray-50">
-                        <td className="p-4 font-medium">{lead.customerName}</td>
+                      <tr key={lead.id} className="border-t hover:bg-gray-50/50 transition-colors">
+                        <td className="p-4 font-medium">
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-semibold">{lead.customerName}</span>
+                            {lead.hasCoapplicant && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-650 bg-blue-50/70 border border-blue-100/50 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm shadow-blue-500/5 animate-pulse">
+                                👥 Co-applicant: {lead.coapplicantName}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-4">{lead.mobile}</td>
                         <td className="p-4">{lead.loanType}</td>
                         <td className="p-4">{lead.expectedAmount}</td>

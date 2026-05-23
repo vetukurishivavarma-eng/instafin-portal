@@ -399,6 +399,8 @@ interface EligibilityData {
   period: number;
   emiPerLac: number;
   eligibleAmount: number;
+  hasCoapplicant?: boolean;
+  coapplicantGross?: number;
 }
 
 const eligStyles = StyleSheet.create({
@@ -443,6 +445,12 @@ const EligibilityPDF: React.FC<{ data: EligibilityData }> = ({ data }) => {
             <Text style={eligStyles.rowLabel}>Gross Salary (Monthly)</Text>
             <Text style={eligStyles.rowValue}>{fmt(data.grossSalary)}</Text>
           </View>
+          {data.hasCoapplicant && (
+            <View style={eligStyles.row}>
+              <Text style={eligStyles.rowLabel}>Co-applicant Gross Income (Monthly)</Text>
+              <Text style={eligStyles.rowValue}>{fmt(data.coapplicantGross || 0)}</Text>
+            </View>
+          )}
           <View style={eligStyles.row}>
             <Text style={eligStyles.rowLabel}>Proposed Rental Income</Text>
             <Text style={eligStyles.rowValue}>{fmt(data.rentalIncome)}</Text>

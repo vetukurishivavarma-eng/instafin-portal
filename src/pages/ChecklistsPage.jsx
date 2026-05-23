@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
 import { getChecklist } from '../utils/resolver';
-import { Selection } from '../checklist-spec';
 import ChecklistDisplay from '../components/ChecklistDisplay';
 import { downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
@@ -261,7 +260,20 @@ export default function ChecklistsPage() {
       businessType: normalizeValue(lead.businessType)
     };
 
-    const items = getChecklist(selection);
+    let items = getChecklist(selection);
+
+    if (lead.hasCoapplicant) {
+      items = [
+        ...items,
+        {
+          id: 'coapplicant_aadhaar',
+          name: `Co-applicant Aadhaar Card (${lead.coapplicantName || 'Co-applicant'})`,
+          category: 'kyc',
+          required: true
+        }
+      ];
+    }
+
     setChecklistItems(items);
   };
 

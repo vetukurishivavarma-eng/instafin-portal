@@ -9,7 +9,39 @@ import { deriveLeadStatus, computeLeadAggregates } from '../utils/statusDerivati
 
 const router = express.Router();
 
+// Helper to parse remarks containing co-applicant data
+const parseRemarksField = (remarksStr) => {
+  if (!remarksStr) return { coapplicant: null, remarks: "" };
+  try {
+    const parsed = JSON.parse(remarksStr);
+    if (parsed && typeof parsed === 'object' && ('coapplicant' in parsed || 'hasCoapplicant' in parsed)) {
+      const coapplicant = parsed.coapplicant || {
+        hasCoapplicant: parsed.hasCoapplicant || false,
+        name: parsed.coapplicantName || "",
+        incomeSource: parsed.coapplicantIncomeSource || "salaried"
+      };
+      return {
+        coapplicant,
+        remarks: parsed.remarks || ""
+      };
+    }
+  } catch (e) {
+    // Normal string remarks
+  }
+  return { coapplicant: null, remarks: remarksStr };
+};
+
+// Helper to serialize remarks containing co-applicant data
+const serializeRemarksField = (coapplicant, remarks) => {
+  if (!coapplicant || !coapplicant.hasCoapplicant) return remarks || "";
+  return JSON.stringify({
+    coapplicant,
+    remarks: remarks || ""
+  });
+};
+
 router.use(authenticate);
+
 
 // Mount bank-wise routes as sub-router
 router.use('/:leadId/banks', leadBanksRouter);
@@ -90,6 +122,8 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         disbursedAmount = agg.totalDisbursed;
       }
 
+      const { coapplicant, remarks: cleanRemarks } = parseRemarksField(lead.remarks);
+
       return {
         id: lead.id,
         customerName: lead.customer_name,
@@ -109,7 +143,10 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         department: lead.department,
         priority: lead.priority,
         followUp: lead.follow_up,
-        remarks: lead.remarks,
+        remarks: cleanRemarks,
+        hasCoapplicant: coapplicant?.hasCoapplicant || false,
+        coapplicantName: coapplicant?.name || "",
+        coapplicantIncomeSource: coapplicant?.incomeSource || "",
         createdAt: lead.created_at,
         bankDetails: banks.map(b => ({
           id: b.id,
@@ -180,6 +217,8 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       disbursedAmount = agg.totalDisbursed;
     }
 
+    const { coapplicant, remarks: cleanRemarks } = parseRemarksField(lead.remarks);
+
     res.json({
       id: lead.id,
       customerName: lead.customer_name,
@@ -199,7 +238,10 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       department: lead.department,
       priority: lead.priority,
       followUp: lead.follow_up,
-      remarks: lead.remarks,
+      remarks: cleanRemarks,
+      hasCoapplicant: coapplicant?.hasCoapplicant || false,
+      coapplicantName: coapplicant?.name || "",
+      coapplicantIncomeSource: coapplicant?.incomeSource || "",
       createdAt: lead.created_at,
       bankDetails: (banks || []).map(b => ({
         id: b.id,
@@ -256,12 +298,21 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       pan,
       annualIncome,
       businessType,
-      remarks
+      remarks,
+      hasCoapplicant,
+      coapplicantName,
+      coapplicantIncomeSource
     } = req.body;
 
     if (!customerName || !mobile) {
       return res.status(400).json({ error: 'Customer name and mobile are required' });
     }
+
+    const coapplicantData = hasCoapplicant ? {
+      hasCoapplicant: true,
+      name: coapplicantName || "",
+      incomeSource: coapplicantIncomeSource || "salaried"
+    } : null;
 
     // Build insert object - conditionally include referral_code
     const insertData = {
@@ -277,7 +328,8 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       assigned_banks: assignedBanks || [],
       status: 'New',
       assigned_to: req.user.role === 'admin' ? null : req.user.id,
-      priority: 'Medium'
+      priority: 'Medium',
+      remarks: serializeRemarksField(coapplicantData, remarks)
     };
 
     // Only add referral_code if it's provided (to handle missing column gracefully)
@@ -343,7 +395,7 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     // Check if lead exists
     const { data: existingLead } = await supabase
       .from('leads')
-      .select('assigned_to')
+      .select('assigned_to, remarks')
       .eq('id', req.params.id)
       .single();
 
@@ -356,6 +408,19 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         existingLead.assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
+
+    const { coapplicant, remarks: existingCleanRemarks } = parseRemarksField(existingLead.remarks);
+
+    const hasCoapplicant = req.body.hasCoapplicant !== undefined ? req.body.hasCoapplicant : (coapplicant?.hasCoapplicant || false);
+    const coapplicantName = req.body.coapplicantName !== undefined ? req.body.coapplicantName : (coapplicant?.name || "");
+    const coapplicantIncomeSource = req.body.coapplicantIncomeSource !== undefined ? req.body.coapplicantIncomeSource : (coapplicant?.incomeSource || "salaried");
+    const remarks = req.body.remarks !== undefined ? req.body.remarks : existingCleanRemarks;
+
+    const coapplicantData = hasCoapplicant ? {
+      hasCoapplicant: true,
+      name: coapplicantName,
+      incomeSource: coapplicantIncomeSource
+    } : null;
 
     const updateData = {};
     const fieldMappings = {
@@ -375,8 +440,7 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       assignedTo: 'assigned_to',
       department: 'department',
       priority: 'priority',
-      followUp: 'follow_up',
-      remarks: 'remarks'
+      followUp: 'follow_up'
     };
 
     Object.keys(fieldMappings).forEach(apiField => {
@@ -384,6 +448,8 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         updateData[fieldMappings[apiField]] = req.body[apiField];
       }
     });
+
+    updateData.remarks = serializeRemarksField(coapplicantData, remarks);
 
     const { data: updatedLead, error } = await supabase
       .from('leads')

@@ -7,6 +7,37 @@ import { authorize } from '../middleware/authorize.js';
 
 const router = express.Router();
 
+// Helper to parse remarks containing co-applicant data
+const parseRemarksField = (remarksStr) => {
+  if (!remarksStr) return { coapplicant: null, remarks: "" };
+  try {
+    const parsed = JSON.parse(remarksStr);
+    if (parsed && typeof parsed === 'object' && ('coapplicant' in parsed || 'hasCoapplicant' in parsed)) {
+      const coapplicant = parsed.coapplicant || {
+        hasCoapplicant: parsed.hasCoapplicant || false,
+        name: parsed.coapplicantName || "",
+        incomeSource: parsed.coapplicantIncomeSource || "salaried"
+      };
+      return {
+        coapplicant,
+        remarks: parsed.remarks || ""
+      };
+    }
+  } catch (e) {
+    // Normal string remarks
+  }
+  return { coapplicant: null, remarks: remarksStr };
+};
+
+// Helper to serialize remarks containing co-applicant data
+const serializeRemarksField = (coapplicant, remarks) => {
+  if (!coapplicant || !coapplicant.hasCoapplicant) return remarks || "";
+  return JSON.stringify({
+    coapplicant,
+    remarks: remarks || ""
+  });
+};
+
 const uploadsDir = process.cwd();
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -82,7 +113,17 @@ const columnMapping = {
   'FOLLOW UP': 'follow_up',
   'remarks': 'remarks',
   'Remarks': 'remarks',
-  'REMARKS': 'remarks'
+  'REMARKS': 'remarks',
+  'Co-applicant (Y/N)': 'has_coapplicant',
+  'Co-applicant': 'has_coapplicant',
+  'Coapplicant': 'has_coapplicant',
+  'CoApplicant Name': 'coapplicant_name',
+  'Co-Applicant Name': 'coapplicant_name',
+  'Coapplicant Name': 'coapplicant_name',
+  'CoApplicant Income Source': 'coapplicant_income_source',
+  'Co-Applicant Income Source': 'coapplicant_income_source',
+  'Coapplicant Income Source': 'coapplicant_income_source',
+  'Income source': 'coapplicant_income_source'
 };
 
 // Preview bulk upload - analyze data without saving
@@ -292,6 +333,24 @@ router.post('/process', authorize('admin'), async (req, res) => {
               insertData[dbCol] = dbCol === 'mobile' ? value.toString() : (enumFields.includes(dbCol) ? normalizeEnum(value) : value);
             }
           }
+          // Parse co-applicant details from Excel row
+          const coapplicantYN = lead['Co-applicant (Y/N)'] || lead['Co-applicant'] || lead['Coapplicant (Y/N)'] || lead['Coapplicant'] || lead['co_applicant'] || lead['has_coapplicant'];
+          const hasCo = (coapplicantYN === 'Y' || coapplicantYN === 'y' || coapplicantYN === true || coapplicantYN === 'Yes' || coapplicantYN === 'yes');
+
+          let coData = null;
+          if (hasCo) {
+            const coName = lead['CoApplicant Name'] || lead['Co-Applicant Name'] || lead['Coapplicant Name'] || lead['coapplicant_name'];
+            const coInc = lead['CoApplicant Income Source'] || lead['Co-Applicant Income Source'] || lead['Coapplicant Income Source'] || lead['coapplicant_income_source'] || lead['CoApplicant Income'] || lead['Income source'];
+            coData = {
+              hasCoapplicant: true,
+              name: coName || '',
+              incomeSource: coInc === 'Self employed' || coInc === 'self_employed' || coInc === 'Self Employed' || coInc === 'non_salaried' ? 'non_salaried' : 'salaried'
+            };
+          }
+
+          const rawRemarks = lead['remarks'] || lead['Remarks'] || lead['REMARKS'] || '';
+          insertData.remarks = serializeRemarksField(coData, rawRemarks);
+
           insertData.status = 'New';
 
           insertData.created_at = new Date().toISOString();
@@ -319,8 +378,52 @@ router.post('/process', authorize('admin'), async (req, res) => {
         try {
           const updateData = {};
 
+          let coapplicantChanged = false;
+          let newHasCo = null;
+          let newCoName = null;
+          let newCoInc = null;
+          let rawRemarks = null;
+
           for (const [field, values] of Object.entries(change.changes)) {
-            updateData[field] = values.new;
+            if (field === 'has_coapplicant') {
+              coapplicantChanged = true;
+              newHasCo = (values.new === 'Y' || values.new === 'y' || values.new === true || values.new === 'Yes' || values.new === 'yes');
+            } else if (field === 'coapplicant_name') {
+              coapplicantChanged = true;
+              newCoName = values.new;
+            } else if (field === 'coapplicant_income_source') {
+              coapplicantChanged = true;
+              newCoInc = values.new === 'Self employed' || values.new === 'self_employed' || values.new === 'Self Employed' || values.new === 'non_salaried' ? 'non_salaried' : 'salaried';
+            } else if (field === 'remarks') {
+              rawRemarks = values.new;
+              updateData[field] = values.new;
+            } else {
+              updateData[field] = values.new;
+            }
+          }
+
+          if (coapplicantChanged || rawRemarks !== null) {
+            // We need to fetch existing remarks to merge
+            const { data: leadRecord } = await supabase
+              .from('leads')
+              .select('remarks')
+              .eq('id', change.leadId)
+              .single();
+
+            const { coapplicant: existingCo, remarks: existingRemarks } = parseRemarksField(leadRecord?.remarks);
+            
+            const hasCo = newHasCo !== null ? newHasCo : (existingCo?.hasCoapplicant || false);
+            const coName = newCoName !== null ? newCoName : (existingCo?.name || "");
+            const coInc = newCoInc !== null ? newCoInc : (existingCo?.incomeSource || "salaried");
+            const finalRemarks = rawRemarks !== null ? rawRemarks : existingRemarks;
+
+            const coData = hasCo ? {
+              hasCoapplicant: true,
+              name: coName,
+              incomeSource: coInc
+            } : null;
+
+            updateData.remarks = serializeRemarksField(coData, finalRemarks);
           }
 
           const { error } = await supabase
