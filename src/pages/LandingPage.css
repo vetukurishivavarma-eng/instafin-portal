@@ -23,16 +23,16 @@
 }
 
 /* ==========================================
-   INTERACTIVE AXE CURSOR HIDING
+   INTERACTIVE KNIFE CURSOR HIDING
    ========================================== */
 .landing, .landing * {
-  cursor: none !important; /* Forces system cursor off so only the custom Axe shows */
+  cursor: none !important; /* Forces system cursor off so only the custom 3D Knife shows */
 }
 
 .custom-axe-cursor {
   position: fixed;
-  width: 42px;
-  height: 42px;
+  width: 45px;
+  height: 45px;
   pointer-events: none; /* CRITICAL: Permits clicks to pass straight to login inputs & buttons! */
   z-index: 999999;
   transform: translate(-10%, -10%) rotate(0deg);
@@ -41,8 +41,8 @@
 }
 
 .custom-axe-cursor.chopping {
-  transform: translate(-10%, -10%) rotate(-45deg) scale(1.2);
-  transition: transform 0.05s ease-out; /* Super snappy chop snap */
+  transform: translate(-10%, -10%) rotate(-45deg) scale(1.15);
+  transition: transform 0.06s ease-out; /* Snappy tactile slicing swing */
 }
 
 /* ==========================================
@@ -611,25 +611,31 @@
 }
 
 /* ==========================================
-   4-LEGGED LION TROT ENGINE
+   4-LEGGED LION TROT ENGINE (Realistic Joint Anchors)
    ========================================== */
 
 .lion-leg {
-  transition: transform 0.12s ease-out;
+  transition: transform 0.15s ease-out;
 }
+
+/* Joint specific transformation origins */
+.lion-leg-fl { transform-origin: 55px 65px !important; }
+.lion-leg-bl { transform-origin: 32px 65px !important; }
+.lion-leg-fr { transform-origin: 72px 65px !important; }
+.lion-leg-br { transform-origin: 48px 65px !important; }
 
 /* Diagonal trot gait swings */
 @keyframes lionLegSwingLeft {
   0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(26deg); }
+  50% { transform: rotate(24deg); }
 }
 
 @keyframes lionLegSwingRight {
   0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-26deg); }
+  50% { transform: rotate(-24deg); }
 }
 
-/* Leg swing animations utilizing inline speed variables from React */
+/* Leg swing animations utilizing inline speed variables from React when walking */
 .lion-box.walking .lion-leg-fl {
   animation: lionLegSwingLeft var(--swing-speed, 0.45s) linear infinite;
 }

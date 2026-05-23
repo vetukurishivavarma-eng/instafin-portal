@@ -11,20 +11,21 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Mouse & Tactile Axe States
+  // Mouse & Tactile Knife States
   const [mouseX, setMouseX] = useState(0);
   const [mouseY, setMouseY] = useState(0);
   const [isChopping, setIsChopping] = useState(false);
 
-  // Evasive Lion States
+  // 3-State Evasive Lion States
   const [lionPos, setLionPos] = useState({ x: 120, y: 320 });
   const [isScared, setIsScared] = useState(false);
   const [facingLeft, setFacingLeft] = useState(false);
   const [isGrowling, setIsGrowling] = useState(false);
+  const [actualSpeed, setActualSpeed] = useState(0);
 
   // Mutable refs for high-efficiency animation frame physics loop
   const lionPosRef = useRef({ x: 120, y: 320 });
-  const lionVelRef = useRef({ x: 1.2, y: 0.4 });
+  const lionVelRef = useRef({ x: 0, y: 0 });
   const mousePosRef = useRef({ x: 0, y: 0 });
   const lastRoarTimeRef = useRef(0);
 
@@ -74,24 +75,24 @@ export default function LoginPage() {
       const now = ctx.currentTime;
 
       // FM Pitch Rumble modulation
-      mod.frequency.setValueAtTime(28, now); // LFO rumble beat
+      mod.frequency.setValueAtTime(26, now); // Low feline rumble beat
       modGain.gain.setValueAtTime(32, now);  // Growl pitch depth
 
-      osc.frequency.setValueAtTime(68, now);
-      osc.frequency.exponentialRampToValueAtTime(45, now + 0.6);
+      osc.frequency.setValueAtTime(65, now);
+      osc.frequency.exponentialRampToValueAtTime(42, now + 0.65);
 
       mod.connect(modGain);
       modGain.connect(osc.frequency);
 
       // Volume envelope swelling growl
       gainNode.gain.setValueAtTime(0, now);
-      gainNode.gain.linearRampToValueAtTime(0.7, now + 0.12);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+      gainNode.gain.linearRampToValueAtTime(0.75, now + 0.12);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.75);
 
       // Throaty low pass sweeping filter
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(380, now);
-      filter.frequency.exponentialRampToValueAtTime(140, now + 0.6);
+      filter.frequency.setValueAtTime(350, now);
+      filter.frequency.exponentialRampToValueAtTime(130, now + 0.6);
 
       osc.connect(filter);
       filter.connect(gainNode);
@@ -100,14 +101,14 @@ export default function LoginPage() {
       mod.start(now);
       osc.start(now);
 
-      mod.stop(now + 0.75);
-      osc.stop(now + 0.75);
+      mod.stop(now + 0.8);
+      osc.stop(now + 0.8);
     } catch (e) {
-      console.warn('Audio Synthesis is disabled or blocked by browser settings.', e);
+      console.warn('Audio Synthesis growl blocked or unsupported.', e);
     }
   };
 
-  // Continuous Evasive 2D Physics Loop
+  // Continuous Evasive 3-State Physics Loop
   useEffect(() => {
     let animationFrameId;
 
@@ -116,29 +117,32 @@ export default function LoginPage() {
       const pos = lionPosRef.current;
       const vel = lionVelRef.current;
 
-      // Center of Lion is X + 75, Y + 50
+      // Center of Lion is roughly X + 75, Y + 50
       const dx = pos.x + 75 - mouse.x;
       const dy = pos.y + 50 - mouse.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-      let targetVelX = vel.x;
-      let targetVelY = vel.y;
+      let targetVelX = 0;
+      let targetVelY = 0;
       let scared = false;
 
-      // Evasion trigger threshold (Axe comes near)
-      if (dist < 220) {
+      // ==========================================
+      // ADVANCED 3-STATE BEHAVIOR AI
+      // ==========================================
+      if (dist < 150) {
+        // STATE 1: PANIC ESCAPE (Knife is extremely close!)
         scared = true;
 
-        // Escape vector directly away from the Axe
+        // Escape vector directly away from the Knife
         const forceX = dx / dist;
         const forceY = dy / dist;
 
-        // Evasive running speeds
-        targetVelX = forceX * 7.5;
-        targetVelY = forceY * 7.5;
+        // Natural, controlled majestic sprint speed (capped at 3.0px/frame)
+        targetVelX = forceX * 3.0;
+        targetVelY = forceY * 3.0;
 
-        // Trigger rumbling growl if axe is extremely close (Danger/Cornered)
-        if (dist < 85) {
+        // Trigger growl sound if knife is dangerously close (Danger/Cornered < 80px)
+        if (dist < 80) {
           const now = Date.now();
           if (now - lastRoarTimeRef.current > 1500) {
             synthesizeGrowl();
@@ -151,17 +155,21 @@ export default function LoginPage() {
             }, 1000);
           }
         }
+      } else if (dist >= 150 && dist <= 280) {
+        // STATE 2: IDLE WATCH (Knife is at a safe, curious distance)
+        // Lion decelerates to a complete stop, stands, and breathes
+        targetVelX = 0;
+        targetVelY = 0;
+        scared = false;
       } else {
-        // Safe wandering drift pattern
-        targetVelX = vel.x * 0.95 + (Math.random() - 0.5) * 0.2;
-        targetVelY = vel.y * 0.95 + (Math.random() - 0.5) * 0.2;
+        // STATE 3: CURIOUS FOLLOW (Knife is far away)
+        // Lion walks slowly and majestically towards the Knife
+        const followX = -dx / dist;
+        const followY = -dy / dist;
 
-        // Slow calm wander speed clamp
-        const speed = Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY) || 1;
-        if (speed > 1.3) {
-          targetVelX = (targetVelX / speed) * 1.3;
-          targetVelY = (targetVelY / speed) * 1.3;
-        }
+        targetVelX = followX * 1.1; // Gentle walk
+        targetVelY = followY * 1.1;
+        scared = false;
       }
 
       // Smooth physics linear interpolation for velocity
@@ -171,7 +179,7 @@ export default function LoginPage() {
       let nextX = pos.x + nextVx;
       let nextY = pos.y + nextVy;
 
-      // Strictly enforce page/viewport boundaries (strictly bounded!)
+      // Strictly enforce page/viewport boundaries
       const padding = 20;
       const minX = padding;
       const maxX = window.innerWidth - 170 - padding;
@@ -180,10 +188,10 @@ export default function LoginPage() {
 
       if (nextX < minX) {
         nextX = minX;
-        targetVelX = Math.abs(nextVx) * 0.8; // Bounce
+        targetVelX = Math.abs(nextVx) * 0.8; // Bounce back
       } else if (nextX > maxX) {
         nextX = maxX;
-        targetVelX = -Math.abs(nextVx) * 0.8; // Bounce
+        targetVelX = -Math.abs(nextVx) * 0.8;
       }
 
       if (nextY < minY) {
@@ -198,8 +206,11 @@ export default function LoginPage() {
       lionPosRef.current = { x: nextX, y: nextY };
       lionVelRef.current = { x: nextVx, y: nextVy };
 
+      const speed = Math.sqrt(nextVx * nextVx + nextVy * nextVy);
+
       setLionPos({ x: nextX, y: nextY });
       setIsScared(scared);
+      setActualSpeed(speed);
 
       // Horizontal orientation flip to face its heading direction
       if (nextVx < -0.15) {
@@ -233,8 +244,78 @@ export default function LoginPage() {
     }
   };
 
+  // Walking class trigger: true if moving, false if idle
+  const isWalking = actualSpeed > 0.22;
+
   return (
     <div className="landing">
+      {/* 3D GRADIENT DEFS FOR LION AND KNIFE (Zero external asset dependency) */}
+      <svg width="0" height="0" style={{ position: 'absolute' }}>
+        <defs>
+          {/* Majestic Golden Body Gradient */}
+          <linearGradient id="lionBodyGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FBBF24" /> {/* Golden yellow highlight */}
+            <stop offset="55%" stopColor="#F59E0B" /> {/* Amber mid-tone */}
+            <stop offset="100%" stopColor="#D97706" /> {/* Ochre shadow */}
+          </linearGradient>
+
+          {/* Leg Depth Shadow Gradient */}
+          <linearGradient id="lionLegShadowGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#D97706" />
+            <stop offset="100%" stopColor="#78350F" />
+          </linearGradient>
+
+          {/* Chest & Mane bobbing Gradients */}
+          <radialGradient id="lionManeGrad" cx="40%" cy="40%" r="60%">
+            <stop offset="0%" stopColor="#78350F" />
+            <stop offset="70%" stopColor="#451A03" />
+            <stop offset="100%" stopColor="#1A0500" />
+          </radialGradient>
+          
+          <radialGradient id="lionManeDarkGrad" cx="30%" cy="30%" r="70%">
+            <stop offset="0%" stopColor="#451A03" />
+            <stop offset="100%" stopColor="#1A0500" />
+          </radialGradient>
+
+          <linearGradient id="lionManeLightGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#B45309" />
+            <stop offset="100%" stopColor="#451A03" />
+          </linearGradient>
+
+          {/* Snout Gradient */}
+          <linearGradient id="snoutGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FFFBEB" />
+            <stop offset="100%" stopColor="#FDE68A" />
+          </linearGradient>
+
+          {/* Knife Handle (Carbon Fiber Ergonomic) */}
+          <linearGradient id="knifeHandleGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#374151" />
+            <stop offset="50%" stopColor="#1F2937" />
+            <stop offset="100%" stopColor="#111827" />
+          </linearGradient>
+
+          {/* Knife Guard (Brass/Bronze) */}
+          <linearGradient id="knifeGuardGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#FBBF24" />
+            <stop offset="100%" stopColor="#B45309" />
+          </linearGradient>
+
+          {/* Knife Blade Steel Gradients */}
+          <linearGradient id="knifeBladeFlatGrad" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stopColor="#F9FAFB" />
+            <stop offset="50%" stopColor="#E5E7EB" />
+            <stop offset="100%" stopColor="#9CA3AF" />
+          </linearGradient>
+          
+          <linearGradient id="knifeBladeBevelGrad" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stopColor="#9CA3AF" />
+            <stop offset="70%" stopColor="#4B5563" />
+            <stop offset="100%" stopColor="#1F2937" />
+          </linearGradient>
+        </defs>
+      </svg>
+
       <div className="floating-shapes">
         <div className="shape shape-1"></div>
         <div className="shape shape-2"></div>
@@ -252,9 +333,9 @@ export default function LoginPage() {
         </div>
       </nav>
 
-      {/* FREELY ROAMING INTERACTIVE LION (Pulsing mesh background shadow) */}
+      {/* FREELY ROAMING INTERACTIVE 3D LION WITH SEAMLESSLY ATTACHED JOINTS */}
       <div 
-        className={`lion-box walking ${isScared ? 'scared' : ''}`}
+        className={`lion-box ${isWalking ? 'walking' : ''} ${isScared ? 'scared' : ''}`}
         style={{
           transform: `translate(${lionPos.x}px, ${lionPos.y}px) scaleX(${facingLeft ? -1 : 1})`,
           '--swing-speed': isScared ? '0.12s' : '0.45s'
@@ -263,87 +344,96 @@ export default function LoginPage() {
         <div className="lion-svg-container">
           {isGrowling && <div className="lion-speech-bubble">Roarrr! 🦁🐾</div>}
           
-          <svg width="150" height="100" viewBox="0 0 150 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+          <svg width="150" height="110" viewBox="0 0 150 110" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+            {/* Blurred Floor Shadow to ground the 3D model */}
+            <ellipse cx="60" cy="98" rx="44" ry="4.5" fill="#000000" opacity="0.35" filter="blur(2px)" />
+
             {/* Tail (Waving, wiggles faster when scared) */}
             <g className="lion-tail">
-              <path d="M 33,52 C 18,52 8,72 5,88" stroke="#e5a93b" strokeWidth="4.5" fill="none" strokeLinecap="round" />
+              <path d="M 33,52 C 18,52 8,72 5,88" stroke="url(#lionLegShadowGrad)" strokeWidth="4.5" fill="none" strokeLinecap="round" />
               {/* Fluffy tail tuft */}
               <ellipse cx="4" cy="90" rx="6" ry="8" fill="#4a2c02" />
             </g>
 
-            {/* Rear Left Leg (Depth dark shadow color) */}
+            {/* Rear Left Leg (Rigged into hip skeleton, darker shadow color) */}
             <g className="lion-leg lion-leg-bl">
-              <rect x="20" y="62" width="10" height="24" rx="5" fill="#a05f25" />
-              <ellipse cx="25" cy="86" rx="7" ry="5" fill="#7d4512" />
+              <path d="M 24,55 Q 32,50 38,62 L 32,92 Q 28,95 24,92 Z" fill="url(#lionLegShadowGrad)" />
+              <ellipse cx="28" cy="92" rx="7" ry="4" fill="#78350F" />
             </g>
 
-            {/* Rear Right Leg (Depth dark shadow color) */}
+            {/* Rear Right Leg (Rigged into hip skeleton, darker shadow color) */}
             <g className="lion-leg lion-leg-br">
-              <rect x="35" y="62" width="10" height="24" rx="5" fill="#a05f25" />
-              <ellipse cx="40" cy="86" rx="7" ry="5" fill="#7d4512" />
+              <path d="M 40,55 Q 48,50 54,62 L 48,92 Q 44,95 40,92 Z" fill="url(#lionLegShadowGrad)" />
+              <ellipse cx="44" cy="92" rx="7" ry="4" fill="#78350F" />
             </g>
 
-            {/* Back Body */}
-            <ellipse cx="65" cy="55" rx="36" ry="18" fill="#e5a93b" />
+            {/* Main Torso (overlapping rear legs) */}
+            <path d="M 28,52 Q 65,34 98,48 Q 98,72 65,70 Q 28,70 28,52 Z" fill="url(#lionBodyGrad)" />
+            
+            {/* 3D Muscle Shoulder & Hip Contours (Attached structure) */}
+            <path d="M 82,48 Q 90,56 82,68" stroke="#D97706" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.7" />
+            <path d="M 32,50 Q 26,58 32,68" stroke="#D97706" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.7" />
 
             {/* Chest contour (Breathing animation) */}
-            <ellipse cx="85" cy="50" rx="20" ry="22" fill="#dfa010" className="lion-chest" />
+            <ellipse cx="85" cy="53" rx="20" ry="20" fill="url(#lionBodyGrad)" className="lion-chest" />
 
-            {/* Front Left Leg */}
+            {/* Front Left Leg (Rigged into chest/shoulder joints, primary golden color) */}
             <g className="lion-leg lion-leg-fl">
-              <rect x="50" y="62" width="11" height="24" rx="5.5" fill="#e5a93b" />
-              <ellipse cx="55" cy="86" rx="8" ry="5.5" fill="#BF7735" />
+              <path d="M 48,56 Q 56,52 62,64 L 56,94 Q 52,97 48,94 Z" fill="url(#lionBodyGrad)" />
+              <ellipse cx="52" cy="94" rx="7" ry="4" fill="#B45309" />
             </g>
 
-            {/* Front Right Leg */}
+            {/* Front Right Leg (Rigged into chest/shoulder joints, primary golden color) */}
             <g className="lion-leg lion-leg-fr">
-              <rect x="65" y="62" width="11" height="24" rx="5.5" fill="#e5a93b" />
-              <ellipse cx="70" cy="86" rx="8" ry="5.5" fill="#BF7735" />
+              <path d="M 65,56 Q 73,52 78,64 L 72,94 Q 68,97 64,94 Z" fill="url(#lionBodyGrad)" />
+              <ellipse cx="68" cy="94" rx="7" ry="4" fill="#B45309" />
             </g>
 
             {/* Floating Head & Majestic Mane (Bobs up/down) */}
             <g className="lion-mane">
-              {/* Lush thick mane */}
-              <circle cx="105" cy="40" r="26" fill="#5c3a21" />
-              <circle cx="112" cy="50" r="18" fill="#4a2c02" />
-              <circle cx="95" cy="35" r="20" fill="#6d472c" />
+              {/* Volumetric layered 3D mane */}
+              <circle cx="104" cy="40" r="26" fill="url(#lionManeGrad)" />
+              <circle cx="112" cy="48" r="18" fill="url(#lionManeDarkGrad)" />
+              <circle cx="94" cy="34" r="20" fill="url(#lionManeLightGrad)" />
               
-              {/* Left and Right Ears peeking out */}
-              <circle cx="98" cy="22" r="6" fill="#e5a93b" />
-              <circle cx="98" cy="22" r="3.5" fill="#4a2c02" />
-              <circle cx="115" cy="24" r="6" fill="#e5a93b" />
-              <circle cx="115" cy="24" r="3.5" fill="#4a2c02" />
+              {/* Left and Right Ears peeking out with 3D shadow depth */}
+              <circle cx="97" cy="22" r="6" fill="url(#lionBodyGrad)" />
+              <circle cx="97" cy="22" r="3.5" fill="#451A03" />
+              <circle cx="114" cy="24" r="6" fill="url(#lionBodyGrad)" />
+              <circle cx="114" cy="24" r="3.5" fill="#451A03" />
               
               {/* Head face base */}
-              <circle cx="106" cy="42" r="17" fill="#e5a93b" />
+              <circle cx="106" cy="42" r="17" fill="url(#lionBodyGrad)" />
               
-              {/* Snout */}
-              <ellipse cx="112" cy="48" rx="8" ry="6" fill="#fcdba2" />
+              {/* 3D Snout */}
+              <ellipse cx="112" cy="48" rx="8" ry="6" fill="url(#snoutGrad)" />
               {/* Feline nose */}
-              <polygon points="113,44 117,44 115,47" fill="#4a2c02" />
+              <polygon points="113,44 117,44 115,47" fill="#1A0500" />
 
               {/* Eyes (Closed in fear > < when scared, yellow open wild when safe) */}
               {isScared ? (
                 <g>
                   {/* Left Eye closed */}
-                  <path d="M 97,39 L 101,42 L 97,45" stroke="#3D1D00" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                  <path d="M 97,39 L 101,42 L 97,45" stroke="#1A0500" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                   {/* Right Eye closed */}
-                  <path d="M 108,39 L 104,42 L 108,45" stroke="#3D1D00" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                  <path d="M 108,39 L 104,42 L 108,45" stroke="#1A0500" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                 </g>
               ) : (
                 <g>
                   {/* Left open eye */}
-                  <circle cx="99" cy="40" r="3.5" fill="#ffd700" />
+                  <circle cx="99" cy="40" r="3.5" fill="#FBBF24" />
                   <circle cx="99" cy="40" r="1.5" fill="#000" />
+                  <circle cx="99.5" cy="39.2" r="0.6" fill="white" />
                   
                   {/* Right open eye */}
-                  <circle cx="107" cy="40" r="3.5" fill="#ffd700" />
+                  <circle cx="107" cy="40" r="3.5" fill="#FBBF24" />
                   <circle cx="107" cy="40" r="1.5" fill="#000" />
+                  <circle cx="107.5" cy="39.2" r="0.6" fill="white" />
                 </g>
               )}
 
               {/* Whiskers */}
-              <path d="M 114,48 L 122,47 M 114,49 L 121,50 M 114,50 L 120,53" stroke="#4a2c02" strokeWidth="0.8" />
+              <path d="M 114,48 L 122,47 M 114,49 L 121,50 M 114,50 L 120,53" stroke="#451A03" strokeWidth="0.8" />
             </g>
           </svg>
         </div>
@@ -434,7 +524,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* CUSTOM INTERACTIVE AXE CURSOR (Tracks mouse coordinate position) */}
+      {/* DYNAMIC 3D HIGH-FIDELITY COMBAT KNIFE CURSOR */}
       <div 
         className={`custom-axe-cursor ${isChopping ? 'chopping' : ''}`}
         style={{
@@ -442,18 +532,23 @@ export default function LoginPage() {
           top: `${mouseY}px`
         }}
       >
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
-          {/* Wooden handle */}
-          <rect x="4" y="30" width="4.5" height="28" rx="1.5" transform="rotate(-45 4 30)" fill="#8B5A2B" stroke="#4A2C02" strokeWidth="0.8" />
-          {/* Leather grip details */}
-          <line x1="16" y1="18" x2="20" y2="14" stroke="#3D1D00" strokeWidth="1" />
-          <line x1="19" y1="21" x2="23" y2="17" stroke="#3D1D00" strokeWidth="1" />
-          {/* Shiny Steel Axe Blade */}
-          <path d="M 23,12 C 27,8 35,6 37,9 C 39,12 37,19 32,23 C 28,25 24,24 21,21" fill="#B0C4DE" stroke="#4A6572" strokeWidth="1.2" />
-          {/* Blade sharp edge highlight */}
-          <path d="M 33,10 C 35,11 35,15 31,18" stroke="white" strokeWidth="1" strokeLinecap="round" />
-          {/* Heavy iron backing hammer block */}
-          <rect x="18" y="9" width="6.5" height="7.5" rx="1" transform="rotate(-45 18 9)" fill="#708090" stroke="#3F4E56" strokeWidth="0.8" />
+        <svg width="45" height="45" viewBox="0 0 45 45" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+          {/* Handle (Dark Ergonomic Carbon Fiber texture) */}
+          <rect x="5" y="34" width="5.5" height="15.5" rx="1.5" transform="rotate(-45 5 34)" fill="url(#knifeHandleGrad)" stroke="#111827" strokeWidth="0.8" />
+          {/* Steel Rivets on Handle */}
+          <circle cx="9" cy="38" r="0.75" fill="#E5E7EB" />
+          <circle cx="14" cy="33" r="0.75" fill="#E5E7EB" />
+          
+          {/* Gold Hilt Guard */}
+          <rect x="15" y="24" width="8.5" height="3" rx="1" transform="rotate(-45 15 24)" fill="url(#knifeGuardGrad)" stroke="#78350F" strokeWidth="0.5" />
+          
+          {/* 3D Beveled Knife Blade Steel */}
+          {/* Lower Blade Bevel (Silver-gray steel) */}
+          <path d="M 19,20 L 38,1 L 39,2 L 22,23 Z" fill="url(#knifeBladeFlatGrad)" />
+          {/* Upper Blade Bevel (Dark carbon steel) */}
+          <path d="M 19,20 L 38,1 L 34,12 L 22,23 Z" fill="url(#knifeBladeBevelGrad)" />
+          {/* Specular Edge Line (Shiny white highlight) */}
+          <path d="M 22,23 L 39,2 Q 40,0 38,1 Z" fill="#FFFFFF" opacity="0.9" />
         </svg>
       </div>
     </div>
