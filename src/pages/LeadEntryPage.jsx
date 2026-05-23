@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -42,8 +43,16 @@ export default function LeadEntryPage() {
   const [createdLead, setCreatedLead] = useState(null);
 
   // Leads Pipeline & Search States
+  const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (statusParam !== null) {
+      setStatusFilter(statusParam);
+    }
+  }, [searchParams]);
   const [editingLead, setEditingLead] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
