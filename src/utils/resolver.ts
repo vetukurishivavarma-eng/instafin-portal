@@ -10,6 +10,57 @@ import { DECISION_TREE, COMMON_CHECKLIST } from '../data/checklists';
 // Memoization cache - singleton to persist across calls
 const checklistCache: Map<string, ChecklistItem[]> = new Map();
 
+export interface ChecklistOverride {
+  added: ChecklistItem[];
+  deleted: string[];
+}
+
+export type ChecklistOverrides = Record<string, ChecklistOverride>;
+
+export function getOverrides(): ChecklistOverrides {
+  if (typeof window === 'undefined') return {};
+  try {
+    const data = localStorage.getItem('instafin_checklist_overrides');
+    return data ? JSON.parse(data) : {};
+  } catch (e) {
+    console.error('Error loading checklist overrides from localStorage', e);
+    return {};
+  }
+}
+
+export function saveOverrides(overrides: ChecklistOverrides): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('instafin_checklist_overrides', JSON.stringify(overrides));
+    clearChecklistCache();
+  } catch (e) {
+    console.error('Error saving checklist overrides to localStorage', e);
+  }
+}
+
+export function addChecklistItemToFlow(key: string, item: ChecklistItem): void {
+  const overrides = getOverrides();
+  if (!overrides[key]) {
+    overrides[key] = { added: [], deleted: [] };
+  }
+  overrides[key].added = overrides[key].added.filter(i => i.id !== item.id);
+  overrides[key].added.push(item);
+  overrides[key].deleted = overrides[key].deleted.filter(id => id !== item.id);
+  saveOverrides(overrides);
+}
+
+export function deleteChecklistItemFromFlow(key: string, itemId: string): void {
+  const overrides = getOverrides();
+  if (!overrides[key]) {
+    overrides[key] = { added: [], deleted: [] };
+  }
+  overrides[key].added = overrides[key].added.filter(i => i.id !== itemId);
+  if (!overrides[key].deleted.includes(itemId)) {
+    overrides[key].deleted.push(itemId);
+  }
+  saveOverrides(overrides);
+}
+
 /**
  * Converts Selection object to a lookup key
  * Format: "loanType|loanStatus|incomeSource|residentType|businessType?"
@@ -135,7 +186,21 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
   }
 
   // Filter out any undefined entries (defensive)
-  const filtered = checklist.filter(Boolean);
+  let filtered = checklist.filter(Boolean);
+
+  // Apply overrides from localStorage
+  const overrides = getOverrides();
+  const flowOverrides = overrides[key];
+  if (flowOverrides) {
+    if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
+      filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
+    }
+    if (flowOverrides.added && flowOverrides.added.length > 0) {
+      const existingIds = new Set(filtered.map(item => item.id));
+      const uniqueAdded = flowOverrides.added.filter(item => !existingIds.has(item.id));
+      filtered = [...filtered, ...uniqueAdded];
+    }
+  }
 
   // Cache the result
   checklistCache.set(key, filtered);
@@ -157,11 +222,28 @@ export function getChecklistByKey(key: string): ChecklistItem[] | undefined {
   // Look up in decision tree
   const checklist = DECISION_TREE[key as ChecklistKey];
 
-  if (checklist) {
-    checklistCache.set(key, checklist);
+  if (!checklist) {
+    return undefined;
   }
 
-  return checklist;
+  let filtered = checklist.filter(Boolean);
+
+  // Apply overrides from localStorage
+  const overrides = getOverrides();
+  const flowOverrides = overrides[key];
+  if (flowOverrides) {
+    if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
+      filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
+    }
+    if (flowOverrides.added && flowOverrides.added.length > 0) {
+      const existingIds = new Set(filtered.map(item => item.id));
+      const uniqueAdded = flowOverrides.added.filter(item => !existingIds.has(item.id));
+      filtered = [...filtered, ...uniqueAdded];
+    }
+  }
+
+  checklistCache.set(key, filtered);
+  return filtered;
 }
 
 /**
@@ -266,7 +348,21 @@ export function getChecklistWithFallback(selection: Selection): ChecklistItem[] 
     if (fallbackKey) {
       const fbChecklist = DECISION_TREE[fallbackKey as ChecklistKey];
       if (fbChecklist && fbChecklist.length > 0) {
-        return fbChecklist.filter(Boolean);
+        let filtered = fbChecklist.filter(Boolean);
+        // Apply overrides for the fallbackKey
+        const overrides = getOverrides();
+        const flowOverrides = overrides[fallbackKey];
+        if (flowOverrides) {
+          if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
+            filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
+          }
+          if (flowOverrides.added && flowOverrides.added.length > 0) {
+            const existingIds = new Set(filtered.map(item => item.id));
+            const uniqueAdded = flowOverrides.added.filter(item => !existingIds.has(item.id));
+            filtered = [...filtered, ...uniqueAdded];
+          }
+        }
+        return filtered;
       }
     }
   }
