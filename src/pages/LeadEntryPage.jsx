@@ -275,16 +275,7 @@ export default function LeadEntryPage() {
   const unassignedLeads = leads.filter(l => !l.assignedTo);
   const assignedLeads = leads.filter(l => l.assignedTo);
 
-  if (!isAdmin) {
-    return (
-      <div className="py-12 px-6">
-        <div className="bg-red-50 border border-red-200 rounded-3xl p-8 text-center max-w-lg mx-auto shadow-xl">
-          <h2 className="text-2xl font-bold text-red-700 mb-2">Access Denied</h2>
-          <p className="text-gray-650 font-medium">Only Admin users can access the Staff Lead Entry Portal.</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="py-12 px-6 min-h-screen bg-gradient-mesh animate-fade-in-up">
@@ -292,8 +283,8 @@ export default function LeadEntryPage() {
       {/* HEADER SECTION */}
       <div className="mb-10 flex justify-between items-center max-w-6xl mx-auto">
         <div>
-          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Staff Lead Entry Portal</h1>
-          <p className="text-gray-500 font-medium mt-1">Internal lead capture and executive assignment queue for staff and appoint DSAs.</p>
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Leads Portal</h1>
+          <p className="text-gray-500 font-medium mt-1">Unified lead capture and pipeline tracking system.</p>
         </div>
         
         {isAdmin && (
@@ -605,7 +596,7 @@ export default function LeadEntryPage() {
               </div>
 
               {/* Instant Executive Assignment nested inside Form popup */}
-              {createdLead && (
+              {isAdmin && createdLead && (
                 <div className="bg-indigo-50/50 border border-indigo-200/50 rounded-2xl p-5 mt-6 animate-fade-in-up">
                   <h3 className="text-lg font-bold text-indigo-800 mb-3">Assign Directly to Executive</h3>
                   <div className="grid md:grid-cols-3 gap-4 mb-4">
@@ -674,7 +665,7 @@ export default function LeadEntryPage() {
                     <table className="w-full text-left">
                       <thead className="bg-gray-50/70 border-b">
                         <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                          <th className="p-4">Customer</th><th className="p-4">Mobile</th><th className="p-4">Loan Type</th><th className="p-4">Amount</th><th className="p-4">Status</th><th className="p-4 text-center">Action</th>
+                          <th className="p-4">Customer</th><th className="p-4">Mobile</th><th className="p-4">Loan Type</th><th className="p-4">Amount</th><th className="p-4">Status</th>{isAdmin && <th className="p-4 text-center">Action</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y text-sm">
@@ -694,14 +685,16 @@ export default function LeadEntryPage() {
                             <td className="p-4 text-gray-650 capitalize font-medium">{lead.loanType?.replace('_', ' ')}</td>
                             <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount).toLocaleString('en-IN')}</td>
                             <td className="p-4"><StatusBadge status={lead.status} /></td>
-                            <td className="p-4 text-center">
-                              <button 
-                                onClick={() => setSelectedLead(lead.id)} 
-                                className="px-4 py-2 rounded-xl text-blue-700 font-bold bg-blue-50 border border-blue-100 hover:bg-blue-150 transition-colors shadow-sm"
-                              >
-                                Assign
-                              </button>
-                            </td>
+                            {isAdmin && (
+                              <td className="p-4 text-center">
+                                <button 
+                                  onClick={() => setSelectedLead(lead.id)} 
+                                  className="px-4 py-2 rounded-xl text-blue-700 font-bold bg-blue-50 border border-blue-100 hover:bg-blue-150 transition-colors shadow-sm"
+                                >
+                                  Assign
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>

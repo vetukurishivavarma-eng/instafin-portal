@@ -21,9 +21,6 @@ export default function Layout({ children }) {
             </div>
             <div className="flex items-center space-x-6">
               <Link to="/dashboard" className={location.pathname === '/dashboard' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Dashboard</Link>
-              {user?.role === 'admin' && (
-                <Link to="/add-lead" className={location.pathname === '/add-lead' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Add Lead</Link>
-              )}
               <Link to="/leads" className={location.pathname === '/leads' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Leads</Link>
               {user?.role === 'admin' && (
                 <Link to="/executive" className={location.pathname === '/executive' ? 'text-blue-700 font-semibold' : 'text-gray-600'}>Executive</Link>

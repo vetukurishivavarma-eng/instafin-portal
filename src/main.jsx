@@ -45,7 +45,7 @@ function AppRoutes() {
         } />
         <Route path="/leads" element={
           <ProtectedRoute>
-            <PipelinePage />
+            <LeadEntryPage />
           </ProtectedRoute>
         } />
         <Route path="/eligibility" element={
@@ -70,14 +70,6 @@ function AppRoutes() {
         } />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        <Route
-          path="/add-lead"
-          element={
-            <ProtectedRoute>
-              <LeadEntryPage />
-            </ProtectedRoute>
-          }
-        />
         <Route
           path="/executive"
           element={
