@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
-import { getChecklist } from '../utils/resolver';
+import { getChecklist, getChecklistWithFallback } from '../utils/resolver';
 import ChecklistDisplay from '../components/ChecklistDisplay';
 import { downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
@@ -260,7 +260,7 @@ export default function ChecklistsPage() {
       businessType: normalizeValue(lead.businessType)
     };
 
-    let items = getChecklist(selection);
+    let items = getChecklistWithFallback(selection);
 
     if (lead.hasCoapplicant) {
       items = [

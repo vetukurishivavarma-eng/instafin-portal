@@ -10,6 +10,7 @@ import LeadEntryPage from './pages/LeadEntryPage'
 import PipelinePage from './pages/PipelinePage'
 import EligibilityPage from './pages/EligibilityPage'
 import ChecklistsPage from './pages/ChecklistsPage'
+import DownloadFormsPage from './pages/DownloadFormsPage'
 import SanctionPage from './pages/SanctionPage'
 import DisbursementPage from './pages/DisbursementPage'
 import FeaturesPage from './pages/FeaturesPage'
@@ -56,6 +57,11 @@ function AppRoutes() {
         <Route path="/checklists" element={
           <ProtectedRoute>
             <ChecklistsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/download-forms" element={
+          <ProtectedRoute>
+            <DownloadFormsPage />
           </ProtectedRoute>
         } />
         <Route path="/sanction" element={

@@ -244,5 +244,36 @@ export function getRequiredCount(checklist: ChecklistItem[]): { required: number
   };
 }
 
+/**
+ * Gets checklist items based on user selection, with a highly robust fallback mechanism
+ * for incomplete or partially filled selections (ideal for leads that are newly captured
+ * and lack complete kyc/income profiles).
+ * @param selection - User selection object
+ * @returns ChecklistItem[]
+ */
+export function getChecklistWithFallback(selection: Selection): ChecklistItem[] {
+  // If selection has a loanType, try standard lookup first
+  const checklist = getChecklist(selection);
+  if (checklist && checklist.length > 0) {
+    return checklist;
+  }
+
+  // If no items found but we have a loanType, find first matching DECISION_TREE profile for that loanType
+  if (selection.loanType) {
+    const cleanLoanType = selection.loanType.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const fallbackKey = Object.keys(DECISION_TREE).find(k => k.startsWith(cleanLoanType + '|')) ||
+                        Object.keys(DECISION_TREE).find(k => k.startsWith(selection.loanType + '|'));
+    if (fallbackKey) {
+      const fbChecklist = DECISION_TREE[fallbackKey as ChecklistKey];
+      if (fbChecklist && fbChecklist.length > 0) {
+        return fbChecklist.filter(Boolean);
+      }
+    }
+  }
+
+  // Final absolute fallback: common checklist
+  return COMMON_CHECKLIST || [];
+}
+
 // Default export for convenience
 export default getChecklist;
