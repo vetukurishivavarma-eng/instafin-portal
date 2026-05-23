@@ -813,3 +813,115 @@
     padding: 0.65rem 1.15rem;
   }
 }
+
+/* ============================================================
+   MAJESTIC INTERACTIVE JUNGLE BACKGROUND & ANIMATIONS
+   ============================================================ */
+
+.landing.jungle-theme {
+  background: radial-gradient(circle at 50% 50%, #064e3b 0%, #022c22 45%, #020617 100%) !important;
+  position: relative;
+}
+
+.landing.jungle-theme::before {
+  background-image: 
+    radial-gradient(at 10% 20%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
+    radial-gradient(at 90% 10%, rgba(52, 211, 153, 0.15) 0px, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(4, 120, 87, 0.12) 0px, transparent 60%) !important;
+}
+
+/* Warm yellow Sunbeam rays filtering through the canopy */
+.jungle-sunbeam {
+  position: absolute;
+  top: 0;
+  left: 20%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 2;
+  transform: skewX(-15deg);
+  filter: blur(40px);
+}
+
+/* Hanging jungle vines */
+.jungle-vines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 140px;
+  background-image: 
+    radial-gradient(ellipse at 15% 0%, rgba(16, 185, 129, 0.28) 0%, transparent 75%),
+    radial-gradient(ellipse at 85% 0%, rgba(52, 211, 153, 0.28) 0%, transparent 75%);
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.85;
+}
+
+/* Tropical Leaves decorations wrapped around borders */
+.jungle-leaves-left {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 350px;
+  height: 280px;
+  background-image: radial-gradient(circle at 0% 100%, rgba(16, 185, 129, 0.22), transparent 75%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.jungle-leaves-right {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 350px;
+  height: 280px;
+  background-image: radial-gradient(circle at 100% 100%, rgba(52, 211, 153, 0.22), transparent 75%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Cute new animals idle bob/sway keyframes */
+@keyframes giraffeSway {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(3deg); }
+}
+
+.giraffe-box {
+  animation: giraffeSway 4.8s ease-in-out infinite;
+  transform-origin: 50px 145px;
+  pointer-events: none;
+}
+
+@keyframes pandaWiggle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1.2px) rotate(-2deg); }
+}
+
+.panda-box {
+  animation: pandaWiggle 3.8s ease-in-out infinite;
+  transform-origin: 37px 60px;
+  pointer-events: none;
+}
+
+@keyframes slothSway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(4deg); }
+}
+
+.sloth-box {
+  animation: slothSway 5.2s ease-in-out infinite;
+  transform-origin: 35px 25px;
+  pointer-events: none;
+}
+
+@keyframes owlBob {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-2px) scaleY(0.98); }
+}
+
+.owl-box {
+  animation: owlBob 3.4s ease-in-out infinite;
+  pointer-events: none;
+}

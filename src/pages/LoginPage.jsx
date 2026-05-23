@@ -19,6 +19,7 @@ export default function LoginPage() {
   // 3D Lion States
   const [isGrowling, setIsGrowling] = useState(false);
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   const lastRoarTimeRef = useRef(0);
 
@@ -170,7 +171,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="landing">
+    <div className="landing jungle-theme">
+      {/* Interactive jungle background foliage overlays */}
+      <div className="jungle-sunbeam"></div>
+      <div className="jungle-vines"></div>
+      <div className="jungle-leaves-left"></div>
+      <div className="jungle-leaves-right"></div>
       {/* 3D GRADIENT DEFS FOR JUNGLE ANIMALS & KNIFE */}
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
@@ -262,6 +268,38 @@ export default function LoginPage() {
           <linearGradient id="redBird" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#FB7185" />
             <stop offset="100%" stopColor="#BE123C" />
+          </linearGradient>
+
+          {/* 3D Giraffe Gradients */}
+          <linearGradient id="girNeck" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FBBF24" />
+            <stop offset="100%" stopColor="#D97706" />
+          </linearGradient>
+          <linearGradient id="girHead" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FBBF24" />
+            <stop offset="60%" stopColor="#F59E0B" />
+            <stop offset="100%" stopColor="#B45309" />
+          </linearGradient>
+
+          {/* 3D Panda Gradients */}
+          <radialGradient id="pandaBody" cx="45%" cy="45%" r="55%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="75%" stopColor="#F1F5F9" />
+            <stop offset="100%" stopColor="#CBD5E1" />
+          </radialGradient>
+
+          {/* 3D Sloth Gradients */}
+          <linearGradient id="slothBody" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#D97706" />
+            <stop offset="60%" stopColor="#B45309" />
+            <stop offset="100%" stopColor="#78350F" />
+          </linearGradient>
+
+          {/* 3D Owl Gradients */}
+          <linearGradient id="owlBody" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#78350F" />
+            <stop offset="60%" stopColor="#451A03" />
+            <stop offset="100%" stopColor="#1A0500" />
           </linearGradient>
         </defs>
       </svg>
@@ -365,8 +403,8 @@ export default function LoginPage() {
                 {/* Feline nose */}
                 <polygon points="113,44 117,44 115,47" fill="#1A0500" />
 
-                {/* Eyes (Closed in fear > < when scared, yellow open wild when safe) */}
-                {isScared ? (
+                {/* Eyes (Closed in fear > < when scared or password focused, yellow open wild when safe) */}
+                {(isScared || isPasswordFocused) ? (
                   <g>
                     {/* Left Eye closed */}
                     <path d="M 97,39 L 101,42 L 97,45" stroke="#1A0500" strokeWidth="2.5" strokeLinecap="round" fill="none" />
@@ -404,8 +442,191 @@ export default function LoginPage() {
         <div className="modal" style={{ maxWidth: '420px', width: '90%' }}>
           
           {/* =======================================================
-              3D ANIMALS SURROUNDING LOGIN CARD (Monkey, Ele, Birds)
+              3D ANIMALS SURROUNDING LOGIN CARD (Monkey, Ele, Birds, Giraffe, Panda, Sloth, Owl)
               ======================================================= */}
+
+          {/* 3D PEEKING GIRAFFE (Peeks from behind the left of the card) */}
+          <div className="giraffe-box" style={{ position: 'absolute', left: '-82px', top: '110px', zIndex: 10 }}>
+            <svg width="85" height="150" viewBox="0 0 85 150" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+              {/* Neck */}
+              <path d="M 35,150 L 50,70 L 65,150 Z" fill="url(#girNeck)" />
+              {/* Spots */}
+              <ellipse cx="44" cy="120" rx="5" ry="8" fill="#78350F" opacity="0.6" />
+              <ellipse cx="52" cy="95" rx="4" ry="6" fill="#78350F" opacity="0.6" />
+              <ellipse cx="46" cy="78" rx="3" ry="4" fill="#78350F" opacity="0.6" />
+              
+              {/* Head group tracking cursor */}
+              <g style={{ transform: `translate(${headX * 0.8}px, ${headY * 0.8}px)`, transition: 'transform 0.12s ease-out' }}>
+                {/* Horns */}
+                <rect x="42" y="32" width="3" height="16" rx="1.5" fill="#B45309" />
+                <circle cx="43.5" cy="30" r="4.5" fill="#D97706" />
+                
+                <rect x="54" y="32" width="3" height="16" rx="1.5" fill="#B45309" />
+                <circle cx="55.5" cy="30" r="4.5" fill="#D97706" />
+
+                {/* Ears */}
+                <path d="M 38,48 Q 22,46 36,54 Z" fill="#D97706" />
+                <path d="M 62,48 Q 78,46 64,54 Z" fill="#D97706" />
+
+                {/* Head Base */}
+                <ellipse cx="50" cy="58" rx="13" ry="17" fill="url(#girHead)" />
+                
+                {/* Snout */}
+                <ellipse cx="50" cy="68" rx="10" ry="8" fill="#FDE68A" />
+                <circle cx="47" cy="67" r="1.2" fill="#78350F" />
+                <circle cx="53" cy="67" r="1.2" fill="#78350F" />
+
+                {/* Eyes closed on password focus */}
+                {isPasswordFocused ? (
+                  <g>
+                    <path d="M 41,52 Q 44,55 47,52" stroke="#451A03" strokeWidth="2" strokeLinecap="round" fill="none" />
+                    <path d="M 53,52 Q 56,55 59,52" stroke="#451A03" strokeWidth="2" strokeLinecap="round" fill="none" />
+                  </g>
+                ) : (
+                  <g>
+                    <circle cx="44" cy="52" r="3.5" fill="white" />
+                    <g style={{ transform: `translate(${lookX * 0.6}px, ${lookY * 0.6}px)`, transition: 'transform 0.08s ease-out' }}>
+                      <circle cx="44" cy="52" r="1.8" fill="#000" />
+                    </g>
+                    <circle cx="56" cy="52" r="3.5" fill="white" />
+                    <g style={{ transform: `translate(${lookX * 0.6}px, ${lookY * 0.6}px)`, transition: 'transform 0.08s ease-out' }}>
+                      <circle cx="56" cy="52" r="1.8" fill="#000" />
+                    </g>
+                  </g>
+                )}
+              </g>
+            </svg>
+          </div>
+
+          {/* 3D CUTE PANDA (Sits sitting on the bottom-left edge of the card) */}
+          <div className="panda-box" style={{ position: 'absolute', left: '-48px', bottom: '-30px', zIndex: 10 }}>
+            <svg width="75" height="75" viewBox="0 0 75 75" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+              {/* Arms holding card edge */}
+              <circle cx="20" cy="52" r="8" fill="#111827" />
+              <circle cx="55" cy="52" r="8" fill="#111827" />
+
+              {/* Body/Head base */}
+              <circle cx="37.5" cy="37.5" r="23" fill="url(#pandaBody)" stroke="#E2E8F0" strokeWidth="0.5" />
+
+              {/* Ears */}
+              <circle cx="18" cy="18" r="8.5" fill="#111827" />
+              <circle cx="18" cy="18" r="4.5" fill="#1F2937" />
+              
+              <circle cx="57" cy="18" r="8.5" fill="#111827" />
+              <circle cx="57" cy="18" r="4.5" fill="#1F2937" />
+
+              {/* Eye Patches */}
+              <ellipse cx="29" cy="36" rx="6.5" ry="8.5" fill="#111827" transform="rotate(-15 29 36)" />
+              <ellipse cx="46" cy="36" rx="6.5" ry="8.5" fill="#111827" transform="rotate(15 46 36)" />
+
+              {/* Eyes */}
+              {isPasswordFocused ? (
+                <g>
+                  <path d="M 26,36 Q 29,39 32,36" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  <path d="M 43,36 Q 46,39 49,36" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                </g>
+              ) : (
+                <g>
+                  <circle cx="29" cy="36" r="3.2" fill="white" />
+                  <g style={{ transform: `translate(${lookX * 0.5}px, ${lookY * 0.5}px)`, transition: 'transform 0.08s ease-out' }}>
+                    <circle cx="29" cy="36" r="1.5" fill="#000" />
+                  </g>
+                  
+                  <circle cx="46" cy="36" r="3.2" fill="white" />
+                  <g style={{ transform: `translate(${lookX * 0.5}px, ${lookY * 0.5}px)`, transition: 'transform 0.08s ease-out' }}>
+                    <circle cx="46" cy="36" r="1.5" fill="#000" />
+                  </g>
+                </g>
+              )}
+
+              {/* Snout */}
+              <ellipse cx="37.5" cy="46" rx="5" ry="4" fill="#FFFFFF" />
+              <polygon points="36,44 39,44 37.5,46" fill="#111827" />
+            </svg>
+          </div>
+
+          {/* 3D CLINGING SLOTH (Clings lazily on the bottom-right border of the card) */}
+          <div className="sloth-box" style={{ position: 'absolute', right: '-45px', bottom: '-28px', zIndex: 10 }}>
+            <svg width="70" height="70" viewBox="0 0 70 70" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+              {/* Hanging body */}
+              <circle cx="35" cy="35" r="21" fill="url(#slothBody)" />
+
+              {/* Face mask */}
+              <ellipse cx="35" cy="34" rx="14" ry="11" fill="#FEF3C7" />
+
+              {/* Face patches */}
+              <ellipse cx="28" cy="34" rx="5" ry="7" fill="#78350F" transform="rotate(-20 28 34)" />
+              <ellipse cx="42" cy="34" rx="5" ry="7" fill="#78350F" transform="rotate(20 42 34)" />
+
+              {/* Arms clinging */}
+              <path d="M 12,28 C 6,36 10,48 20,44" stroke="#451A03" strokeWidth="5.5" strokeLinecap="round" fill="none" />
+              <path d="M 58,28 C 64,36 60,48 50,44" stroke="#451A03" strokeWidth="5.5" strokeLinecap="round" fill="none" />
+
+              {/* Eyes */}
+              {isPasswordFocused ? (
+                <g>
+                  <path d="M 25,34 Q 28,37 31,34" stroke="#FEF3C7" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  <path d="M 39,34 Q 42,37 45,34" stroke="#FEF3C7" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                </g>
+              ) : (
+                <g>
+                  <circle cx="28" cy="34" r="2.8" fill="white" />
+                  <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)`, transition: 'transform 0.08s ease-out' }}>
+                    <circle cx="28" cy="34" r="1.3" fill="#000" />
+                  </g>
+                  
+                  <circle cx="42" cy="34" r="2.8" fill="white" />
+                  <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)`, transition: 'transform 0.08s ease-out' }}>
+                    <circle cx="42" cy="34" r="1.3" fill="#000" />
+                  </g>
+                </g>
+              )}
+
+              {/* Nose */}
+              <polygon points="34,39 36,39 35,41" fill="#451A03" />
+            </svg>
+          </div>
+
+          {/* 3D MAJESTIC OWL (Perches proud next to the elephant on the top border) */}
+          <div className="owl-box" style={{ position: 'absolute', top: '-64px', left: '72px', zIndex: 10 }}>
+            <svg width="70" height="70" viewBox="0 0 70 70" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+              {/* Body */}
+              <ellipse cx="35" cy="38" rx="19" ry="22" fill="url(#owlBody)" />
+
+              {/* Chest patch */}
+              <path d="M 28,34 Q 35,42 42,34 Q 35,46 28,34 Z" fill="#FEF3C7" opacity="0.8" />
+
+              {/* Horn tufts */}
+              <path d="M 22,22 L 14,14 L 26,18 Z" fill="#451A03" />
+              <path d="M 48,22 L 56,14 L 44,18 Z" fill="#451A03" />
+
+              {/* Big circular eyes */}
+              <circle cx="24" cy="27" r="9.5" fill="#FBBF24" stroke="#78350F" strokeWidth="1" />
+              <circle cx="46" cy="27" r="9.5" fill="#FBBF24" stroke="#78350F" strokeWidth="1" />
+
+              {/* Gaze tracking open pupils / sleep slits */}
+              {isPasswordFocused ? (
+                <g>
+                  <path d="M 19,27 L 29,27" stroke="#451A03" strokeWidth="2.5" strokeLinecap="round" />
+                  <path d="M 41,27 L 51,27" stroke="#451A03" strokeWidth="2.5" strokeLinecap="round" />
+                </g>
+              ) : (
+                <g>
+                  <g style={{ transform: `translate(${lookX * 0.8}px, ${lookY * 0.8}px)`, transition: 'transform 0.08s ease-out' }}>
+                    <circle cx="24" cy="27" r="4.5" fill="#000" />
+                    <circle cx="25.5" cy="25.5" r="1.5" fill="white" />
+                  </g>
+                  <g style={{ transform: `translate(${lookX * 0.8}px, ${lookY * 0.8}px)`, transition: 'transform 0.08s ease-out' }}>
+                    <circle cx="46" cy="27" r="4.5" fill="#000" />
+                    <circle cx="47.5" cy="25.5" r="1.5" fill="white" />
+                  </g>
+                </g>
+              )}
+
+              {/* Beak */}
+              <polygon points="33,31 37,31 35,36" fill="#F59E0B" />
+            </svg>
+          </div>
 
           {/* 3D HANGING MONKEY (Hangs and swings from top-left card corner) */}
           <div className="monkey-box" style={{ position: 'absolute', top: '-38px', left: '-38px', zIndex: 10 }}>
@@ -445,9 +666,24 @@ export default function LoginPage() {
               <ellipse cx="29" cy="26" rx="3.5" ry="3.5" fill="#FDE68A" />
               <ellipse cx="35" cy="26" rx="3.5" ry="3.5" fill="#FDE68A" />
 
-              {/* Face details */}
-              <circle cx="29.5" cy="26" r="1.2" fill="#111827" />
-              <circle cx="34.5" cy="26" r="1.2" fill="#111827" />
+              {/* Face details with gaze and closed-eyes */}
+              {isPasswordFocused ? (
+                <g>
+                  <path d="M 27,27 Q 29.5,29 32,27" stroke="#111827" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                  <path d="M 32,27 Q 34.5,29 37,27" stroke="#111827" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                </g>
+              ) : (
+                <g>
+                  <circle cx="29.5" cy="26" r="2.2" fill="white" />
+                  <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)` }}>
+                    <circle cx="29.5" cy="26" r="1" fill="#111827" />
+                  </g>
+                  <circle cx="34.5" cy="26" r="2.2" fill="white" />
+                  <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)` }}>
+                    <circle cx="34.5" cy="26" r="1" fill="#111827" />
+                  </g>
+                </g>
+              )}
               <path d="M 30,32 Q 32,34 34,32" stroke="#78350F" strokeWidth="1.2" fill="none" strokeLinecap="round" />
             </svg>
           </div>
@@ -487,9 +723,17 @@ export default function LoginPage() {
               {/* Small ivory Tusk */}
               <path d="M 76,34 L 84,36 L 78,38 Z" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="0.5" />
 
-              {/* Eye */}
-              <circle cx="72" cy="25" r="2.5" fill="#1E293B" />
-              <circle cx="73" cy="24.2" r="0.8" fill="white" />
+              {/* Eye with gaze and closed-eyes */}
+              {isPasswordFocused ? (
+                <path d="M 70,25 Q 73,28 76,25" stroke="#1E293B" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+              ) : (
+                <g>
+                  <circle cx="73" cy="25" r="3.2" fill="white" stroke="#334155" strokeWidth="0.5" />
+                  <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)` }}>
+                    <circle cx="73" cy="25" r="1.5" fill="#1E293B" />
+                  </g>
+                </g>
+              )}
             </svg>
           </div>
 
@@ -510,7 +754,17 @@ export default function LoginPage() {
                 <ellipse cx="24" cy="30" rx="10" ry="8" fill="url(#cyanBird)" />
                 <ellipse cx="22" cy="31" rx="6" ry="4" fill="#06B6D4" transform="rotate(-10 22 31)" />
                 <circle cx="31" cy="22" r="6.5" fill="url(#cyanBird)" />
-                <circle cx="32.5" cy="20.5" r="1" fill="#000" />
+                {/* Cyan Bird Eye with gaze and closed-eyes */}
+                {isPasswordFocused ? (
+                  <path d="M 31,21 Q 32.5,23 34,21" stroke="#000" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                ) : (
+                  <g>
+                    <circle cx="32.5" cy="20.5" r="2.2" fill="white" />
+                    <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)` }}>
+                      <circle cx="32.5" cy="20.5" r="1" fill="#000" />
+                    </g>
+                  </g>
+                )}
                 <polygon points="37,20 42,22 37,24" fill="#F59E0B" />
                 <line x1="22" y1="38" x2="22" y2="41" stroke="#4B5563" strokeWidth="1" />
                 <line x1="26" y1="38" x2="26" y2="41" stroke="#4B5563" strokeWidth="1" />
@@ -522,7 +776,17 @@ export default function LoginPage() {
                 <ellipse cx="52" cy="30" rx="10" ry="8" fill="url(#redBird)" />
                 <ellipse cx="50" cy="31" rx="6" ry="4" fill="#E11D48" transform="rotate(-5 50 31)" />
                 <circle cx="59" cy="22" r="6.5" fill="url(#redBird)" />
-                <circle cx="60.5" cy="20.5" r="1" fill="#000" />
+                {/* Red Bird Eye with gaze and closed-eyes */}
+                {isPasswordFocused ? (
+                  <path d="M 59,21 Q 60.5,23 62,21" stroke="#000" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                ) : (
+                  <g>
+                    <circle cx="60.5" cy="20.5" r="2.2" fill="white" />
+                    <g style={{ transform: `translate(${lookX * 0.4}px, ${lookY * 0.4}px)` }}>
+                      <circle cx="60.5" cy="20.5" r="1" fill="#000" />
+                    </g>
+                  </g>
+                )}
                 <polygon points="65,20 70,22 65,24" fill="#FBBF24" />
                 <line x1="50" y1="38" x2="50" y2="41" stroke="#4B5563" strokeWidth="1" />
                 <line x1="54" y1="38" x2="54" y2="41" stroke="#4B5563" strokeWidth="1" />
@@ -566,6 +830,8 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setIsPasswordFocused(true)}
+                onBlur={() => setIsPasswordFocused(false)}
                 required
               />
             </div>
