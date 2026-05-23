@@ -552,9 +552,9 @@ export default function LeadEntryPage() {
           MODAL 1: ADD NEW LEAD POPUP FORM
           ======================================================= */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in">
           <div 
-            className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl animate-slide-up border border-gray-150"
+            className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl animate-slide-up border border-gray-150 my-auto"
             style={{ maxHeight: '90vh', overflowY: 'auto' }}
           >
             {/* Close Button */}
@@ -781,17 +781,14 @@ export default function LeadEntryPage() {
               {isAdmin && createdLead && (
                 <div className="bg-indigo-50/50 border border-indigo-200/50 rounded-2xl p-5 mt-6 animate-fade-in-up">
                   <h3 className="text-lg font-bold text-indigo-800 mb-3">Assign Directly to Executive</h3>
-                  <div className="grid md:grid-cols-3 gap-4 mb-4">
-                    <select className="border rounded-2xl px-4 py-3 bg-white" value={assignData.assignedTo} onChange={(e) => setAssignData(p => ({...p, assignedTo: e.target.value}))}>
+                  <div className="grid md:grid-cols-2 gap-4 mb-4">
+                    <select className="border rounded-2xl px-4 py-3 bg-white font-semibold focus:ring-2 focus:ring-blue-100" value={assignData.assignedTo} onChange={(e) => setAssignData(p => ({...p, assignedTo: e.target.value}))}>
                       <option value="">Select Executive</option>
                       {executives.map(exec => <option key={exec.id} value={exec.name}>{exec.name}</option>)}
                     </select>
-                    <select className="border rounded-2xl px-4 py-3 bg-white" value={assignData.department} onChange={(e) => setAssignData(p => ({...p, department: e.target.value}))}>
+                    <select className="border rounded-2xl px-4 py-3 bg-white font-semibold focus:ring-2 focus:ring-blue-100" value={assignData.department} onChange={(e) => setAssignData(p => ({...p, department: e.target.value}))}>
                       <option value="">Department</option>
                       <option>Operations Team</option><option>Login Team</option><option>Sales Team</option><option>Credit Coordination</option>
-                    </select>
-                    <select className="border rounded-2xl px-4 py-3 bg-white" value={assignData.priority} onChange={(e) => setAssignData(p => ({...p, priority: e.target.value}))}>
-                      <option value="Low">Low Priority</option><option value="Medium">Medium Priority</option><option value="High">High Priority</option>
                     </select>
                   </div>
                   <button onClick={handleAssignExecutive} disabled={loading} className="w-full bg-indigo-700 text-white py-3.5 rounded-2xl font-bold disabled:opacity-50 hover:bg-indigo-800 transition-colors">
@@ -808,9 +805,9 @@ export default function LeadEntryPage() {
           MODAL 2: MANAGE & ASSIGN LEADS LISTING OVERLAY
           ======================================================= */}
       {showManageModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in">
           <div 
-            className="bg-white rounded-3xl p-8 max-w-6xl w-full relative shadow-2xl animate-slide-up border border-gray-150"
+            className="bg-white rounded-3xl p-8 max-w-6xl w-full relative shadow-2xl animate-slide-up border border-gray-150 my-auto"
             style={{ maxHeight: '90vh', overflowY: 'auto' }}
           >
             {/* Close Button */}
@@ -955,10 +952,10 @@ export default function LeadEntryPage() {
           NESTED ASSIGNMENT MODAL (Inside leads lists)
           ======================================================= */}
       {selectedLead && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-55 p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full relative shadow-2xl animate-slide-up border border-gray-150">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm overflow-y-auto flex justify-center items-start p-4 animate-fade-in" style={{ zIndex: 60 }}>
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full relative shadow-2xl animate-slide-up border border-gray-150 my-auto">
             <h3 className="text-xl font-bold text-gray-900 mb-2">Assign Loan File</h3>
-            <p className="text-gray-500 text-sm mb-5 font-semibold">Choose an available executive, department, and priority to route this file.</p>
+            <p className="text-gray-500 text-sm mb-5 font-semibold">Choose an available executive and department to route this file.</p>
             
             <div className="space-y-4">
               <div>
@@ -976,15 +973,6 @@ export default function LeadEntryPage() {
                   <option>Operations Team</option><option>Login Team</option><option>Sales Team</option><option>Credit Coordination</option>
                 </select>
               </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">File Priority *</label>
-                <select className="border rounded-2xl px-4 py-3 w-full bg-gray-50 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-all" value={assignData.priority} onChange={(e) => setAssignData(p => ({...p, priority: e.target.value}))}>
-                  <option value="Low">Low Priority</option>
-                  <option value="Medium">Medium Priority</option>
-                  <option value="High">High Priority</option>
-                </select>
-              </div>
             </div>
             
             <div className="flex gap-4 mt-6">
@@ -999,8 +987,8 @@ export default function LeadEntryPage() {
 
       {/* VIEW LEAD DETAILS MODAL */}
       {viewLead && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}>
-          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl border border-gray-150 animate-slide-up" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl border border-gray-150 animate-slide-up my-auto" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -1096,8 +1084,8 @@ export default function LeadEntryPage() {
 
       {/* EDIT LEAD DETAILS MODAL */}
       {editingLead && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setEditingLead(null)}>
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl border border-gray-150 animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => setEditingLead(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl border border-gray-150 animate-slide-up my-auto" onClick={e => e.stopPropagation()}>
             <button onClick={() => setEditingLead(null)} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -1207,8 +1195,8 @@ export default function LeadEntryPage() {
 
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm relative shadow-2xl border border-gray-150 animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm relative shadow-2xl border border-gray-150 animate-slide-up my-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-xl font-bold mb-2 text-red-655 flex items-center gap-2">
               ⚠️ Purge Loan File?
             </h3>
