@@ -23,7 +23,7 @@
 }
 
 /* ==========================================
-   INTERACTIVE KNIFE CURSOR HIDING
+   INTERACTIVE 3D KNIFE CURSOR HIDING
    ========================================== */
 .landing, .landing * {
   cursor: none !important; /* Forces system cursor off so only the custom 3D Knife shows */
@@ -590,13 +590,13 @@
 }
 
 /* ==========================================
-   MAJESTIC LION ROAMING & PHYSICS STYLE
+   MAJESTIC LION FIXED BACKGROUND DESIGN
    ========================================== */
 
 .lion-box {
   position: fixed;
   width: 150px;
-  height: 100px;
+  height: 110px;
   pointer-events: none; /* Essential so mouse coordinates pass straight through to forms */
   z-index: 4; /* Roams freely in the background behind forms, but above shapes */
   overflow: visible !important;
@@ -605,13 +605,13 @@
 
 .lion-svg-container {
   width: 150px;
-  height: 100px;
+  height: 110px;
   position: relative;
   overflow: visible !important;
 }
 
 /* ==========================================
-   4-LEGGED LION TROT ENGINE (Realistic Joint Anchors)
+   4-LEGGED LION TROT ENGINE (Anatomical Rigging)
    ========================================== */
 
 .lion-leg {
@@ -651,7 +651,7 @@
 
 /* Secondary realistic bobbing animations */
 .lion-mane {
-  transform-origin: 90px 45px;
+  transform-origin: 104px 40px;
   animation: lionManeBob 3.2s ease-in-out infinite;
 }
 
@@ -661,7 +661,7 @@
 }
 
 .lion-chest {
-  transform-origin: 60px 65px;
+  transform-origin: 85px 53px;
   animation: lionBreathing 2.4s ease-in-out infinite;
 }
 
@@ -672,7 +672,7 @@
 
 /* Tail animations */
 .lion-tail {
-  transform-origin: 15px 75px;
+  transform-origin: 33px 52px;
   animation: lionTailWag 3.2s ease-in-out infinite;
 }
 
@@ -693,9 +693,9 @@
 /* Speech/Growl Bubble */
 .lion-speech-bubble {
   position: absolute;
-  bottom: 85px;
-  left: 95px;
-  background: rgba(220, 38, 38, 0.9); /* Vibrant red panic */
+  bottom: 92px;
+  left: 98px;
+  background: rgba(220, 38, 38, 0.95); /* Vibrant red panic */
   color: white;
   padding: 0.4rem 0.8rem;
   border-radius: 12px;
@@ -715,7 +715,7 @@
   left: 15px;
   border-width: 6px 6px 0;
   border-style: solid;
-  border-color: rgba(220, 38, 38, 0.9) transparent;
+  border-color: rgba(220, 38, 38, 0.95) transparent;
   display: block;
   width: 0;
 }
@@ -723,6 +723,62 @@
 @keyframes bubblePop {
   0% { transform: scale(0) translateY(10px); opacity: 0; }
   100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* ==========================================
+   3D ANCHORED ANIMALS (Monkey, Elephant, Birds)
+   ========================================== */
+
+/* Hanging Monkey swing pivoting from its hands */
+@keyframes monkeySwing {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(8deg); }
+}
+
+.monkey-box {
+  animation: monkeySwing 3.6s ease-in-out infinite;
+  transform-origin: 32px 5px; /* Arm grip anchor */
+  pointer-events: none;
+}
+
+/* Standing Elephant breathing bob */
+@keyframes elephantBob {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-1.5px) scaleY(0.985); }
+}
+
+.elephant-box {
+  animation: elephantBob 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes earFlap {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(8deg); }
+}
+
+.elephant-ear {
+  transform-origin: 32px 30px;
+  animation: earFlap 3.5s ease-in-out infinite;
+}
+
+/* Birds on Stem bobbing frequencies */
+@keyframes birdBob1 {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-2.5px) rotate(3deg); }
+}
+
+@keyframes birdBob2 {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-3.5px) rotate(-3deg); }
+}
+
+.bird-1 {
+  animation: birdBob1 2.4s ease-in-out infinite;
+}
+
+.bird-2 {
+  animation: birdBob2 2.8s ease-in-out infinite;
 }
 
 /* ==========================================
