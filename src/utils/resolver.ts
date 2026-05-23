@@ -196,9 +196,20 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
       filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
     }
     if (flowOverrides.added && flowOverrides.added.length > 0) {
-      const existingIds = new Set(filtered.map(item => item.id));
-      const uniqueAdded = flowOverrides.added.filter(item => !existingIds.has(item.id));
-      filtered = [...filtered, ...uniqueAdded];
+      const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
+      filtered = filtered.map(item => {
+        if (addedMap.has(item.id)) {
+          const modifiedItem = addedMap.get(item.id);
+          if (modifiedItem) {
+            addedMap.delete(item.id);
+            return modifiedItem;
+          }
+        }
+        return item;
+      });
+      if (addedMap.size > 0) {
+        filtered = [...filtered, ...Array.from(addedMap.values())];
+      }
     }
   }
 
@@ -236,9 +247,20 @@ export function getChecklistByKey(key: string): ChecklistItem[] | undefined {
       filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
     }
     if (flowOverrides.added && flowOverrides.added.length > 0) {
-      const existingIds = new Set(filtered.map(item => item.id));
-      const uniqueAdded = flowOverrides.added.filter(item => !existingIds.has(item.id));
-      filtered = [...filtered, ...uniqueAdded];
+      const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
+      filtered = filtered.map(item => {
+        if (addedMap.has(item.id)) {
+          const modifiedItem = addedMap.get(item.id);
+          if (modifiedItem) {
+            addedMap.delete(item.id);
+            return modifiedItem;
+          }
+        }
+        return item;
+      });
+      if (addedMap.size > 0) {
+        filtered = [...filtered, ...Array.from(addedMap.values())];
+      }
     }
   }
 
@@ -357,9 +379,20 @@ export function getChecklistWithFallback(selection: Selection): ChecklistItem[] 
             filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
           }
           if (flowOverrides.added && flowOverrides.added.length > 0) {
-            const existingIds = new Set(filtered.map(item => item.id));
-            const uniqueAdded = flowOverrides.added.filter(item => !existingIds.has(item.id));
-            filtered = [...filtered, ...uniqueAdded];
+            const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
+            filtered = filtered.map(item => {
+              if (addedMap.has(item.id)) {
+                const modifiedItem = addedMap.get(item.id);
+                if (modifiedItem) {
+                  addedMap.delete(item.id);
+                  return modifiedItem;
+                }
+              }
+              return item;
+            });
+            if (addedMap.size > 0) {
+              filtered = [...filtered, ...Array.from(addedMap.values())];
+            }
           }
         }
         return filtered;

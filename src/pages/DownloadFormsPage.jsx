@@ -117,6 +117,38 @@ export default function DownloadFormsPage() {
     setTimeout(() => setSuccess(''), 3000);
   };
 
+  // Inline editing states
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editDocName, setEditDocName] = useState('');
+  const [editDocCategory, setEditDocCategory] = useState('kyc');
+  const [editDocRequired, setEditDocRequired] = useState(true);
+
+  const startEditingItem = (item) => {
+    setEditingItemId(item.id);
+    setEditDocName(item.name);
+    setEditDocCategory(item.category || 'kyc');
+    setEditDocRequired(item.required);
+  };
+
+  const handleEditItemSubmit = (itemId) => {
+    if (!editDocName.trim()) return;
+
+    const key = activeTab === 'browse' ? selectedFlowKey : selectionToKey(builderSelection);
+    if (!key) return;
+
+    const modifiedItem = {
+      id: itemId,
+      name: editDocName.trim(),
+      category: editDocCategory,
+      required: editDocRequired
+    };
+
+    addChecklistItemToFlow(key, modifiedItem);
+    setEditingItemId(null);
+    setSuccess(`"${modifiedItem.name}" updated successfully!`);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
   // Fetch all pre-defined flows from resolver
   const allFlowKeys = getAvailableKeys();
 
@@ -522,32 +554,105 @@ export default function DownloadFormsPage() {
                     <span className="text-[10px] font-bold text-gray-500 bg-gray-200/60 px-2 py-0.5 rounded-full">{list.length} items</span>
                   </div>
                   <ul className="divide-y divide-gray-100 text-sm">
-                    {list.map(item => (
-                      <li key={item.id} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50/20 transition-colors">
-                        <span className="font-bold text-gray-800 leading-snug">{item.name}</span>
-                        <div className="flex items-center gap-3.5">
-                          <span className={`px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-full shadow-sm ${
-                            item.required ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-gray-50 text-gray-500 border border-gray-150'
-                          }`}>
-                            {item.required ? 'Required' : 'Optional'}
-                          </span>
-                          {user?.role === 'admin' && (
-                            <button
-                              onClick={() => handleDeleteItem(item.id)}
-                              title="Delete document requirement"
-                              className="text-red-500 hover:text-red-750 p-1.5 rounded-xl hover:bg-red-50 transition-all flex items-center justify-center"
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                <line x1="10" y1="11" x2="10" y2="17" />
-                                <line x1="14" y1="11" x2="14" y2="17" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
+                    {list.map(item => {
+                      const isEditing = editingItemId === item.id;
+                      if (isEditing) {
+                        return (
+                          <li key={item.id} className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-xl space-y-3 m-2 animate-fade-in">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                              <div className="md:col-span-5 space-y-1">
+                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Document Name</label>
+                                <input 
+                                  type="text"
+                                  className="border border-indigo-150 rounded-xl px-2.5 py-1.5 text-xs bg-white w-full focus:ring-2 focus:ring-indigo-100 outline-none font-bold"
+                                  value={editDocName}
+                                  onChange={e => setEditDocName(e.target.value)}
+                                />
+                              </div>
+
+                              <div className="md:col-span-4 space-y-1">
+                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Category</label>
+                                <select
+                                  className="border border-indigo-150 rounded-xl px-2.5 py-1.5 text-xs bg-white font-bold w-full focus:ring-2 focus:ring-indigo-100 outline-none"
+                                  value={editDocCategory}
+                                  onChange={e => setEditDocCategory(e.target.value)}
+                                >
+                                  {Object.entries(categoryLabels).map(([k, v]) => (
+                                    <option key={k} value={k}>{v}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="md:col-span-3 flex items-center justify-between gap-2 h-[34px]">
+                                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                  <input 
+                                    type="checkbox" 
+                                    className="rounded text-indigo-650 focus:ring-indigo-500"
+                                    checked={editDocRequired}
+                                    onChange={e => setEditDocRequired(e.target.checked)}
+                                  />
+                                  <span className="text-xs font-bold text-gray-700">Required</span>
+                                </label>
+
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={() => handleEditItemSubmit(item.id)}
+                                    className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] shadow-sm transition-all"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingItemId(null)}
+                                    className="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-[10px] transition-all"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      return (
+                        <li key={item.id} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50/20 transition-colors">
+                          <span className="font-bold text-gray-800 leading-snug">{item.name}</span>
+                          <div className="flex items-center gap-3.5">
+                            <span className={`px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-full shadow-sm ${
+                              item.required ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-gray-50 text-gray-500 border border-gray-150'
+                            }`}>
+                              {item.required ? 'Required' : 'Optional'}
+                            </span>
+                            {user?.role === 'admin' && (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => startEditingItem(item)}
+                                  title="Modify document requirement"
+                                  className="text-indigo-600 hover:text-indigo-850 p-1.5 rounded-xl hover:bg-indigo-50 transition-all flex items-center justify-center"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteItem(item.id)}
+                                  title="Delete document requirement"
+                                  className="text-red-500 hover:text-red-750 p-1.5 rounded-xl hover:bg-red-50 transition-all flex items-center justify-center"
+                                >
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                    <line x1="10" y1="11" x2="10" y2="17" />
+                                    <line x1="14" y1="11" x2="14" y2="17" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))
