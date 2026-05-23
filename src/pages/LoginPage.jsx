@@ -202,7 +202,7 @@ export default function LoginPage() {
       <div className="landing-content" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="modal" style={{ maxWidth: '420px', width: '90%' }}>
           
-          {/* THE INTERACTIVE PUPPY */}
+          {/* THE INTERACTIVE 4-LEGGED PUPPY */}
           <div className="puppy-box">
             <div className={`puppy-svg-container ${isWalking ? 'walking' : ''} ${hasEntered ? 'entered' : ''}`}>
               {isBarking && <div className="puppy-speech-bubble">Woof! 🐾</div>}
@@ -212,6 +212,18 @@ export default function LoginPage() {
                 <g className={`puppy-tail ${isBarking ? 'excited' : ''}`}>
                   <path d="M 32,88 Q 15,75 10,85 Q 12,95 28,92 Z" fill="#BF7735" />
                   <path d="M 10,85 Q 8,82 12,81 Q 15,83 13,87 Z" fill="#FCE1BE" />
+                </g>
+
+                {/* Quadruped Rear Leg Left (Depth shadow color) */}
+                <g className="puppy-leg puppy-leg-bl" style={{ transformOrigin: '38px 84px' }}>
+                  <ellipse cx="38" cy="93" rx="6" ry="10" fill="#A05F25" />
+                  <circle cx="38" cy="101" r="4.5" fill="#884C15" />
+                </g>
+
+                {/* Quadruped Rear Leg Right (Depth shadow color) */}
+                <g className="puppy-leg puppy-leg-br" style={{ transformOrigin: '72px 84px' }}>
+                  <ellipse cx="72" cy="93" rx="6" ry="10" fill="#A05F25" />
+                  <circle cx="72" cy="101" r="4.5" fill="#884C15" />
                 </g>
 
                 {/* Back Body */}
@@ -283,18 +295,22 @@ export default function LoginPage() {
                   <path d="M 83,38 C 95,38 98,65 86,70 C 80,71 77,52 83,38 Z" fill="#BF7735" />
                 </g>
 
-                {/* Raised Paws (Covers eyes when password is focused) */}
-                <g className={`puppy-paw puppy-paw-left ${isPasswordFocused ? 'hide-pass' : ''}`} style={{ transformOrigin: '40px 96px' }}>
-                  <ellipse cx="40" cy="96" rx="9" ry="8" fill="#FCE1BE" stroke="#BF7735" strokeWidth="1.2" />
-                  <circle cx="36" cy="92" r="1" fill="#BF7735" />
-                  <circle cx="40" cy="91" r="1" fill="#BF7735" />
-                  <circle cx="44" cy="92" r="1" fill="#BF7735" />
+                {/* Quadruped Front Leg Left (Resting Paw, raises on password focused) */}
+                <g className={`puppy-leg puppy-leg-fl puppy-paw-left ${isPasswordFocused ? 'hide-pass' : ''}`} style={{ transformOrigin: '44px 84px' }}>
+                  <path d="M 40,80 L 48,80 L 46,95 L 38,95 Z" fill="#E69C54" />
+                  <ellipse cx="42" cy="96" rx="8" ry="7" fill="#FCE1BE" stroke="#BF7735" strokeWidth="1.2" />
+                  <circle cx="39" cy="92.5" r="1" fill="#BF7735" />
+                  <circle cx="42" cy="91.5" r="1" fill="#BF7735" />
+                  <circle cx="45" cy="92.5" r="1" fill="#BF7735" />
                 </g>
-                <g className={`puppy-paw puppy-paw-right ${isPasswordFocused ? 'hide-pass' : ''}`} style={{ transformOrigin: '70px 96px' }}>
-                  <ellipse cx="70" cy="96" rx="9" ry="8" fill="#FCE1BE" stroke="#BF7735" strokeWidth="1.2" />
-                  <circle cx="66" cy="92" r="1" fill="#BF7735" />
-                  <circle cx="70" cy="91" r="1" fill="#BF7735" />
-                  <circle cx="74" cy="92" r="1" fill="#BF7735" />
+
+                {/* Quadruped Front Leg Right (Resting Paw, raises on password focused) */}
+                <g className={`puppy-leg puppy-leg-fr puppy-paw-right ${isPasswordFocused ? 'hide-pass' : ''}`} style={{ transformOrigin: '66px 84px' }}>
+                  <path d="M 62,80 L 70,80 L 72,95 L 64,95 Z" fill="#E69C54" />
+                  <ellipse cx="68" cy="96" rx="8" ry="7" fill="#FCE1BE" stroke="#BF7735" strokeWidth="1.2" />
+                  <circle cx="65" cy="92.5" r="1" fill="#BF7735" />
+                  <circle cx="68" cy="91.5" r="1" fill="#BF7735" />
+                  <circle cx="71" cy="92.5" r="1" fill="#BF7735" />
                 </g>
               </svg>
             </div>
