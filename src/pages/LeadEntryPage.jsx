@@ -366,7 +366,8 @@ export default function LeadEntryPage() {
 
 
   return (
-    <div className="py-12 px-6 min-h-screen bg-gradient-mesh animate-fade-in-up">
+    <div className="py-12 px-6 min-h-screen bg-gradient-mesh">
+      <div className="animate-fade-in-up">
       
       {/* HEADER SECTION */}
       <div className="mb-10 flex justify-between items-center max-w-6xl mx-auto">
@@ -544,6 +545,7 @@ export default function LeadEntryPage() {
             ))}
           </div>
         )}
+      </div>
       </div>
 
       {/* =======================================================
