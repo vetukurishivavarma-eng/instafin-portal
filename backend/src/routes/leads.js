@@ -112,8 +112,8 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       let sanctionedAmount = lead.sanctioned_amount;
       let disbursedAmount = lead.disbursed_amount || 0;
 
-      // Override with derived values if lead_banks records exist
-      if (banks.length > 0) {
+      // Override with derived values if lead_banks records exist and executive is assigned
+      if (banks.length > 0 && lead.assigned_to) {
         const bankStatuses = banks.map(b => b.status);
         const derived = deriveLeadStatus(bankStatuses);
         const agg = computeLeadAggregates(banks);
@@ -208,7 +208,7 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     let sanctionedAmount = lead.sanctioned_amount;
     let disbursedAmount = lead.disbursed_amount || 0;
 
-    if (banks && banks.length > 0) {
+    if (banks && banks.length > 0 && lead.assigned_to) {
       const bankStatuses = banks.map(b => b.status);
       const derived = deriveLeadStatus(bankStatuses);
       const agg = computeLeadAggregates(banks);

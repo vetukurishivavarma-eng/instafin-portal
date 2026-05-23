@@ -103,7 +103,7 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
     // Also sync the legacy assigned_banks array on leads table
     const { data: lead } = await supabase
       .from('leads')
-      .select('assigned_banks, status')
+      .select('assigned_banks, status, assigned_to')
       .eq('id', leadId)
       .single();
 
@@ -111,7 +111,9 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
       const existingBanks = lead.assigned_banks || [];
       if (!existingBanks.includes(bankName)) {
         const updatedBanks = [...existingBanks, bankName];
-        const newStatus = (lead.status === 'New' || lead.status === 'Assigned') ? 'Processing' : lead.status;
+        const newStatus = (lead.status === 'New' || lead.status === 'Assigned') 
+          ? (lead.assigned_to ? 'Processing' : 'New') 
+          : lead.status;
         await supabase
           .from('leads')
           .update({ assigned_banks: updatedBanks, status: newStatus })

@@ -41,6 +41,16 @@ export default function LeadEntryPage() {
   const [success, setSuccess] = useState('');
   const [createdLead, setCreatedLead] = useState(null);
 
+  // Leads Pipeline & Search States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [editingLead, setEditingLead] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [viewLead, setViewLead] = useState(null);
+  const [sanctionLetterUrl, setSanctionLetterUrl] = useState(null);
+  const [loadingLetter, setLoadingLetter] = useState(false);
+
   useEffect(() => {
     if (!accessToken) return;
     fetch(`${API_BASE}/leads/meta/executives`, {
@@ -59,6 +69,67 @@ export default function LeadEntryPage() {
       .then(r => r.json())
       .then(data => setLeads(data.data || []))
       .catch(() => {});
+  };
+
+  const fetchSanctionLetter = async (leadId) => {
+    setLoadingLetter(true);
+    setSanctionLetterUrl(null);
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/${leadId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data && data.sanction_letter && data.sanction_letter.status === 'uploaded') {
+        setSanctionLetterUrl(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sanction letter:', err);
+    } finally {
+      setLoadingLetter(false);
+    }
+  };
+
+  const handleViewLead = (lead) => {
+    setViewLead(lead);
+    if (lead.status === 'Sanctioned') {
+      fetchSanctionLetter(lead.id);
+    }
+  };
+
+  const handleDownloadSanctionLetter = async (leadId) => {
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${leadId}/sanction_letter`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) {
+        setError('Failed to download sanction letter');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sanction-letter-${leadId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download sanction letter');
+    }
+  };
+
+  const getStatusBorder = (status) => {
+    const colors = {
+      'New': 'border-yellow-400',
+      'Processing': 'border-blue-400',
+      'Sanctioned': 'border-green-400',
+      'Partially Disbursed': 'border-teal-400',
+      'Disbursed': 'border-purple-400',
+      'Assigned': 'border-orange-400',
+      'Rejected': 'border-red-400'
+    };
+    return colors[status] || 'border-gray-200';
   };
 
   // Validation functions
@@ -275,6 +346,14 @@ export default function LeadEntryPage() {
   const unassignedLeads = leads.filter(l => !l.assignedTo);
   const assignedLeads = leads.filter(l => l.assignedTo);
 
+  const filteredLeads = leads.filter(lead => {
+    const matchesSearch = !searchTerm ||
+      lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.mobile?.includes(searchTerm);
+    const matchesStatus = !statusFilter || lead.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
 
 
   return (
@@ -364,6 +443,98 @@ export default function LeadEntryPage() {
           </button>
         </div>
 
+      </div>
+
+      {/* ACTIVE LEADS PIPELINE GRID */}
+      <div className="max-w-6xl mx-auto mt-14 pt-10 border-t border-gray-250/60">
+        <div className="flex flex-wrap gap-4 items-center justify-between border-b pb-5 mb-8">
+          <div>
+            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Active Leads Pipeline</h2>
+            <p className="text-gray-500 font-medium mt-1">Track and manage individual customer files and loan status cards.</p>
+          </div>
+          <div className="flex gap-3">
+            <input 
+              type="text" 
+              placeholder="Search leads by name or mobile..." 
+              className="border border-gray-200 rounded-2xl px-5 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm w-72" 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+            />
+            <select 
+              className="border border-gray-200 rounded-2xl px-5 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm font-bold" 
+              value={statusFilter} 
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="New">New</option>
+              <option value="Assigned">Assigned</option>
+              <option value="Processing">Processing</option>
+              <option value="Sanctioned">Sanctioned</option>
+              <option value="Partially Disbursed">Partially Disbursed</option>
+              <option value="Disbursed">Disbursed</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+
+        {loading && leads.length === 0 ? (
+          <div className="text-center py-16 font-bold text-gray-400 text-lg animate-pulse">Loading leads pipeline...</div>
+        ) : filteredLeads.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-gray-150 p-16 text-center text-gray-400 font-bold shadow-sm text-lg">
+            No leads found matching current criteria.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredLeads.map(lead => (
+              <div
+                key={lead.id}
+                onClick={() => handleViewLead(lead)}
+                className={`bg-white rounded-3xl shadow-md hover:shadow-xl transition-all duration-300 border-l-4 ${getStatusBorder(lead.status)} cursor-pointer p-6 border border-gray-150 hover-lift relative`}
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className="max-w-[70%]">
+                    <h3 className="text-lg font-bold text-gray-900 leading-tight truncate">{lead.customerName}</h3>
+                    {lead.hasCoapplicant && (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 shadow-sm">
+                        👥 Co-applicant
+                      </span>
+                    )}
+                  </div>
+                  <span className="bg-indigo-50 text-indigo-700 border border-indigo-150 px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wider">
+                    {lead.loanType?.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="text-2xl font-black text-gray-900 mb-2">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</p>
+                <p className="text-blue-700 text-xs font-bold mb-4 flex items-center gap-1.5">
+                  🏦 {lead.assignedBanks && lead.assignedBanks.length > 0 ? lead.assignedBanks.join(', ') : 'No banks assigned'}
+                </p>
+                <div className="flex justify-between items-center border-t border-gray-100 pt-4 mt-2">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Assigned To</span>
+                    <span className="text-xs font-bold text-gray-700">{lead.assignedTo || 'Unassigned'}</span>
+                  </div>
+                  <StatusBadge status={lead.status} />
+                </div>
+                {isAdmin && (
+                  <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => { setEditingLead(lead); setEditForm({...lead}); }}
+                      className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 py-2 px-3 rounded-xl text-xs font-bold hover-lift transition-all"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(lead)}
+                      className="flex-1 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 py-2 px-3 rounded-xl text-xs font-bold hover-lift transition-all"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* =======================================================
@@ -809,6 +980,252 @@ export default function LeadEntryPage() {
               <button onClick={() => setSelectedLead(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-750 px-6 py-3 rounded-2xl font-bold transition-colors">Cancel</button>
               <button onClick={() => handleAssignFromList(selectedLead)} disabled={loading} className="flex-1 bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-800 disabled:opacity-50 hover-lift transition-all shadow-md shadow-blue-500/10">
                 {loading ? 'Assigning...' : 'Assign File'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW LEAD DETAILS MODAL */}
+      {viewLead && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl border border-gray-150 animate-slide-up" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+
+            <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Lead Detail Profile</h2>
+            <p className="text-gray-500 text-sm mb-6 font-semibold">In-depth loan parameters, verification checklist, and assignment details.</p>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Customer Name</p>
+                <p className="font-extrabold text-gray-900 text-lg mt-1">{viewLead.customerName}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Mobile Number</p>
+                <p className="font-extrabold text-gray-900 text-lg mt-1">{viewLead.mobile}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Loan Type</p>
+                <p className="font-bold text-gray-800 mt-1 capitalize">{viewLead.loanType?.replace('_', ' ') || 'N/A'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Expected Amount</p>
+                <p className="font-bold text-gray-800 mt-1">₹{parseInt(viewLead.expectedAmount || 0).toLocaleString('en-IN')}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Executive Assigned</p>
+                <p className="font-bold text-gray-800 mt-1">{viewLead.assignedTo || 'Unassigned'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Department</p>
+                <p className="font-bold text-gray-800 mt-1">{viewLead.department || 'N/A'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Priority Level</p>
+                <p className="font-bold text-gray-800 mt-1">{viewLead.priority || 'Medium'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Lead Status Badge</p>
+                <div className="mt-1"><StatusBadge status={viewLead.status} /></div>
+              </div>
+            </div>
+
+            {viewLead.hasCoapplicant && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mt-4">
+                <h4 className="font-extrabold text-indigo-900 text-sm mb-2 uppercase tracking-wide">Co-applicant Parameters</h4>
+                <div className="grid md:grid-cols-2 gap-4 text-sm text-indigo-950 font-semibold">
+                  <div>Name: <span className="font-bold">{viewLead.coapplicantName}</span></div>
+                  <div>Income Source: <span className="font-bold capitalize">{viewLead.coapplicantIncomeSource?.replace('_', ' ')}</span></div>
+                </div>
+              </div>
+            )}
+
+            {viewLead.remarks && (
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mt-4">
+                <p className="text-xs uppercase font-bold text-gray-400 mb-1">Remarks & Details</p>
+                <p className="font-medium text-gray-700 text-sm">{viewLead.remarks}</p>
+              </div>
+            )}
+
+            {viewLead.status === 'Sanctioned' && (
+              <div className="bg-emerald-50 border border-emerald-150 rounded-2xl p-5 mt-4">
+                <h4 className="font-extrabold text-emerald-950 text-sm mb-2 uppercase tracking-wide">Approved Sanction Letter</h4>
+                {loadingLetter ? (
+                  <p className="text-xs font-bold text-gray-400">Retrieving sanction letter URL...</p>
+                ) : sanctionLetterUrl ? (
+                  <button
+                    onClick={() => handleDownloadSanctionLetter(viewLead.id)}
+                    className="inline-flex items-center gap-2 text-blue-700 hover:text-blue-900 font-bold text-sm hover-lift transition-all"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download Sanction Letter PDF
+                  </button>
+                ) : (
+                  <p className="text-xs font-bold text-gray-500">No sanction letter uploaded by executive yet.</p>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}
+              className="w-full mt-6 py-4 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-750 font-bold transition-all hover-lift shadow-sm"
+            >
+              Close Profile
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT LEAD DETAILS MODAL */}
+      {editingLead && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setEditingLead(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl border border-gray-150 animate-slide-up" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setEditingLead(null)} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+
+            <h2 className="text-xl font-extrabold text-gray-900 mb-2">Edit Customer Lead</h2>
+            <p className="text-gray-500 text-sm mb-5 font-semibold">Modify core customer loan details or update status category.</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer Full Name</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                  value={editForm.customerName || ''}
+                  onChange={e => setEditForm({...editForm, customerName: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Mobile Number</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                  value={editForm.mobile || ''}
+                  onChange={e => setEditForm({...editForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Type</label>
+                <select
+                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                  value={editForm.loanType || ''}
+                  onChange={e => setEditForm({...editForm, loanType: e.target.value})}
+                >
+                  <option value="home_loan">Home Loan</option>
+                  <option value="lap">LAP</option>
+                  <option value="mudra">Mudra Loan</option>
+                  <option value="msme">MSME Loan</option>
+                  <option value="business_loan">Business Loan</option>
+                  <option value="personal_loan">Personal Loan</option>
+                  <option value="education_loan">Education Loan</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expected Amount (INR)</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                  value={editForm.expectedAmount || ''}
+                  onChange={e => setEditForm({...editForm, expectedAmount: e.target.value.replace(/\D/g, '')})}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">File Status</label>
+                <select
+                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-extrabold text-blue-900"
+                  value={editForm.status || 'New'}
+                  onChange={e => setEditForm({...editForm, status: e.target.value})}
+                >
+                  <option>New</option>
+                  <option>Assigned</option>
+                  <option>Processing</option>
+                  <option>Sanctioned</option>
+                  <option>Partially Disbursed</option>
+                  <option>Disbursed</option>
+                  <option>Rejected</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-6">
+              <button onClick={() => setEditingLead(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-750 px-6 py-3 rounded-2xl font-bold transition-all hover-lift">Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/leads/${editingLead.id}`, {
+                      method: 'PUT',
+                      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        customerName: editForm.customerName,
+                        mobile: editForm.mobile,
+                        loanType: editForm.loanType,
+                        expectedAmount: editForm.expectedAmount,
+                        status: editForm.status
+                      })
+                    });
+                    if (res.ok) {
+                      setLeads(leads.map(l => l.id === editingLead.id ? {...l, ...editForm} : l));
+                      setEditingLead(null);
+                      setSuccess('Lead updated successfully!');
+                      loadLeads();
+                    }
+                  } catch (err) {
+                    setError('Failed to update lead');
+                  }
+                }}
+                className="flex-1 bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-800 hover-lift transition-all shadow-md shadow-blue-500/10"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm relative shadow-2xl border border-gray-150 animate-slide-up" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-2 text-red-655 flex items-center gap-2">
+              ⚠️ Purge Loan File?
+            </h3>
+            <p className="text-gray-650 mb-6 text-sm font-semibold leading-relaxed">
+              Are you sure you want to completely delete the file for <strong className="text-gray-900 font-extrabold">{deleteConfirm.customerName}</strong>? This action is permanent and cannot be undone.
+            </p>
+            <div className="flex gap-4">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold transition-all hover-lift">Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/leads/${deleteConfirm.id}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                    if (res.ok) {
+                      setLeads(leads.filter(l => l.id !== deleteConfirm.id));
+                      setDeleteConfirm(null);
+                      setSuccess('Lead deleted successfully.');
+                      loadLeads();
+                    }
+                  } catch (err) {
+                    setError('Failed to delete lead');
+                  }
+                }}
+                className="flex-1 bg-red-600 hover:bg-red-750 text-white py-3 rounded-2xl font-bold transition-all hover-lift shadow-md shadow-red-500/10"
+              >
+                Delete File
               </button>
             </div>
           </div>
