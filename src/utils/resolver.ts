@@ -62,6 +62,45 @@ export function deleteChecklistItemFromFlow(key: string, itemId: string): void {
 }
 
 /**
+ * Shared helper: apply localStorage overrides (deleted + added) for a given checklist key to an item array.
+ * @returns A new, overridden array of ChecklistItem. If no overrides exist, returns a shallow copy.
+ */
+function applyOverridesForKey(items: ChecklistItem[], overrideKey: string): ChecklistItem[] {
+  if (typeof window === 'undefined') return [...items];
+  let filtered = [...items];
+  try {
+    const raw = localStorage.getItem('instafin_checklist_overrides');
+    if (!raw) return filtered;
+    const overrides: ChecklistOverrides = JSON.parse(raw);
+    const flowOverrides = overrides[overrideKey];
+    if (!flowOverrides) return filtered;
+
+    if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
+      filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
+    }
+    if (flowOverrides.added && flowOverrides.added.length > 0) {
+      const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
+      filtered = filtered.map(item => {
+        if (addedMap.has(item.id)) {
+          const modifiedItem = addedMap.get(item.id);
+          if (modifiedItem) {
+            addedMap.delete(item.id);
+            return modifiedItem;
+          }
+        }
+        return item;
+      });
+      if (addedMap.size > 0) {
+        filtered = [...filtered, ...Array.from(addedMap.values())];
+      }
+    }
+  } catch (e) {
+    console.error('Error applying overrides for key', overrideKey, e);
+  }
+  return filtered;
+}
+
+/**
  * Converts Selection object to a lookup key
  * Format: "loanType|loanStatus|incomeSource|residentType|businessType?"
  * @param selection - User selection object
@@ -158,13 +197,16 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
   }
 
   // Look up in decision tree with fallback chain
-  let checklist = DECISION_TREE[key as ChecklistKey];
+  // Track the actual key found so overrides are looked up against the real tree entry
+  let actualKey: string = key;
+  let checklist = DECISION_TREE[actualKey as ChecklistKey];
 
   // Fallback: try without businessType
   if (!checklist) {
     const parts = key.split('|');
     if (parts.length === 5) {
-      checklist = DECISION_TREE[parts.slice(0, 4).join('|') as ChecklistKey];
+      actualKey = parts.slice(0, 4).join('|');
+      checklist = DECISION_TREE[actualKey as ChecklistKey];
     }
   }
 
@@ -172,7 +214,10 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
   if (!checklist) {
     const loanType = key.split('|')[0];
     const fallback = Object.keys(DECISION_TREE).find(k => k.startsWith(loanType + '|'));
-    if (fallback) checklist = DECISION_TREE[fallback as ChecklistKey];
+    if (fallback) {
+      actualKey = fallback;
+      checklist = DECISION_TREE[fallback as ChecklistKey];
+    }
   }
 
   // Final fallback: common checklist
@@ -188,29 +233,10 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
   // Filter out any undefined entries (defensive)
   let filtered = checklist.filter(Boolean);
 
-  // Apply overrides from localStorage
-  const overrides = getOverrides();
-  const flowOverrides = overrides[key];
-  if (flowOverrides) {
-    if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
-      filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
-    }
-    if (flowOverrides.added && flowOverrides.added.length > 0) {
-      const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
-      filtered = filtered.map(item => {
-        if (addedMap.has(item.id)) {
-          const modifiedItem = addedMap.get(item.id);
-          if (modifiedItem) {
-            addedMap.delete(item.id);
-            return modifiedItem;
-          }
-        }
-        return item;
-      });
-      if (addedMap.size > 0) {
-        filtered = [...filtered, ...Array.from(addedMap.values())];
-      }
-    }
+  // Apply overrides using the actual key found in the decision tree (not the original key)
+  // Because admins can only modify existing DECISION_TREE keys in DownloadFormsPage.
+  if (actualKey) {
+    filtered = applyOverridesForKey(filtered, actualKey);
   }
 
   // Cache the result
@@ -239,30 +265,8 @@ export function getChecklistByKey(key: string): ChecklistItem[] | undefined {
 
   let filtered = checklist.filter(Boolean);
 
-  // Apply overrides from localStorage
-  const overrides = getOverrides();
-  const flowOverrides = overrides[key];
-  if (flowOverrides) {
-    if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
-      filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
-    }
-    if (flowOverrides.added && flowOverrides.added.length > 0) {
-      const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
-      filtered = filtered.map(item => {
-        if (addedMap.has(item.id)) {
-          const modifiedItem = addedMap.get(item.id);
-          if (modifiedItem) {
-            addedMap.delete(item.id);
-            return modifiedItem;
-          }
-        }
-        return item;
-      });
-      if (addedMap.size > 0) {
-        filtered = [...filtered, ...Array.from(addedMap.values())];
-      }
-    }
-  }
+  // Apply overrides using the shared helper
+  filtered = applyOverridesForKey(filtered, key);
 
   checklistCache.set(key, filtered);
   return filtered;
@@ -371,30 +375,9 @@ export function getChecklistWithFallback(selection: Selection): ChecklistItem[] 
       const fbChecklist = DECISION_TREE[fallbackKey as ChecklistKey];
       if (fbChecklist && fbChecklist.length > 0) {
         let filtered = fbChecklist.filter(Boolean);
-        // Apply overrides for the fallbackKey
-        const overrides = getOverrides();
-        const flowOverrides = overrides[fallbackKey];
-        if (flowOverrides) {
-          if (flowOverrides.deleted && flowOverrides.deleted.length > 0) {
-            filtered = filtered.filter(item => !flowOverrides.deleted.includes(item.id));
-          }
-          if (flowOverrides.added && flowOverrides.added.length > 0) {
-            const addedMap = new Map(flowOverrides.added.map(item => [item.id, item]));
-            filtered = filtered.map(item => {
-              if (addedMap.has(item.id)) {
-                const modifiedItem = addedMap.get(item.id);
-                if (modifiedItem) {
-                  addedMap.delete(item.id);
-                  return modifiedItem;
-                }
-              }
-              return item;
-            });
-            if (addedMap.size > 0) {
-              filtered = [...filtered, ...Array.from(addedMap.values())];
-            }
-          }
-        }
+        // Apply overrides using the shared helper — use the fallbackKey
+        // since that's the actual DECISION_TREE key the admin can modify
+        filtered = applyOverridesForKey(filtered, fallbackKey);
         return filtered;
       }
     }
