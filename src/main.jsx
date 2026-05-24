@@ -91,6 +91,11 @@ function AppRoutes() {
             <PipelinePage />
           </ProtectedRoute>
         } />
+        <Route path="/admin/add-lead" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <LeadEntryPage />
+          </ProtectedRoute>
+        } />
         <Route path="/admin/customer-tracking" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <CustomerTrackingPage />
@@ -126,6 +131,11 @@ function AppRoutes() {
         <Route path="/executive/leads" element={
           <ProtectedRoute allowedRoles={['executive']}>
             <LeadEntryPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/executive/pipeline" element={
+          <ProtectedRoute allowedRoles={['executive']}>
+            <PipelinePage />
           </ProtectedRoute>
         } />
         <Route path="/executive/customers" element={
