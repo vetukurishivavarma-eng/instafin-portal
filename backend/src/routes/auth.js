@@ -3,6 +3,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { authorize } from '../middleware/authorize.js';
+import { sendApprovalEmail, sendRejectionEmail } from '../services/email.service.js';
+import { sendApprovalWhatsApp, sendRejectionWhatsApp } from '../services/whatsapp.service.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'instafin-dev-secret-2024';
@@ -153,18 +156,56 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/auth/request-access (for signup modal)
+// POST /api/auth/request-access (for signup modal - executive registration)
 router.post('/request-access', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, mobile } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
+    // Check if user already exists in users table
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'This email is already registered' });
+    }
+
+    // Check if there's already a pending request
+    const { data: existingRequest } = await supabase
+      .from('access_requests')
+      .select('id, status')
+      .eq('email', email)
+      .single();
+
+    if (existingRequest) {
+      if (existingRequest.status === 'pending') {
+        return res.status(400).json({ error: 'You already have a pending request. Please wait for admin approval.' });
+      }
+      // If rejected, update the existing request instead of creating a new one
+      if (existingRequest.status === 'rejected') {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const { error: updateError } = await supabase
+          .from('access_requests')
+          .update({ name, password: passwordHash, mobile, status: 'pending', updated_at: new Date().toISOString() })
+          .eq('id', existingRequest.id);
+
+        if (updateError) throw updateError;
+        return res.status(201).json({ message: 'Access request re-submitted. Admin will review it.' });
+      }
+    }
+
+    // Hash the password before storing
+    const passwordHash = await bcrypt.hash(password, 10);
+
     const { error } = await supabase
       .from('access_requests')
-      .insert({ name, email, password });
+      .insert({ name, email, password: passwordHash, mobile, status: 'pending' });
 
     if (error) {
       if (error.code === '23505') {
@@ -177,6 +218,176 @@ router.post('/request-access', async (req, res) => {
   } catch (error) {
     console.error('Access request error:', error);
     res.status(500).json({ error: 'Failed to submit access request' });
+  }
+});
+
+// GET /api/auth/pending-requests (admin only)
+router.get('/pending-requests', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { data: requests, error } = await supabase
+      .from('access_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json(requests || []);
+  } catch (error) {
+    console.error('Fetch pending requests error:', error);
+    res.status(500).json({ error: 'Failed to fetch pending requests' });
+  }
+});
+
+// GET /api/auth/all-requests (admin only - all requests including history)
+router.get('/all-requests', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { data: requests, error } = await supabase
+      .from('access_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json(requests || []);
+  } catch (error) {
+    console.error('Fetch all requests error:', error);
+    res.status(500).json({ error: 'Failed to fetch requests' });
+  }
+});
+
+// POST /api/auth/approve-request/:id (admin only)
+router.post('/approve-request/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch the access request
+    const { data: request, error: fetchError } = await supabase
+      .from('access_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !request) {
+      return res.status(404).json({ error: 'Access request not found' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: `Request is already ${request.status}` });
+    }
+
+    // Check if user already exists in users table
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', request.email)
+      .single();
+
+    if (existingUser) {
+      // User already exists - just mark request as approved
+      await supabase
+        .from('access_requests')
+        .update({ status: 'approved', updated_at: new Date().toISOString(), reviewed_by: req.user.id })
+        .eq('id', id);
+
+      // Send notifications
+      const emailResult = await sendApprovalEmail({ name: request.name, email: request.email });
+      const whatsappResult = await sendApprovalWhatsApp({ name: request.name, email: request.email, mobile: request.mobile });
+
+      return res.json({
+        message: 'Request approved. User already existed.',
+        emailSent: emailResult.success,
+        whatsappSent: whatsappResult.success
+      });
+    }
+
+    // Create the user in the users table
+    const { data: newUser, error: createError } = await supabase
+      .from('users')
+      .insert({
+        name: request.name,
+        email: request.email,
+        password: request.password, // Already hashed
+        role: 'executive',
+        status: 'active',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('Create user error:', createError);
+      return res.status(500).json({ error: 'Failed to create user account' });
+    }
+
+    // Mark the access request as approved
+    await supabase
+      .from('access_requests')
+      .update({ status: 'approved', updated_at: new Date().toISOString(), reviewed_by: req.user.id })
+      .eq('id', id);
+
+    // Send email notification
+    const emailResult = await sendApprovalEmail({ name: request.name, email: request.email });
+
+    // Send WhatsApp notification
+    const whatsappResult = await sendApprovalWhatsApp({ name: request.name, email: request.email, mobile: request.mobile });
+
+    res.json({
+      message: `Executive ${request.name} has been approved successfully.`,
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role
+      },
+      emailSent: emailResult.success,
+      whatsappSent: whatsappResult.success
+    });
+  } catch (error) {
+    console.error('Approve request error:', error);
+    res.status(500).json({ error: 'Failed to approve request' });
+  }
+});
+
+// POST /api/auth/reject-request/:id (admin only)
+router.post('/reject-request/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: request, error: fetchError } = await supabase
+      .from('access_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !request) {
+      return res.status(404).json({ error: 'Access request not found' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: `Request is already ${request.status}` });
+    }
+
+    // Mark the access request as rejected
+    await supabase
+      .from('access_requests')
+      .update({ status: 'rejected', updated_at: new Date().toISOString(), reviewed_by: req.user.id })
+      .eq('id', id);
+
+    // Send rejection email
+    const emailResult = await sendRejectionEmail({ name: request.name, email: request.email });
+
+    // Send WhatsApp rejection
+    const whatsappResult = await sendRejectionWhatsApp({ name: request.name, mobile: request.mobile });
+
+    res.json({
+      message: `Request from ${request.name} has been rejected.`,
+      emailSent: emailResult.success,
+      whatsappSent: whatsappResult.success
+    });
+  } catch (error) {
+    console.error('Reject request error:', error);
+    res.status(500).json({ error: 'Failed to reject request' });
   }
 });
 

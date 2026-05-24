@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import API_BASE from '../config/api';
 import './LandingPage.css';
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [showSignup, setShowSignup] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', mobile: '' });
 
   useEffect(() => {
     if (searchParams.get('action') === 'signup') {
@@ -18,10 +19,43 @@ export default function LandingPage() {
     navigate('/login');
   };
 
-  const handleSignup = (e) => {
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState('');
+  const [signupSuccess, setSignupSuccess] = useState('');
+
+  const handleSignup = async (e) => {
     e.preventDefault();
-    alert('Signup functionality coming soon! Contact admin for access.');
-    setShowSignup(false);
+    setSignupLoading(true);
+    setSignupError('');
+    setSignupSuccess('');
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/request-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSignupError(data.error || 'Failed to submit request');
+        return;
+      }
+
+      setSignupSuccess(data.message || 'Access request submitted! Admin will review it.');
+      setFormData({ name: '', email: '', password: '', mobile: '' });
+
+      // Auto-close after 3 seconds
+      setTimeout(() => {
+        setShowSignup(false);
+        setSignupSuccess('');
+      }, 3000);
+    } catch (err) {
+      setSignupError('Network error. Please try again.');
+    } finally {
+      setSignupLoading(false);
+    }
   };
 
   return (
@@ -112,6 +146,34 @@ export default function LandingPage() {
             <h2>Request Access</h2>
             <p className="modal-subtitle">Fill in your details and we'll get back to you</p>
             <form onSubmit={handleSignup}>
+              {signupError && (
+                <div className="error-message" style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#fca5a5',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '12px',
+                  marginBottom: '1.5rem',
+                  fontSize: '0.85rem',
+                  textAlign: 'center'
+                }}>
+                  {signupError}
+                </div>
+              )}
+              {signupSuccess && (
+                <div style={{
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  color: '#86efac',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '12px',
+                  marginBottom: '1.5rem',
+                  fontSize: '0.85rem',
+                  textAlign: 'center'
+                }}>
+                  {signupSuccess}
+                </div>
+              )}
               <div className="form-group">
                 <label>Full Name</label>
                 <input
@@ -133,6 +195,15 @@ export default function LandingPage() {
                 />
               </div>
               <div className="form-group">
+                <label>Mobile Number (for WhatsApp)</label>
+                <input
+                  type="tel"
+                  placeholder="Enter your mobile number"
+                  value={formData.mobile || ''}
+                  onChange={(e) => setFormData({...formData, mobile: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
                 <label>Password</label>
                 <input
                   type="password"
@@ -142,7 +213,9 @@ export default function LandingPage() {
                   required
                 />
               </div>
-              <button type="submit" className="btn-submit">Submit Request</button>
+              <button type="submit" className="btn-submit" disabled={signupLoading}>
+                {signupLoading ? 'Submitting...' : 'Submit Request'}
+              </button>
             </form>
           </div>
         </div>

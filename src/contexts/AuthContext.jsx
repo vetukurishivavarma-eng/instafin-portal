@@ -35,7 +35,14 @@ export function AuthProvider({ children }) {
     localStorage.setItem('instafin_user', JSON.stringify(data.user));
     localStorage.setItem('instafin_token', data.accessToken);
     localStorage.setItem('instafin_refresh', data.refreshToken);
-    navigate('/dashboard');
+    // Role-based redirect
+    if (data.user.role === 'admin') {
+      navigate('/admin/dashboard');
+    } else if (data.user.role === 'executive') {
+      navigate('/executive/leads');
+    } else {
+      navigate('/dashboard');
+    }
     return data.user;
   };
 
@@ -55,6 +62,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('instafin_user');
     localStorage.removeItem('instafin_token');
     localStorage.removeItem('instafin_refresh');
+    navigate('/login');
   };
 
   const refreshAccessToken = async () => {
