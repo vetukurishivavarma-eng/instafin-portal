@@ -56,7 +56,7 @@ export default function DashboardPage() {
 
   const StatCard = ({ label, value, gradient, filterStatus }) => (
     <div
-      onClick={() => navigate(filterStatus ? `/leads?status=${filterStatus}` : '/leads')}
+      onClick={() => navigate(filterStatus ? `/admin/leads?status=${filterStatus}` : '/admin/leads')}
       className={`bg-gradient-to-br ${gradient} rounded-3xl p-6 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200`}
     >
       <p className="text-white/80 text-sm font-medium">{label}</p>
