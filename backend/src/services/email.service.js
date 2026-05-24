@@ -14,7 +14,7 @@ const APP_NAME = 'InstaFin Portal';
 console.log(`[EMAIL] SMTP Config: host=${SMTP_HOST} port=${SMTP_PORT} secure=${SMTP_SECURE} user=${SMTP_USER} from=${FROM_EMAIL}`);
 console.log(`[EMAIL] SMTP_PASS is ${SMTP_PASS ? 'SET (' + SMTP_PASS.length + ' chars)' : 'NOT SET — email will fail!'}`);
 
-// Configure email transporter
+// Configure email transporter with timeouts so it fails fast instead of hanging
 const transporter = nodemailer.createTransport({
   host: SMTP_HOST,
   port: SMTP_PORT,
@@ -23,6 +23,9 @@ const transporter = nodemailer.createTransport({
     user: SMTP_USER,
     pass: SMTP_PASS,
   },
+  connectionTimeout: 10000,  // 10 seconds to connect
+  greetingTimeout: 10000,     // 10 seconds for server greeting
+  socketTimeout: 15000,       // 15 seconds overall socket timeout
 });
 
 // Verify transporter connection on startup (asynchronously)
