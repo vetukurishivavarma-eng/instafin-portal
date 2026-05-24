@@ -81,6 +81,10 @@ export default function DownloadFormsPage() {
   const [downloading, setDownloading] = useState(false);
   const [success, setSuccess] = useState('');
 
+  // Force re-render tick whenever localStorage checklist data changes
+  const [refreshTick, setRefreshTick] = useState(0);
+  const refreshChecklists = () => setRefreshTick(t => t + 1);
+
   // Admin Custom additions/deletions states
   const [showAddForm, setShowAddForm] = useState(false);
   const [newDocName, setNewDocName] = useState('');
@@ -107,6 +111,7 @@ export default function DownloadFormsPage() {
     setNewDocName('');
     setSuccess(`"${newItem.name}" added successfully to this checklist flow!`);
     setTimeout(() => setSuccess(''), 3000);
+    refreshChecklists();
   };
 
   const handleDeleteItem = (itemId) => {
@@ -115,6 +120,7 @@ export default function DownloadFormsPage() {
     deleteChecklistItemFromFlow(key, itemId);
     setSuccess('Document removed successfully!');
     setTimeout(() => setSuccess(''), 3000);
+    refreshChecklists();
   };
 
   // Inline editing states
@@ -143,10 +149,20 @@ export default function DownloadFormsPage() {
       required: editDocRequired
     };
 
+    // For static (original) items, we need to mark the original as deleted
+    // and store the modified version in the added overrides list.
+    // For custom-added items (cust_ prefix), they're already in added[], so
+    // addChecklistItemToFlow will update them in-place.
+    if (!itemId.startsWith('cust_')) {
+      // This is a static item from the decision tree — delete original, re-add modified
+      deleteChecklistItemFromFlow(key, itemId);
+    }
     addChecklistItemToFlow(key, modifiedItem);
+
     setEditingItemId(null);
     setSuccess(`"${modifiedItem.name}" updated successfully!`);
     setTimeout(() => setSuccess(''), 3000);
+    refreshChecklists();
   };
 
   // Fetch all pre-defined flows from resolver
@@ -174,6 +190,9 @@ export default function DownloadFormsPage() {
   });
 
   // Get currently previewed checklist items
+  // refreshTick is read here so React re-evaluates this block on every add/edit/delete
+  // eslint-disable-next-line no-unused-vars
+  const _tick = refreshTick;
   let previewItems = [];
   let previewSelection = {};
 
