@@ -29,20 +29,29 @@ export default function ExecutivePage() {
   const [processingId, setProcessingId] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [emailTesting, setEmailTesting] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('yeshwantraavi4@gmail.com');
 
   // Test SMTP configuration
   const handleTestEmail = async () => {
+    if (!testEmailAddress) {
+      setError('Please enter an email address to send the test to.');
+      return;
+    }
     setEmailTesting(true);
     setError('');
     setSuccess('');
     try {
       const res = await fetch(`${API_BASE}/auth/test-email`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ email: testEmailAddress })
       });
       const data = await res.json();
       if (data.success) {
-        setSuccess('✅ Test email sent successfully! Check your inbox (and spam folder).');
+        setSuccess(`✅ Test email sent to ${testEmailAddress}! Check inbox (and spam folder).`);
       } else {
         setError(`❌ Email test failed: ${data.error || 'Unknown error'}`);
       }
@@ -417,13 +426,22 @@ export default function ExecutivePage() {
                   </span>
                 )}
               </h2>
-              <button
-                onClick={handleTestEmail}
-                disabled={emailTesting}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-all disabled:opacity-50"
-              >
-                {emailTesting ? '⏳ Testing...' : '🧪 Test Email Config'}
-              </button>
+              <div className="flex items-center gap-3">
+                <input
+                  type="email"
+                  value={testEmailAddress}
+                  onChange={e => setTestEmailAddress(e.target.value)}
+                  placeholder="Enter email to send test to"
+                  className="border rounded-xl px-4 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleTestEmail}
+                  disabled={emailTesting}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-all disabled:opacity-50"
+                >
+                  {emailTesting ? '⏳ Sending...' : '🧪 Test Email'}
+                </button>
+              </div>
             </div>
 
             {requestsLoading ? (

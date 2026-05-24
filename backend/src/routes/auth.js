@@ -260,8 +260,10 @@ router.get('/all-requests', authenticate, authorize('admin'), async (req, res) =
 router.post('/test-email', authenticate, authorize('admin'), async (req, res) => {
   console.log('[AUTH] 🧪 Admin testing email configuration');
   try {
-    const adminEmail = req.user.email;
-    const result = await testEmailConnection({ email: adminEmail });
+    // Use provided email or fall back to admin's email
+    const targetEmail = req.body.email || req.user.email;
+    console.log(`[AUTH] 🧪 Sending test email to: ${targetEmail}`);
+    const result = await testEmailConnection({ email: targetEmail });
     console.log('[AUTH] 🧪 Test email result:', JSON.stringify(result));
     res.json(result);
   } catch (error) {
