@@ -53,7 +53,20 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     // Role-based filtering
     if (req.user.role !== 'admin') {
-      query = query.eq('assigned_to', req.user.id);
+      // Match by either users table UUID (new) or executive name (legacy)
+      // This covers both newly assigned leads (UUID) and previously assigned ones (name)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        // Use OR filter to match both formats
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
     }
 
     // Filter by status
@@ -87,6 +100,19 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     const { data: leads, error, count } = await query;
 
     if (error) throw error;
+
+    // Resolve UUID assigned_to values to display names
+    const execIds = [...new Set(leads.filter(l => l.assigned_to && l.assigned_to.length > 20).map(l => l.assigned_to))];
+    let nameMap = {};
+    if (execIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', execIds);
+      if (users) {
+        users.forEach(u => nameMap[u.id] = u.name);
+      }
+    }
 
     // Fetch lead_banks for all returned leads to compute derived statuses
     const leadIds = leads.map(l => l.id);
@@ -139,7 +165,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         disbursedAmount,
         assignedBanks: lead.assigned_banks || [],
         status,
-        assignedTo: lead.assigned_to,
+        assignedTo: nameMap[lead.assigned_to] || lead.assigned_to,
         department: lead.department,
         priority: lead.priority,
         followUp: lead.follow_up,
@@ -194,7 +220,16 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     // Role-based access
     if (req.user.role !== 'admin' && lead.assigned_to !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+      // Also check if assigned_to matches the executive's name (legacy format)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (!userData?.name || lead.assigned_to !== userData.name) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
 
     // Fetch bank-wise records for derived status
@@ -406,7 +441,16 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     // Role-based access
     if (req.user.role !== 'admin' &&
         existingLead.assigned_to !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+      // Also check if assigned_to matches the executive's name (legacy format)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (!userData?.name || existingLead.assigned_to !== userData.name) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
 
     const { coapplicant, remarks: existingCleanRemarks } = parseRemarksField(existingLead.remarks);
@@ -500,7 +544,17 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     let query = supabase.from('leads').select('status');
 
     if (req.user.role !== 'admin') {
-      query = query.eq('assigned_to', req.user.id);
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
     }
 
     const { data: leads, error } = await query;
@@ -530,7 +584,17 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
     let query = supabase.from('leads').select('status');
 
     if (req.user.role !== 'admin') {
-      query = query.eq('assigned_to', req.user.id);
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
     }
 
     const { data: leads, error } = await query;
@@ -559,7 +623,17 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
     let query = supabase.from('leads').select('loan_type');
 
     if (req.user.role !== 'admin') {
-      query = query.eq('assigned_to', req.user.id);
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
     }
 
     const { data: leads, error } = await query;
@@ -590,39 +664,36 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
       return res.status(400).json({ error: 'Executive name is required' });
     }
 
-    // First, find the executive by name to get their ID
-    const { data: executive } = await supabase
-      .from('executives')
-      .select('id, name, department')
+    // Look up the user's UUID from users table (NOT the executives table)
+    // The assigned_to field stores users table UUID so executives can filter their leads by req.user.id
+    const { data: userRecord } = await supabase
+      .from('users')
+      .select('id, name')
       .eq('name', assignedTo)
-      .single();
+      .eq('role', 'executive')
+      .maybeSingle();
 
-    console.log('Executive found:', executive);
+    console.log('User record found:', userRecord);
 
-    if (!executive) {
-      // If executive not found in DB, just store the name directly
-      const { data: updatedLead, error } = await supabase
-        .from('leads')
-        .update({
-          assigned_to: assignedTo,
-          department: department || null,
-          priority: priority || 'Medium',
-          status: 'Assigned'
-        })
-        .eq('id', req.params.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return res.json({ message: 'Lead assigned', lead: updatedLead });
+    // Also get department from executives table if available
+    let dept = department || null;
+    if (!dept) {
+      const { data: execRecord } = await supabase
+        .from('executives')
+        .select('department')
+        .eq('name', assignedTo)
+        .maybeSingle();
+      if (execRecord) dept = execRecord.department;
     }
 
-    // If executive found, use their ID
+    // Use the user's UUID if found, otherwise fall back to the name (legacy fallback)
+    const assignToValue = userRecord?.id || assignedTo;
+
     const { data: updatedLead, error } = await supabase
       .from('leads')
       .update({
-        assigned_to: executive.name,
-        department: department || executive.department,
+        assigned_to: assignToValue,
+        department: dept,
         priority: priority || 'Medium',
         status: 'Assigned'
       })
