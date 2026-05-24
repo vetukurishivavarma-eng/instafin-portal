@@ -311,6 +311,27 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
         .update({ status: 'approved', updated_at: new Date().toISOString(), reviewed_by: req.user.id })
         .eq('id', id);
 
+      // Also ensure they exist in executives table
+      console.log(`[AUTH] Ensuring ${request.name} exists in executives table...`);
+      const { data: existingExec } = await supabase
+        .from('executives')
+        .select('id')
+        .eq('name', request.name)
+        .maybeSingle();
+
+      if (!existingExec) {
+        const { error: execInsertError } = await supabase
+          .from('executives')
+          .insert({ name: request.name, department: 'executive', active: true });
+        if (execInsertError) {
+          console.error('[AUTH] ⚠️ Failed to insert into executives table:', execInsertError.message);
+        } else {
+          console.log('[AUTH] ✅ Executive added to executives table');
+        }
+      } else {
+        console.log('[AUTH] Executive already in executives table');
+      }
+
       // Send notifications
       console.log(`[AUTH] Sending approval email to ${request.email}...`);
       const emailResult = await sendApprovalEmail({ name: request.name, email: request.email });
@@ -348,6 +369,23 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
       return res.status(500).json({ error: 'Failed to create user account' });
     }
     console.log(`[AUTH] ✅ User created: id=${newUser.id} name=${newUser.name} role=${newUser.role}`);
+
+    // Also insert into the executives table so they appear in dropdowns
+    console.log(`[AUTH] Inserting ${request.name} into executives table...`);
+    const { error: execInsertError } = await supabase
+      .from('executives')
+      .insert({
+        name: request.name,
+        department: 'executive',
+        active: true
+      });
+
+    if (execInsertError) {
+      console.error('[AUTH] ⚠️ Failed to insert into executives table:', execInsertError.message);
+      // Non-fatal — user is still created, just won't appear in dropdowns
+    } else {
+      console.log('[AUTH] ✅ Executive added to executives table');
+    }
 
     // Mark the access request as approved
     await supabase
