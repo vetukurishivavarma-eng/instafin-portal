@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
-import { sendApprovalEmail, sendRejectionEmail } from '../services/email.service.js';
+import { sendApprovalEmail, sendRejectionEmail, testEmailConnection } from '../services/email.service.js';
 import { sendApprovalWhatsApp, sendRejectionWhatsApp } from '../services/whatsapp.service.js';
 
 const router = express.Router();
@@ -256,10 +256,25 @@ router.get('/all-requests', authenticate, authorize('admin'), async (req, res) =
   }
 });
 
+// POST /api/auth/test-email (admin only - test SMTP configuration)
+router.post('/test-email', authenticate, authorize('admin'), async (req, res) => {
+  console.log('[AUTH] 🧪 Admin testing email configuration');
+  try {
+    const adminEmail = req.user.email;
+    const result = await testEmailConnection({ email: adminEmail });
+    console.log('[AUTH] 🧪 Test email result:', JSON.stringify(result));
+    res.json(result);
+  } catch (error) {
+    console.error('[AUTH] 🧪 Test email error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST /api/auth/approve-request/:id (admin only)
 router.post('/approve-request/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`[AUTH] ✅ Admin approving access request ID=${id} by admin user ID=${req.user.id}`);
 
     // Fetch the access request
     const { data: request, error: fetchError } = await supabase
@@ -269,8 +284,11 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
       .single();
 
     if (fetchError || !request) {
+      console.log(`[AUTH] ❌ Access request ID=${id} not found`);
       return res.status(404).json({ error: 'Access request not found' });
     }
+
+    console.log(`[AUTH] Found request: name=${request.name} email=${request.email} status=${request.status}`);
 
     if (request.status !== 'pending') {
       return res.status(400).json({ error: `Request is already ${request.status}` });
@@ -284,6 +302,7 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
       .single();
 
     if (existingUser) {
+      console.log(`[AUTH] User ${request.email} already exists - just marking approved`);
       // User already exists - just mark request as approved
       await supabase
         .from('access_requests')
@@ -291,17 +310,24 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
         .eq('id', id);
 
       // Send notifications
+      console.log(`[AUTH] Sending approval email to ${request.email}...`);
       const emailResult = await sendApprovalEmail({ name: request.name, email: request.email });
+      console.log(`[AUTH] Email result:`, JSON.stringify(emailResult));
+
+      console.log(`[AUTH] Sending WhatsApp to ${request.mobile}...`);
       const whatsappResult = await sendApprovalWhatsApp({ name: request.name, email: request.email, mobile: request.mobile });
+      console.log(`[AUTH] WhatsApp result:`, JSON.stringify(whatsappResult));
 
       return res.json({
         message: 'Request approved. User already existed.',
         emailSent: emailResult.success,
+        emailError: emailResult.error || null,
         whatsappSent: whatsappResult.success
       });
     }
 
     // Create the user in the users table
+    console.log(`[AUTH] Creating user account for ${request.email}...`);
     const { data: newUser, error: createError } = await supabase
       .from('users')
       .insert({
@@ -316,9 +342,10 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
       .single();
 
     if (createError) {
-      console.error('Create user error:', createError);
+      console.error('[AUTH] ❌ Create user error:', createError);
       return res.status(500).json({ error: 'Failed to create user account' });
     }
+    console.log(`[AUTH] ✅ User created: id=${newUser.id} name=${newUser.name} role=${newUser.role}`);
 
     // Mark the access request as approved
     await supabase
@@ -327,10 +354,14 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
       .eq('id', id);
 
     // Send email notification
+    console.log(`[AUTH] Sending approval email to ${request.email}...`);
     const emailResult = await sendApprovalEmail({ name: request.name, email: request.email });
+    console.log(`[AUTH] Email result:`, JSON.stringify(emailResult));
 
     // Send WhatsApp notification
+    console.log(`[AUTH] Sending WhatsApp to ${request.mobile}...`);
     const whatsappResult = await sendApprovalWhatsApp({ name: request.name, email: request.email, mobile: request.mobile });
+    console.log(`[AUTH] WhatsApp result:`, JSON.stringify(whatsappResult));
 
     res.json({
       message: `Executive ${request.name} has been approved successfully.`,
@@ -341,10 +372,11 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
         role: newUser.role
       },
       emailSent: emailResult.success,
+      emailError: emailResult.error || null,
       whatsappSent: whatsappResult.success
     });
   } catch (error) {
-    console.error('Approve request error:', error);
+    console.error('[AUTH] ❌ Approve request error:', error);
     res.status(500).json({ error: 'Failed to approve request' });
   }
 });
@@ -353,6 +385,7 @@ router.post('/approve-request/:id', authenticate, authorize('admin'), async (req
 router.post('/reject-request/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`[AUTH] ❌ Admin rejecting access request ID=${id} by admin user ID=${req.user.id}`);
 
     const { data: request, error: fetchError } = await supabase
       .from('access_requests')
@@ -361,8 +394,11 @@ router.post('/reject-request/:id', authenticate, authorize('admin'), async (req,
       .single();
 
     if (fetchError || !request) {
+      console.log(`[AUTH] ❌ Access request ID=${id} not found`);
       return res.status(404).json({ error: 'Access request not found' });
     }
+
+    console.log(`[AUTH] Found request: name=${request.name} email=${request.email} status=${request.status}`);
 
     if (request.status !== 'pending') {
       return res.status(400).json({ error: `Request is already ${request.status}` });
@@ -375,18 +411,23 @@ router.post('/reject-request/:id', authenticate, authorize('admin'), async (req,
       .eq('id', id);
 
     // Send rejection email
+    console.log(`[AUTH] Sending rejection email to ${request.email}...`);
     const emailResult = await sendRejectionEmail({ name: request.name, email: request.email });
+    console.log(`[AUTH] Email result:`, JSON.stringify(emailResult));
 
     // Send WhatsApp rejection
+    console.log(`[AUTH] Sending WhatsApp rejection to ${request.mobile}...`);
     const whatsappResult = await sendRejectionWhatsApp({ name: request.name, mobile: request.mobile });
+    console.log(`[AUTH] WhatsApp result:`, JSON.stringify(whatsappResult));
 
     res.json({
       message: `Request from ${request.name} has been rejected.`,
       emailSent: emailResult.success,
+      emailError: emailResult.error || null,
       whatsappSent: whatsappResult.success
     });
   } catch (error) {
-    console.error('Reject request error:', error);
+    console.error('[AUTH] ❌ Reject request error:', error);
     res.status(500).json({ error: 'Failed to reject request' });
   }
 });

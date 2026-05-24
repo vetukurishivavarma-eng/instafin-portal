@@ -28,6 +28,30 @@ export default function ExecutivePage() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null);
+  const [emailTesting, setEmailTesting] = useState(false);
+
+  // Test SMTP configuration
+  const handleTestEmail = async () => {
+    setEmailTesting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/test-email`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess('✅ Test email sent successfully! Check your inbox (and spam folder).');
+      } else {
+        setError(`❌ Email test failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      setError('Failed to test email: ' + err.message);
+    } finally {
+      setEmailTesting(false);
+    }
+  };
 
   useEffect(() => {
     if (!accessToken) return;
@@ -81,7 +105,15 @@ export default function ExecutivePage() {
         setError(data.error || 'Failed to approve request');
         return;
       }
-      setSuccess(`${data.message} ${data.emailSent ? '✅ Email sent.' : '⚠️ Email not sent.'} ${data.whatsappSent ? '✅ WhatsApp sent.' : ''}`);
+      let successMsg = data.message;
+      if (data.emailSent) {
+        successMsg += ' ✅ Email sent.';
+      } else {
+        successMsg += ' ⚠️ Email NOT sent';
+        if (data.emailError) successMsg += ` — ${data.emailError}`;
+      }
+      if (data.whatsappSent) successMsg += ' ✅ WhatsApp sent.';
+      setSuccess(successMsg);
       fetchPendingRequests();
     } catch (err) {
       setError('Failed to approve request');
@@ -104,7 +136,14 @@ export default function ExecutivePage() {
         setError(data.error || 'Failed to reject request');
         return;
       }
-      setSuccess(`${data.message} ${data.emailSent ? '✅ Email sent.' : '⚠️ Email not sent.'}`);
+      let successMsg = data.message;
+      if (data.emailSent) {
+        successMsg += ' ✅ Email sent.';
+      } else {
+        successMsg += ' ⚠️ Email NOT sent';
+        if (data.emailError) successMsg += ` — ${data.emailError}`;
+      }
+      setSuccess(successMsg);
       setShowRejectModal(null);
       fetchPendingRequests();
     } catch (err) {
@@ -369,14 +408,23 @@ export default function ExecutivePage() {
         <div className="space-y-8">
           {/* Pending Requests */}
           <div className="bg-white rounded-3xl shadow-xl p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              Pending Access Requests
-              {pendingRequests.length > 0 && (
-                <span className="ml-3 bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-medium">
-                  {pendingRequests.length} pending
-                </span>
-              )}
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                Pending Access Requests
+                {pendingRequests.length > 0 && (
+                  <span className="ml-3 bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-medium">
+                    {pendingRequests.length} pending
+                  </span>
+                )}
+              </h2>
+              <button
+                onClick={handleTestEmail}
+                disabled={emailTesting}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-all disabled:opacity-50"
+              >
+                {emailTesting ? '⏳ Testing...' : '🧪 Test Email Config'}
+              </button>
+            </div>
 
             {requestsLoading ? (
               <p className="text-gray-500 text-center py-8">Loading requests...</p>
