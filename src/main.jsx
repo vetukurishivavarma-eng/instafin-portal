@@ -10,7 +10,6 @@ import ContactPage from './pages/ContactPage'
 
 // Admin pages
 import DashboardPage from './pages/DashboardPage'
-import PipelinePage from './pages/PipelinePage'
 import CustomerTrackingPage from './pages/CustomerTrackingPage'
 import DownloadFormsPage from './pages/DownloadFormsPage'
 import SanctionPage from './pages/SanctionPage'
@@ -88,11 +87,6 @@ function AppRoutes() {
         } />
         <Route path="/admin/leads" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <PipelinePage />
-          </ProtectedRoute>
-        } />
-        <Route path="/admin/add-lead" element={
-          <ProtectedRoute allowedRoles={['admin']}>
             <LeadEntryPage />
           </ProtectedRoute>
         } />
@@ -133,11 +127,7 @@ function AppRoutes() {
             <LeadEntryPage />
           </ProtectedRoute>
         } />
-        <Route path="/executive/pipeline" element={
-          <ProtectedRoute allowedRoles={['executive']}>
-            <PipelinePage />
-          </ProtectedRoute>
-        } />
+
         <Route path="/executive/customers" element={
           <ProtectedRoute allowedRoles={['executive']}>
             <CustomerListPage />

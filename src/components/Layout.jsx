@@ -34,8 +34,7 @@ export default function Layout({ children }) {
               {isAdmin && (
                 <>
                   <Link to="/admin/dashboard" className={getLinkClass('/admin/dashboard')}>Dashboard</Link>
-                  <Link to="/admin/leads" className={getLinkClass('/admin/leads')}>Manage Leads</Link>
-                  <Link to="/admin/add-lead" className={getLinkClass('/admin/add-lead')}>Add Lead</Link>
+                  <Link to="/admin/leads" className={getLinkClass('/admin/leads')}>Leads</Link>
                   <Link to="/admin/customer-tracking" className={getLinkClass('/admin/customer-tracking')}>Customer Tracking</Link>
                   <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
                   <Link to="/admin/sanction" className={getLinkClass('/admin/sanction')}>Sanction</Link>
@@ -48,8 +47,7 @@ export default function Layout({ children }) {
               {/* Executive Navigation */}
               {isExecutive && (
                 <>
-                  <Link to="/executive/leads" className={getLinkClass('/executive/leads')}>Add Lead</Link>
-                  <Link to="/executive/pipeline" className={getLinkClass('/executive/pipeline')}>Manage Leads</Link>
+                  <Link to="/executive/leads" className={getLinkClass('/executive/leads')}>Leads</Link>
                   <Link to="/executive/customers" className={getLinkClass('/executive/customers')}>Customers</Link>
                   <Link to="/executive/checklists" className={getLinkClass('/executive/checklists')}>Checklist & Upload</Link>
                   <Link to="/executive/credit-query" className={getLinkClass('/executive/credit-query')}>Credit Query</Link>
