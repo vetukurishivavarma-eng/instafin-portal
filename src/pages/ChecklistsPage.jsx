@@ -17,9 +17,11 @@ export default function ChecklistsPage() {
   const [success, setSuccess] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [uploadingDoc, setUploadingDoc] = useState(null);
-  const [deletingDoc, setDeletingDoc] = useState(null);
+  const [uploadingDoc, setUploadingDoc] = useState(null); // { documentId, description }
+  const [deletingDoc, setDeletingDoc] = useState(null); // fileId
   const [viewDoc, setViewDoc] = useState(null);
+  const [showUploadForm, setShowUploadForm] = useState(null); // documentId of item showing upload form
+  const [uploadDescription, setUploadDescription] = useState('');
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
@@ -109,11 +111,12 @@ export default function ChecklistsPage() {
   const cropAadhaarPhoto = async (boundingBox) => {
     if (!selectedLead || !boundingBox) return;
 
-    // Find if Aadhaar or PAN is uploaded
-    const uploadedDocs = Object.keys(checklistStatuses).filter(id => 
-      checklistStatuses[id]?.status === 'uploaded' && 
-      (id.toLowerCase().includes('aadhaar') || id.toLowerCase().includes('pan'))
-    );
+    // Find if Aadhaar or PAN is uploaded (check if array has files)
+    const uploadedDocs = Object.keys(checklistStatuses).filter(id => {
+      const files = checklistStatuses[id];
+      return files && files.length > 0 && 
+        (id.toLowerCase().includes('aadhaar') || id.toLowerCase().includes('pan'));
+    });
 
     if (uploadedDocs.length === 0) {
       console.log('No uploaded Aadhaar/PAN found for cropping.');
@@ -324,18 +327,31 @@ export default function ChecklistsPage() {
     })
     .then(r => r.json())
     .then(data => {
-      // Convert to simple map: { documentId: { status, filePath, documentName } }
-      const statusMap = {};
-      if (data && typeof data === 'object') {
+      // New response format: { grouped: { docId: [files...] }, files: [...] }
+      if (data && data.grouped) {
+        setChecklistStatuses(data.grouped);
+      } else if (data && typeof data === 'object') {
+        // Legacy fallback: try old format
+        const statusMap = {};
         Object.entries(data).forEach(([docId, info]) => {
-          statusMap[docId] = {
-            status: info.status || 'pending',
-            filePath: info.filePath || null,
-            documentName: info.documentName || null
-          };
+          if (typeof info === 'object' && info.status) {
+            statusMap[docId] = [{
+              id: info.id || docId,
+              status: info.status || 'pending',
+              filePath: info.filePath || null,
+              documentName: info.documentName || null,
+              description: info.description || '',
+              originalFile: info.originalFile || null,
+              uploadedAt: info.uploadedAt || null
+            }];
+          } else {
+            statusMap[docId] = [];
+          }
         });
+        setChecklistStatuses(statusMap);
+      } else {
+        setChecklistStatuses({});
       }
-      setChecklistStatuses(statusMap);
     })
     .catch(err => {
       console.error('Failed to load checklist statuses:', err);
@@ -344,8 +360,13 @@ export default function ChecklistsPage() {
   };
 
   // Handle file upload for a checklist item
-  const handleFileUpload = async (documentId, documentName, file) => {
+  const handleFileUpload = async (documentId, documentName, file, description) => {
     if (!selectedLead) return;
+    if (!description || !description.trim()) {
+      setError('Description is required for upload');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
 
     setUploadingDoc(documentId);
     try {
@@ -353,6 +374,7 @@ export default function ChecklistsPage() {
       formData.append('leadId', selectedLead.id);
       formData.append('documentId', documentId);
       formData.append('documentName', documentName);
+      formData.append('description', description.trim());
       formData.append('file', file);
 
       const res = await fetch(`${API_BASE}/checklist-status/upload`, {
@@ -364,6 +386,8 @@ export default function ChecklistsPage() {
       if (res.ok) {
         fetchChecklistStatuses(selectedLead.id);
         setSuccess(`${documentName} uploaded successfully!`);
+        setShowUploadForm(null);
+        setUploadDescription('');
         setTimeout(() => setSuccess(''), 3000);
       } else {
         const errData = await res.json();
@@ -379,20 +403,20 @@ export default function ChecklistsPage() {
     }
   };
 
-  // Handle document deletion
-  const handleDeleteDocument = async (documentId, documentName) => {
-    if (!selectedLead || !window.confirm(`Delete "${documentName}"? This cannot be undone.`)) return;
+  // Handle document deletion (by file record ID)
+  const handleDeleteDocument = async (fileId, documentName) => {
+    if (!selectedLead || !window.confirm(`Delete this file for "${documentName}"? This cannot be undone.`)) return;
 
-    setDeletingDoc(documentId);
+    setDeletingDoc(fileId);
     try {
-      const res = await fetch(`${API_BASE}/checklist-status/${selectedLead.id}/${documentId}`, {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${accessToken}` }
       });
 
       if (res.ok) {
-        setChecklistStatuses(prev => ({ ...prev, [documentId]: { status: 'pending', filePath: null, documentName: null } }));
-        setSuccess(`${documentName} deleted successfully!`);
+        fetchChecklistStatuses(selectedLead.id);
+        setSuccess(`File deleted successfully!`);
         setTimeout(() => setSuccess(''), 3000);
       } else {
         const errData = await res.json();
@@ -407,17 +431,17 @@ export default function ChecklistsPage() {
     }
   };
 
-  // Handle view document
-  const handleViewDocument = async (documentId) => {
-    setViewDoc({ url: null, id: documentId, loading: true });
+  // Handle view document (by file record ID)
+  const handleViewDocument = async (fileId) => {
+    setViewDoc({ url: null, id: fileId, loading: true });
     try {
-      const res = await fetch(`${API_BASE}/checklist-status/file/${selectedLead.id}/${documentId}`, {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       if (!res.ok) throw new Error('Failed to fetch file');
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      setViewDoc({ url: blobUrl, id: documentId, loading: false });
+      setViewDoc({ url: blobUrl, id: fileId, loading: false });
     } catch (err) {
       setError('Failed to load document');
       setTimeout(() => setError(''), 5000);
@@ -428,9 +452,9 @@ export default function ChecklistsPage() {
   // Share via email (opens Gmail compose)
   const handleShareEmail = () => {
     const pendingItems = checklistItems.filter(item => {
-      const statusEntry = checklistStatuses[item.id];
-      const status = statusEntry?.status || 'pending';
-      return status === 'pending' && item.required;
+      const files = checklistStatuses[item.id];
+      const hasUploaded = files && files.length > 0;
+      return !hasUploaded && item.required;
     });
 
     if (pendingItems.length === 0) {
@@ -476,8 +500,9 @@ export default function ChecklistsPage() {
   // Share pending documents via WhatsApp
   const handleSharePendingWhatsApp = async () => {
     const pendingItems = checklistItems.filter(item => {
-      const status = checklistStatuses[item.id]?.status || 'pending';
-      return status === 'pending' && item.required;
+      const files = checklistStatuses[item.id];
+      const hasUploaded = files && files.length > 0;
+      return !hasUploaded && item.required;
     });
 
     if (pendingItems.length === 0) {
@@ -506,11 +531,15 @@ export default function ChecklistsPage() {
     }
   };
 
-  // Compute stats
-  const uploadedCount = checklistItems.filter(item => checklistStatuses[item.id]?.status === 'uploaded').length;
-  const pendingRequiredCount = checklistItems.filter(item =>
-    item.required && (checklistStatuses[item.id]?.status || 'pending') === 'pending'
-  ).length;
+  // Compute stats - now with array of files per document
+  const uploadedCount = checklistItems.filter(item => {
+    const files = checklistStatuses[item.id];
+    return files && files.length > 0;
+  }).length;
+  const pendingRequiredCount = checklistItems.filter(item => {
+    const files = checklistStatuses[item.id];
+    return item.required && (!files || files.length === 0);
+  }).length;
 
   return (
     <div className="py-12">
@@ -643,86 +672,182 @@ export default function ChecklistsPage() {
                           </div>
                           <ul className="divide-y divide-gray-100">
                             {items.map(item => {
-                              const statusEntry = checklistStatuses[item.id];
-                              const status = statusEntry?.status || 'pending';
-                              const isUploaded = status === 'uploaded';
+                              const uploadedFiles = checklistStatuses[item.id] || [];
                               const isUploading = uploadingDoc === item.id;
-                              const isDeleting = deletingDoc === item.id;
+                              const showForm = showUploadForm === item.id;
 
                               return (
-                                <li key={item.id} className={`px-5 py-4 flex items-center gap-3 ${isUploaded ? 'bg-green-50' : ''}`}>
-                                  {/* Status icon */}
-                                  <div className="flex-shrink-0">
-                                    {isUploaded ? (
-                                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                      </svg>
-                                    ) : item.required ? (
-                                      <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                                      </svg>
-                                    ) : (
-                                      <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
-                                  </div>
+                                <li key={item.id} className={`px-5 py-4 ${uploadedFiles.length > 0 ? 'bg-green-50' : ''}`}>
+                                  {/* Document header row */}
+                                  <div className="flex items-center gap-3 mb-2">
+                                    {/* Status icon */}
+                                    <div className="flex-shrink-0">
+                                      {uploadedFiles.length > 0 ? (
+                                        <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                      ) : item.required ? (
+                                        <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                    </div>
 
-                                  {/* Document name */}
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium ${isUploaded ? 'text-green-800' : item.required ? 'text-gray-900' : 'text-gray-700'}`}>
-                                      {item.name}
-                                    </p>
-                                  </div>
+                                    {/* Document name */}
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`text-sm font-medium ${uploadedFiles.length > 0 ? 'text-green-800' : item.required ? 'text-gray-900' : 'text-gray-700'}`}>
+                                        {item.name}
+                                      </p>
+                                      {uploadedFiles.length > 0 && (
+                                        <p className="text-xs text-green-600 mt-0.5">
+                                          {uploadedFiles.length} file{uploadedFiles.length > 1 ? 's' : ''} uploaded
+                                        </p>
+                                      )}
+                                    </div>
 
-                                  {/* Required/Optional badge */}
-                                  <div className="flex-shrink-0">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                      item.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'
-                                    }`}>
-                                      {item.required ? 'Required' : 'Optional'}
-                                    </span>
-                                  </div>
+                                    {/* Required/Optional badge */}
+                                    <div className="flex-shrink-0">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                        item.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'
+                                      }`}>
+                                        {item.required ? 'Required' : 'Optional'}
+                                      </span>
+                                    </div>
 
-                                  {/* Upload/View/Delete buttons */}
-                                  <div className="flex-shrink-0 flex items-center gap-2">
-                                    {isUploaded ? (
-                                      <>
+                                    {/* Add File button */}
+                                    <div className="flex-shrink-0">
+                                      {showForm ? (
                                         <button
-                                          onClick={() => handleViewDocument(item.id)}
+                                          onClick={() => { setShowUploadForm(null); setUploadDescription(''); }}
+                                          className="text-xs text-gray-500 font-semibold bg-gray-100 px-3 py-1.5 rounded-lg hover:bg-gray-200"
+                                        >
+                                          Cancel
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => setShowUploadForm(item.id)}
                                           className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
                                         >
-                                          View
+                                          + Add File
                                         </button>
-                                        <button
-                                          onClick={() => handleDeleteDocument(item.id, item.name)}
-                                          disabled={isDeleting}
-                                          className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
-                                        >
-                                          {isDeleting ? '...' : 'Delete'}
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg font-medium ${
-                                        isUploading
-                                          ? 'bg-gray-300 text-gray-500 cursor-wait'
-                                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                                      }`}>
-                                        {isUploading ? 'Uploading...' : 'Upload'}
-                                        <input
-                                          type="file"
-                                          className="hidden"
-                                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                          disabled={isUploading}
-                                          onChange={(e) => {
-                                            if (e.target.files[0]) {
-                                              handleFileUpload(item.id, item.name, e.target.files[0]);
-                                            }
-                                          }}
-                                        />
-                                      </label>
-                                    )}
+                                      )}
+                                    </div>
                                   </div>
+
+                                  {/* Upload Form (inline) */}
+                                  {showForm && (
+                                    <div className="ml-8 mb-3 p-4 bg-white border border-blue-200 rounded-xl">
+                                      <div className="space-y-3">
+                                        {/* Description field (mandatory) */}
+                                        <div>
+                                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                            Description <span className="text-red-500">*</span>
+                                          </label>
+                                          <textarea
+                                            value={uploadDescription}
+                                            onChange={(e) => setUploadDescription(e.target.value)}
+                                            placeholder="Describe this document (e.g. Front & back copy, Signed copy, etc.)"
+                                            rows={2}
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                                            disabled={isUploading}
+                                          />
+                                        </div>
+
+                                        {/* File input + Upload button */}
+                                        <div className="flex items-center gap-3">
+                                          <label className={`flex-1 cursor-pointer text-sm px-4 py-2 rounded-lg font-medium text-center ${
+                                            isUploading
+                                              ? 'bg-gray-300 text-gray-500 cursor-wait'
+                                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                                          }`}>
+                                            {isUploading ? (
+                                              <span className="flex items-center justify-center gap-2">
+                                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                </svg>
+                                                Uploading...
+                                              </span>
+                                            ) : (
+                                              'Choose File & Upload'
+                                            )}
+                                            <input
+                                              type="file"
+                                              className="hidden"
+                                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                              disabled={isUploading || !uploadDescription.trim()}
+                                              onChange={(e) => {
+                                                if (e.target.files[0]) {
+                                                  handleFileUpload(item.id, item.name, e.target.files[0], uploadDescription);
+                                                }
+                                              }}
+                                            />
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Uploaded files list */}
+                                  {uploadedFiles.length > 0 && (
+                                    <div className="ml-8 space-y-2 mt-2">
+                                      {uploadedFiles.map((file) => (
+                                        <div
+                                          key={file.id}
+                                          className="flex items-center gap-3 bg-white border border-green-200 rounded-lg px-4 py-3"
+                                        >
+                                          {/* File icon */}
+                                          <div className="flex-shrink-0">
+                                            <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                          </div>
+
+                                          {/* File info */}
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                              {file.description || 'No description'}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                              {file.originalFile || 'Unknown file'}
+                                              {file.uploadedAt && (
+                                                <span className="ml-2">
+                                                  {new Date(file.uploadedAt).toLocaleDateString('en-IN', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                  })}
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+
+                                          {/* View button */}
+                                          <button
+                                            onClick={() => handleViewDocument(file.id)}
+                                            className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
+                                          >
+                                            View
+                                          </button>
+
+                                          {/* Delete button */}
+                                          <button
+                                            onClick={() => handleDeleteDocument(file.id, file.description || item.name)}
+                                            disabled={deletingDoc === file.id}
+                                            className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                                          >
+                                            {deletingDoc === file.id ? '...' : 'Delete'}
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </li>
                               );
                             })}

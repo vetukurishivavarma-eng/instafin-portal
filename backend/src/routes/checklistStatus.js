@@ -47,7 +47,34 @@ const upload = multer({
 
 router.use(authenticate);
 
+/**
+ * Helper: parse the document_name field which may be a JSON-encoded object
+ * with name, description, and originalFile keys, or a plain string (legacy).
+ */
+function parseDocName(docName) {
+  if (!docName) return { name: '', description: '', originalFile: '' };
+  try {
+    const parsed = JSON.parse(docName);
+    return {
+      name: parsed.name || '',
+      description: parsed.description || '',
+      originalFile: parsed.originalFile || parsed.file || '',
+    };
+  } catch {
+    // Legacy: plain string
+    return { name: docName, description: '', originalFile: '' };
+  }
+}
+
+/**
+ * Helper: build the document_name JSON string for storage
+ */
+function buildDocName(name, description, originalFile) {
+  return JSON.stringify({ name, description, originalFile });
+}
+
 // GET /api/checklist-status/:leadId - Get all checklist statuses for a lead
+// Returns files grouped by document_id, each file with id, description, filePath, fileName, uploadedAt
 router.get('/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
@@ -55,22 +82,38 @@ router.get('/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) 
     const { data: statuses, error } = await supabase
       .from('lead_checklist_status')
       .select('*')
-      .eq('lead_id', leadId);
+      .eq('lead_id', leadId)
+      .order('uploaded_at', { ascending: false });
 
     if (error) throw error;
 
-    // Return as a map: { documentId: { status, filePath, uploadedAt } }
-    const statusMap = {};
+    // Group files by document_id, return arrays
+    const groupedMap = {};
     (statuses || []).forEach(s => {
-      statusMap[s.document_id] = {
+      const docId = s.document_id;
+      if (!groupedMap[docId]) {
+        groupedMap[docId] = [];
+      }
+      const parsed = parseDocName(s.document_name);
+      groupedMap[docId].push({
+        id: s.id,
         status: s.status,
         filePath: s.file_path,
         uploadedAt: s.uploaded_at,
-        documentName: s.document_name
-      };
+        documentId: s.document_id,
+        documentName: parsed.name,
+        description: parsed.description,
+        originalFile: parsed.originalFile,
+      });
     });
 
-    res.json(statusMap);
+    // Also return a flat list
+    const allFiles = Object.values(groupedMap).flat();
+
+    res.json({
+      grouped: groupedMap,
+      files: allFiles,
+    });
   } catch (error) {
     console.error('Error fetching checklist statuses:', error);
     res.status(500).json({ error: 'Failed to fetch checklist statuses' });
@@ -78,12 +121,17 @@ router.get('/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) 
 });
 
 // POST /api/checklist-status/upload - Upload a document for a checklist item
+// Now accepts description and allows multiple files per document_id (INSERT, not upsert)
 router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('file'), async (req, res) => {
   try {
-    const { leadId, documentId, documentName } = req.body;
+    const { leadId, documentId, documentName, description } = req.body;
 
     if (!leadId || !documentId || !documentName) {
       return res.status(400).json({ error: 'leadId, documentId, and documentName are required' });
+    }
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({ error: 'Description is required for upload' });
     }
 
     if (!req.file) {
@@ -126,28 +174,36 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
       filePath = req.file.filename;
     }
 
-    // Upsert checklist status
-    const { data: statusRecord, error: upsertError } = await supabase
+    // Build the document_name JSON with description and original filename
+    const storedDocName = buildDocName(documentName, description.trim(), req.file.originalname);
+
+    // INSERT a new row (NOT upsert) to allow multiple files per document
+    const { data: statusRecord, error: insertError } = await supabase
       .from('lead_checklist_status')
-      .upsert({
+      .insert({
         lead_id: leadId,
         document_id: documentId,
-        document_name: documentName,
+        document_name: storedDocName,
         status: 'uploaded',
         file_path: filePath,
         uploaded_at: new Date().toISOString()
-      }, { onConflict: 'lead_id,document_id' })
+      })
       .select()
       .single();
 
-    if (upsertError) throw upsertError;
+    if (insertError) throw insertError;
+
+    const parsed = parseDocName(statusRecord.document_name);
 
     res.status(201).json({
       id: statusRecord.id,
       leadId: statusRecord.lead_id,
       documentId: statusRecord.document_id,
-      documentName: statusRecord.document_name,
+      documentName: parsed.name,
+      description: parsed.description,
+      originalFile: parsed.originalFile,
       status: statusRecord.status,
+      filePath: statusRecord.file_path,
       uploadedAt: statusRecord.uploaded_at
     });
   } catch (error) {
@@ -156,21 +212,23 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
   }
 });
 
-// GET /api/checklist-status/file/:leadId/:documentId - Download an uploaded file
-router.get('/file/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+// GET /api/checklist-status/file/:fileId - Download an uploaded file by its record ID
+router.get('/file/:fileId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    const { leadId, documentId } = req.params;
+    const { fileId } = req.params;
 
     const { data: record } = await supabase
       .from('lead_checklist_status')
       .select('file_path, document_name')
-      .eq('lead_id', leadId)
-      .eq('document_id', documentId)
+      .eq('id', fileId)
       .single();
 
     if (!record || !record.file_path) {
       return res.status(404).json({ error: 'File not found' });
     }
+
+    const parsed = parseDocName(record.document_name);
+    const downloadName = parsed.originalFile || parsed.name || 'document';
 
     if (process.env.NODE_ENV === 'production') {
       // Production: get signed URL from Supabase Storage
@@ -186,7 +244,7 @@ router.get('/file/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), 
       if (!fs.existsSync(localPath)) {
         return res.status(404).json({ error: 'File not found on disk' });
       }
-      return res.download(localPath, record.document_name);
+      return res.download(localPath, downloadName);
     }
   } catch (error) {
     console.error('File download error:', error);
@@ -194,35 +252,33 @@ router.get('/file/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), 
   }
 });
 
-// DELETE /api/checklist-status/:leadId/:documentId - Delete an uploaded document
-router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+// DELETE /api/checklist-status/file/:fileId - Delete an uploaded document by its record ID
+router.delete('/file/:fileId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    const { leadId, documentId } = req.params;
+    const { fileId } = req.params;
 
-    console.log(`DELETE checklist-status: leadId=${leadId}, documentId=${documentId}`);
+    console.log(`DELETE checklist-status file: fileId=${fileId}`);
 
-    // Verify lead still exists first
-    const { data: lead, error: leadErr } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('id', leadId)
-      .single();
-
-    if (leadErr || !lead) {
-      console.error('Lead not found for delete:', leadErr);
-      return res.status(404).json({ error: 'Lead not found' });
-    }
-
-    // Get the record first to find the file path
+    // Get the record first to find the file path and lead_id
     const { data: record } = await supabase
       .from('lead_checklist_status')
-      .select('file_path')
-      .eq('lead_id', leadId)
-      .eq('document_id', documentId)
+      .select('file_path, lead_id')
+      .eq('id', fileId)
       .single();
 
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
+    }
+
+    // Verify lead exists
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', record.lead_id)
+      .single();
+
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
     }
 
     // Delete file from storage
@@ -241,12 +297,11 @@ router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), as
       }
     }
 
-    // Delete ONLY the checklist status record (NOT the lead)
+    // Delete the specific file record by its ID
     const { error } = await supabase
       .from('lead_checklist_status')
       .delete()
-      .eq('lead_id', leadId)
-      .eq('document_id', documentId);
+      .eq('id', fileId);
 
     if (error) throw error;
 
@@ -254,7 +309,7 @@ router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), as
     const { data: leadAfter } = await supabase
       .from('leads')
       .select('id')
-      .eq('id', leadId)
+      .eq('id', record.lead_id)
       .single();
 
     if (!leadAfter) {
@@ -262,7 +317,7 @@ router.delete('/:leadId/:documentId', authorize('admin', 'executive', 'dsa'), as
       return res.status(500).json({ error: 'Lead was unexpectedly deleted - check DB cascade settings' });
     }
 
-    console.log(`DELETE checklist-status success: leadId=${leadId} still exists`);
+    console.log(`DELETE checklist-status file success: leadId=${record.lead_id} still exists`);
     res.json({ success: true, message: 'Document deleted' });
   } catch (error) {
     console.error('Delete document error:', error);
