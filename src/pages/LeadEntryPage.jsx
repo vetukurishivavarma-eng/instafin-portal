@@ -405,53 +405,57 @@ export default function LeadEntryPage() {
       {/* CENTRAL ACTION DASHBOARD CARDS */}
       <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
         
-        {/* CARD 1: ADD NEW LEAD */}
-        <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
-          <div>
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-6 shadow-md shadow-blue-500/20">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="20" y1="8" x2="20" y2="14" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
+        {/* CARD 1: ADD NEW LEAD — visible only to executives */}
+        {!isAdmin && (
+          <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
+            <div>
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-6 shadow-md shadow-blue-500/20">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="8.5" cy="7" r="4" />
+                  <line x1="20" y1="8" x2="20" y2="14" />
+                  <line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Add New Lead</h2>
+              <p className="text-gray-500 leading-relaxed mb-6 font-medium">
+                Manually capture new customer loan requirements, co-applicant parameters, and banks selection to calculate credit risk.
+              </p>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Add New Lead</h2>
-            <p className="text-gray-500 leading-relaxed mb-6 font-medium">
-              Manually capture new customer loan requirements, co-applicant parameters, and banks selection to calculate credit risk.
-            </p>
+            <button
+              onClick={() => { setShowAddModal(true); setError(''); setSuccess(''); }}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-bold hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-500/10 hover-lift transition-all"
+            >
+              Create Lead Form
+            </button>
           </div>
-          <button
-            onClick={() => { setShowAddModal(true); setError(''); setSuccess(''); }}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-bold hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-500/10 hover-lift transition-all"
-          >
-            Create Lead Form
-          </button>
-        </div>
+        )}
 
-        {/* CARD 2: MANAGE & ASSIGN LEADS */}
-        <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
-          <div>
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-6 shadow-md shadow-indigo-500/20">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
+        {/* CARD 2: MANAGE & ASSIGN LEADS — visible only to admin */}
+        {isAdmin && (
+          <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
+            <div>
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-6 shadow-md shadow-indigo-500/20">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Manage Leads</h2>
+              <p className="text-gray-500 leading-relaxed mb-6 font-medium">
+                Assign pending leads to loan executives, view assigned files, and track real-time loan pipeline status.
+              </p>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Manage Leads</h2>
-            <p className="text-gray-500 leading-relaxed mb-6 font-medium">
-              Assign pending leads to loan executives, view assigned files, and track real-time loan pipeline status.
-            </p>
+            <button
+              onClick={() => { setShowManageModal(true); setError(''); setSuccess(''); }}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-700 text-white font-bold hover:from-indigo-700 hover:to-purple-800 shadow-md shadow-indigo-500/10 hover-lift transition-all"
+            >
+              Open Management Queue ({unassignedLeads.length} Unassigned)
+            </button>
           </div>
-          <button
-            onClick={() => { setShowManageModal(true); setError(''); setSuccess(''); }}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-700 text-white font-bold hover:from-indigo-700 hover:to-purple-800 shadow-md shadow-indigo-500/10 hover-lift transition-all"
-          >
-            Open Management Queue ({unassignedLeads.length} Unassigned)
-          </button>
-        </div>
+        )}
 
       </div>
 
