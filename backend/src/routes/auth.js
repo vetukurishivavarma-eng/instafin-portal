@@ -517,10 +517,15 @@ router.post('/revoke-access/:id', authenticate, authorize('admin'), async (req, 
     }
 
     // Update the access request status to 'revoked'
-    await supabase
+    const { error: updateError } = await supabase
       .from('access_requests')
       .update({ status: 'revoked', updated_at: new Date().toISOString(), reviewed_by: req.user.id })
       .eq('id', id);
+
+    if (updateError) {
+      console.error('[AUTH] ❌ Failed to update access request status:', updateError);
+      return res.status(500).json({ error: 'Failed to update access request status in database' });
+    }
 
     console.log(`[AUTH] ✅ Access revoked for ${request.name} (${request.email})`);
 
