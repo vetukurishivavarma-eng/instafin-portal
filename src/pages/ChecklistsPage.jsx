@@ -552,32 +552,97 @@ export default function ChecklistsPage() {
   };
 
   // Parse AI summary for income/deduction hints
+  // Also looks for the embedded ```json block to extract structured data
   const prefillEligibilityFromSummary = () => {
     if (!summary) return;
     try {
-      // Try to extract numbers from the summary text
-      const text = summary;
+      // 1) Try extracting from the JSON block first (most reliable)
+      let parsedExtra = null;
+      const jsonMatch = summary.match(/```json([\s\S]*?)```/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const root = JSON.parse(jsonMatch[1].trim());
+          parsedExtra = root.extracted_details || null;
+        } catch (_) { /* ignore parse error */ }
+      }
+
+      if (parsedExtra) {
+        if (parsedExtra.gross_income) {
+          const val = parseInt(String(parsedExtra.gross_income).replace(/,/g, ''));
+          if (val > 0) setEligGrossSalary(String(val));
+        } else if (parsedExtra.monthly_income) {
+          const val = parseInt(String(parsedExtra.monthly_income).replace(/,/g, ''));
+          if (val > 0) setEligGrossSalary(String(val));
+        }
+        if (parsedExtra.pf) {
+          const val = parseInt(String(parsedExtra.pf).replace(/,/g, ''));
+          if (val > 0) setEligPF(String(val));
+        }
+        if (parsedExtra.income_tax) {
+          const val = parseInt(String(parsedExtra.income_tax).replace(/,/g, ''));
+          if (val > 0) setEligIncomeTax(String(val));
+        }
+        if (parsedExtra.profession_tax) {
+          const val = parseInt(String(parsedExtra.profession_tax).replace(/,/g, ''));
+          if (val > 0) setEligProfessionTax(String(val));
+        }
+        if (parsedExtra.rental_income) {
+          const val = parseInt(String(parsedExtra.rental_income).replace(/,/g, ''));
+          if (val > 0) setEligRentalIncome(String(val));
+        }
+        // If we got structured data, we're done — no need for regex fallback
+        return;
+      }
+
+      // 2) Fallback: strip markdown bold/italic markers and try regex patterns
+      const text = summary.replace(/\*\*/g, '').replace(/\*/g, '');
       
-      // Look for salary/gross income patterns
-      const salaryMatch = text.match(/(?:gross\s*salary|monthly\s*income|salary\s*income|total\s*income)[:\s]*Rs?\.?\s*([\d,]+)/i);
-      if (salaryMatch) {
-        const val = parseInt(salaryMatch[1].replace(/,/g, ''));
-        if (val > 0) setEligGrossSalary(String(val));
+      // Look for gross income patterns
+      const incomePatterns = [
+        /(?:gross\s+monthly\s+income|gross\s+salary|gross\s+income|monthly\s+income|salary\s+income|total\s+income)[:\s]*₹?\s*([\d,]+)/i,
+        /(?:gross\s+monthly\s+income|gross\s+salary|gross\s+income|monthly\s+income|salary\s+income|total\s+income)[:\s]*rs?\.?\s*([\d,]+)/i,
+        /(?:earns|income|salary)(?:\s+is|\s*~|\s*approx(?:imately)?)?\s*(?:₹|rs?\.?)?\s*([\d,]+)\s*(?:per\s+month|\/month|\/pm|monthly)/i
+      ];
+      let salaryVal = 0;
+      for (const pattern of incomePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (val > 0) { salaryVal = val; break; }
+        }
       }
+      if (salaryVal > 0) setEligGrossSalary(String(salaryVal));
 
-      // Look for PF patterns
-      const pfMatch = text.match(/(?:provident\s*fund|pf|p.f.)[:\s]*Rs?\.?\s*([\d,]+)/i);
-      if (pfMatch) {
-        const val = parseInt(pfMatch[1].replace(/,/g, ''));
-        if (val > 0) setEligPF(String(val));
+      // Look for PF / Provident Fund patterns
+      const pfPatterns = [
+        /(?:provident\s+fund|pf|p\.f\.)[:\s]*₹?\s*([\d,]+)/i,
+        /(?:provident\s+fund|pf|p\.f\.)[:\s]*rs?\.?\s*([\d,]+)/i,
+        /(?:pf|provident\s+fund)(?:\s+deduction|\s+contribution)?[\s:]*₹?\s*([\d,]+)/i
+      ];
+      let pfVal = 0;
+      for (const pattern of pfPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (val > 0) { pfVal = val; break; }
+        }
       }
+      if (pfVal > 0) setEligPF(String(pfVal));
 
-      // Look for income tax patterns
-      const taxMatch = text.match(/(?:income\s*tax|tax\s*deduction|tds)[:\s]*Rs?\.?\s*([\d,]+)/i);
-      if (taxMatch) {
-        const val = parseInt(taxMatch[1].replace(/,/g, ''));
-        if (val > 0) setEligIncomeTax(String(val));
+      // Look for Income Tax / TDS patterns
+      const taxPatterns = [
+        /(?:income\s+tax|tax\s+deduction|tax\s+deducted|tds)[:\s]*₹?\s*([\d,]+)/i,
+        /(?:income\s+tax|tax\s+deduction|tds)[:\s]*rs?\.?\s*([\d,]+)/i
+      ];
+      let taxVal = 0;
+      for (const pattern of taxPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (val > 0) { taxVal = val; break; }
+        }
       }
+      if (taxVal > 0) setEligIncomeTax(String(taxVal));
     } catch (err) {
       console.error('Failed to parse summary for eligibility:', err);
     }
