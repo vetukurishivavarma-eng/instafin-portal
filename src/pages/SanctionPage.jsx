@@ -8,7 +8,12 @@ export default function SanctionPage() {
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [banks, setBanks] = useState([]);
-  const [bankForms, setBankForms] = useState({}); // { [bankId]: { amount, file, uploaded } }
+  const [bankForms, setBankForms] = useState({}); // { [bankId]: { amount, uploaded } }
+  const [sanctionFiles, setSanctionFiles] = useState({}); // { [bankId]: [files...] }
+  const [showUploadForm, setShowUploadForm] = useState(null); // bankId
+  const [newUpload, setNewUpload] = useState({ file: null, description: '' });
+  const [deletingDoc, setDeletingDoc] = useState(null);
+  const [viewDoc, setViewDoc] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -32,19 +37,51 @@ export default function SanctionPage() {
     }
   };
 
+  // Fetch existing sanction letter files from checklist-status
+  const fetchSanctionFiles = async (leadId, banksList) => {
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/${leadId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      const grouped = data?.grouped || {};
+      // Filter only sanction letter documents
+      const sanctionDocs = {};
+      Object.entries(grouped).forEach(([docId, files]) => {
+        if (docId.startsWith('sanction_letter_')) {
+          // Extract bank name from documentId: sanction_letter_BankName
+          const bankName = docId.replace('sanction_letter_', '');
+          // Find the matching bank to get its id (use banksList from param, not state)
+          const bank = (banksList || banks).find(b => b.bank_name === bankName);
+          if (bank) {
+            sanctionDocs[bank.id] = files;
+          }
+        }
+      });
+      setSanctionFiles(prev => ({...prev, ...sanctionDocs}));
+    } catch (err) {
+      console.error('Failed to load sanction files:', err);
+    }
+  };
+
   const fetchBanks = async (leadId) => {
     try {
       const res = await fetch(`${API_BASE}/leads/${leadId}/banks`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       const data = await res.json();
-      setBanks(data.banks || []);
+      const banksList = data.banks || [];
+      setBanks(banksList);
       // Initialize form state for each processing bank
       const forms = {};
-      (data.banks || []).forEach(b => {
-        forms[b.id] = { amount: '', file: null, uploaded: false, description: '' };
+      banksList.forEach(b => {            forms[b.id] = { amount: '' };
       });
       setBankForms(forms);
+      setNewUpload({ file: null, description: '' });
+      setShowUploadForm(null);
+
+      // Fetch existing sanction files after banks are loaded
+      await fetchSanctionFiles(leadId, banksList);
     } catch (err) {
       setError('Failed to load bank details');
     }
@@ -56,6 +93,7 @@ export default function SanctionPage() {
     setSelectedLead(lead || null);
     setError('');
     setSuccess('');
+    setSanctionFiles({});
     if (lead) {
       fetchBanks(lead.id);
     } else {
@@ -71,14 +109,20 @@ export default function SanctionPage() {
     }));
   };
 
-  const handleFileSelect = (bankId, e) => {
+  const resetUploadForm = () => {
+    setNewUpload({ file: null, description: '' });
+    setShowUploadForm(null);
+  };
+
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (file) updateBankForm(bankId, 'file', file);
+    if (file) {
+      setNewUpload(prev => ({ ...prev, file }));
+    }
   };
 
   const handleUploadLetter = async (bankId) => {
-    const form = bankForms[bankId];
-    if (!form?.file || !selectedLead) return;
+    if (!newUpload.file || !selectedLead) return;
 
     setLoading(true);
     setError('');
@@ -89,8 +133,8 @@ export default function SanctionPage() {
       formData.append('leadId', selectedLead.id);
       formData.append('documentId', `sanction_letter_${bank.bank_name}`);
       formData.append('documentName', `Sanction Letter - ${bank.bank_name}`);
-      formData.append('description', form.description || '');
-      formData.append('file', form.file);
+      formData.append('description', newUpload.description || '');
+      formData.append('file', newUpload.file);
 
       const res = await fetch(`${API_BASE}/checklist-status/upload`, {
         method: 'POST',
@@ -104,7 +148,9 @@ export default function SanctionPage() {
         return;
       }
 
-      updateBankForm(bankId, 'uploaded', true);
+      // Refresh files for this bank
+      await fetchSanctionFiles(selectedLead.id);
+      resetUploadForm();
       setSuccess('Sanction letter uploaded');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -114,9 +160,54 @@ export default function SanctionPage() {
     }
   };
 
+  const handleDeleteDocument = async (fileId, bankId) => {
+    if (!selectedLead || !window.confirm('Delete this sanction letter file? This cannot be undone.')) return;
+
+    setDeletingDoc(fileId);
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      if (res.ok) {
+        await fetchSanctionFiles(selectedLead.id);
+        setSuccess('File deleted successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const errData = await res.json();
+        setError(errData.error || 'Delete failed');
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('Delete failed');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setDeletingDoc(null);
+    }
+  };
+
+  const handleViewDocument = async (fileId) => {
+    setViewDoc({ url: null, id: fileId, loading: true });
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch file');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setViewDoc({ url: blobUrl, id: fileId, loading: false });
+    } catch (err) {
+      setError('Failed to load document');
+      setTimeout(() => setError(''), 5000);
+      setViewDoc(null);
+    }
+  };
+
   const handleSanctionBank = async (bankId) => {
     const form = bankForms[bankId];
-    if (!form?.amount || !form?.uploaded) return;
+    const files = sanctionFiles[bankId] || [];
+    if (!form?.amount || files.length === 0) return;
 
     setLoading(true);
     setError('');
@@ -270,6 +361,7 @@ export default function SanctionPage() {
               <div className="grid gap-4">
                 {processingBanks.map(bank => {
                   const form = bankForms[bank.id] || {};
+                  const uploadedFiles = sanctionFiles[bank.id] || [];
                   return (
                     <div key={bank.id} className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-yellow-400">
                       <div className="flex items-center justify-between mb-4">
@@ -292,61 +384,160 @@ export default function SanctionPage() {
                         )}
                       </div>
 
-                      {/* Upload Sanction Letter */}
+                      {/* Upload Sanction Letter — Multi-file support */}
                       <div className="mb-4">
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Sanction Letter</label>
-                        
-                        {/* Description field */}
-                        <div className="mb-3">
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">
-                            Description
-                          </label>
-                          <textarea
-                            value={form.description || ''}
-                            onChange={(e) => updateBankForm(bank.id, 'description', e.target.value)}
-                            placeholder="Describe the sanction letter (e.g. Final sanction letter, Revised terms, etc.)"
-                            rows={2}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                            disabled={loading}
-                          />
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-semibold text-gray-700">Sanction Letter</label>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                          <label className={`flex-1 cursor-pointer border-2 border-dashed rounded-xl p-3 text-center transition-colors ${
-                            form.uploaded ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-400'
-                          }`}>
-                            {form.file ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="text-sm text-gray-700">{form.file.name}</span>
-                                {form.uploaded && <span className="text-xs text-green-600">Uploaded</span>}
+                        {/* Uploaded files list */}
+                        {uploadedFiles.length > 0 && (
+                          <div className="mb-3 space-y-2">
+                            {uploadedFiles.map((file) => (
+                              <div
+                                key={file.id}
+                                className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3"
+                              >
+                                {/* File icon */}
+                                <div className="flex-shrink-0">
+                                  <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                </div>
+
+                                {/* File info */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {file.description || 'Sanction letter'}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {file.originalFile || 'Unknown file'}
+                                    {file.uploadedAt && (
+                                      <span className="ml-2">
+                                        {new Date(file.uploadedAt).toLocaleDateString('en-IN', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        })}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+
+                                {/* View button */}
+                                <button
+                                  onClick={() => handleViewDocument(file.id)}
+                                  className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
+                                >
+                                  View
+                                </button>
+
+                                {/* Delete button */}
+                                <button
+                                  onClick={() => handleDeleteDocument(file.id, bank.id)}
+                                  disabled={deletingDoc === file.id}
+                                  className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                                >
+                                  {deletingDoc === file.id ? '...' : 'Delete'}
+                                </button>
                               </div>
-                            ) : (
-                              <span className="text-sm text-gray-500">Click to select file</span>
-                            )}
-                            <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => handleFileSelect(bank.id, e)} />
-                          </label>
-                          {form.file && !form.uploaded && (
-                            <button
-                              onClick={() => handleUploadLetter(bank.id)}
-                              disabled={loading}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
-                            >
-                              Upload
-                            </button>
-                          )}
-                        </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* "Add File" button when form is closed */}
+                        {showUploadForm !== bank.id && (
+                          <button
+                            onClick={() => { resetUploadForm(); setShowUploadForm(bank.id); }}
+                            className="text-xs text-blue-700 font-semibold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200"
+                          >
+                            + Add File
+                          </button>
+                        )}
+
+                        {/* Upload form (inline) */}
+                        {showUploadForm === bank.id && (
+                          <div className="p-4 bg-white border border-blue-200 rounded-xl space-y-3">
+                            {/* Description field */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                Description
+                              </label>
+                              <textarea
+                                value={newUpload.description}
+                                onChange={(e) => setNewUpload(prev => ({ ...prev, description: e.target.value }))}
+                                placeholder="Describe the sanction letter (e.g. Final sanction letter, Revised terms, etc.)"
+                                rows={2}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                                disabled={loading}
+                              />
+                            </div>
+
+                            {/* File input + Upload button */}
+                            <div className="flex items-center gap-3">
+                              <label className={`flex-1 cursor-pointer text-sm px-4 py-2 rounded-lg font-medium text-center ${
+                                loading
+                                  ? 'bg-gray-300 text-gray-500 cursor-wait'
+                                  : newUpload.file
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                              }`}>
+                                {loading ? (
+                                  <span className="flex items-center justify-center gap-2">
+                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    Uploading...
+                                  </span>
+                                ) : newUpload.file ? (
+                                  <span className="flex items-center justify-center gap-2">
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {newUpload.file.name}
+                                  </span>
+                                ) : (
+                                  'Choose File'
+                                )}
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                  disabled={loading}
+                                  onChange={handleFileSelect}
+                                />
+                              </label>
+                              {newUpload.file && (
+                                <button
+                                  onClick={() => handleUploadLetter(bank.id)}
+                                  disabled={loading}
+                                  className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  Upload
+                                </button>
+                              )}
+                              <button
+                                onClick={resetUploadForm}
+                                disabled={loading}
+                                className="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons */}
                       <div className="flex gap-3">
                         <button
                           onClick={() => handleSanctionBank(bank.id)}
-                          disabled={!form.uploaded || !form.amount || loading}
+                          disabled={!form.amount || uploadedFiles.length === 0 || loading}
                           className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition-all ${
-                            form.uploaded && form.amount
+                            form.amount && uploadedFiles.length > 0
                               ? 'bg-green-700 hover:bg-green-800'
                               : 'bg-gray-300 cursor-not-allowed'
                           }`}
@@ -424,6 +615,46 @@ export default function SanctionPage() {
       {!selectedLead && leads.length > 0 && (
         <div className="text-center py-8 text-gray-500">
           Select a lead above to proceed with bank-wise sanction or rejection.
+        </div>
+      )}
+
+      {/* View Document Modal */}
+      {viewDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center px-6 py-4 border-b">
+              <h3 className="text-lg font-bold text-gray-900">Sanction Letter</h3>
+              <div className="flex items-center gap-3">
+                {viewDoc.url && (
+                  <a
+                    href={viewDoc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Open in new tab
+                  </a>
+                )}
+                <button
+                  onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}
+                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {viewDoc.loading ? (
+                <div className="flex items-center justify-center h-[70vh] text-gray-500">Loading document...</div>
+              ) : (
+                <iframe
+                  src={viewDoc.url}
+                  title="Sanction Letter"
+                  className="w-full h-[70vh] border rounded-lg"
+                />
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
