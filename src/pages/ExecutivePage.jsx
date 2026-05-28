@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
@@ -8,6 +8,23 @@ const BANK_OPTIONS = [
   'Canara Bank', 'Union Bank', 'Kotak Mahindra', 'IDFC First',
   'Bajaj Finserv', 'Tata Capital', 'L&T Finance', 'Muthoot Finance',
   'Manappuram Finance', 'Other'
+];
+
+const COMMON_BANKS = [
+  'SBI', 'PNB', 'HDFC', 'ICICI', 'Axis Bank', 'Bank of Baroda',
+  'Canara Bank', 'Union Bank', 'Kotak Mahindra', 'IDFC First',
+  'Bajaj Finserv', 'Tata Capital', 'L&T Finance', 'Muthoot Finance',
+  'Manappuram Finance', 'Yes Bank', 'RBL Bank', 'IndusInd Bank',
+  'Federal Bank', 'South Indian Bank', 'Bank of India', 'Indian Bank',
+  'Central Bank of India', 'Indian Overseas Bank', 'UCO Bank',
+  'Punjab & Sind Bank', 'Bank of Maharashtra', 'Jammu & Kashmir Bank',
+  'DCB Bank', 'Karur Vysya Bank', 'City Union Bank', 'Dhanlaxmi Bank',
+  'Karnataka Bank', 'CSB Bank', 'Tamilnad Mercantile Bank',
+  'Shriram Finance', 'Aditya Birla Finance', 'HDB Financial Services',
+  'Cholamandalam Finance', 'Piramal Finance', 'IIFL Finance',
+  'Poonawalla Fincorp', 'Hero FinCorp', 'IndiaBulls Finance',
+  'SMFG India Credit', 'TVS Credit', 'Sundaram Finance',
+  'Mahindra Finance', 'Reliance Capital', 'Edelweiss Finance'
 ];
 
 export default function ExecutivePage() {
@@ -21,6 +38,10 @@ export default function ExecutivePage() {
   const [success, setSuccess] = useState('');
   const [bankModal, setBankModal] = useState(null);
   const [selectedBank, setSelectedBank] = useState('');
+  const [customBankInput, setCustomBankInput] = useState('');
+  const [showBankSuggestions, setShowBankSuggestions] = useState(false);
+  const bankInputRef = useRef(null);
+  const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
   // Access request state
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -28,6 +49,7 @@ export default function ExecutivePage() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null);
+  const [showRevokeModal, setShowRevokeModal] = useState(null);
   const [emailTesting, setEmailTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('yeshwantraavi4@gmail.com');
 
@@ -190,7 +212,12 @@ export default function ExecutivePage() {
   };
 
   const handleAssignBank = async () => {
-    if (!selectedBank || !bankModal) return;
+    const bankName = selectedBank === 'Other' ? customBankInput.trim() : selectedBank;
+    if (!bankName || !bankModal) {
+      setError('Please select or type a bank name');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/leads/${bankModal.id}/assign-bank`, {
         method: 'PUT',
@@ -198,7 +225,7 @@ export default function ExecutivePage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ bankName: selectedBank })
+        body: JSON.stringify({ bankName })
       });
 
       if (!res.ok) {
@@ -209,14 +236,14 @@ export default function ExecutivePage() {
       }
 
       const data = await res.json();
-      setSuccess(`Bank "${selectedBank}" assigned to ${bankModal.customerName}`);
+      setSuccess(`Bank "${bankName}" assigned to ${bankModal.customerName}`);
       setTimeout(() => setSuccess(''), 3000);
 
       setLeads(prev => prev.map(l => {
         if (l.id === bankModal.id) {
           return {
             ...l,
-            assignedBanks: [...(l.assignedBanks || []), selectedBank],
+            assignedBanks: [...(l.assignedBanks || []), bankName],
             status: data.lead.status
           };
         }
@@ -225,6 +252,7 @@ export default function ExecutivePage() {
 
       setBankModal(null);
       setSelectedBank('');
+      setCustomBankInput('');
     } catch (err) {
       setError('Failed to assign bank');
       setTimeout(() => setError(''), 5000);
@@ -371,13 +399,70 @@ export default function ExecutivePage() {
                   <select
                     className="w-full border rounded-xl px-4 py-3"
                     value={selectedBank}
-                    onChange={e => setSelectedBank(e.target.value)}
+                    onChange={e => {
+                      setSelectedBank(e.target.value);
+                      if (e.target.value !== 'Other') {
+                        setCustomBankInput('');
+                        setShowBankSuggestions(false);
+                      }
+                    }}
                   >
                     <option value="">Choose a bank</option>
                     {BANK_OPTIONS.map(bank => (
                       <option key={bank} value={bank}>{bank}</option>
                     ))}
                   </select>
+
+                  {selectedBank === 'Other' && (
+                    <div className="mt-3 relative" ref={bankInputRef}>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Type Bank Name</label>
+                      <input
+                        type="text"
+                        placeholder="Start typing bank name..."
+                        className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        value={customBankInput}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setCustomBankInput(val);
+                          if (val.length >= 1) {
+                            const filtered = COMMON_BANKS.filter(b =>
+                              b.toLowerCase().includes(val.toLowerCase())
+                            );
+                            setFilteredSuggestions(filtered.slice(0, 8));
+                            setShowBankSuggestions(true);
+                          } else {
+                            setFilteredSuggestions([]);
+                            setShowBankSuggestions(false);
+                          }
+                        }}
+                        onFocus={() => {
+                          if (customBankInput.length >= 1 && filteredSuggestions.length > 0) {
+                            setShowBankSuggestions(true);
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => setShowBankSuggestions(false), 200);
+                        }}
+                      />
+                      {showBankSuggestions && filteredSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
+                          {filteredSuggestions.map((suggestion, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 text-sm font-medium transition-colors border-b border-gray-50 last:border-b-0"
+                              onMouseDown={() => {
+                                setCustomBankInput(suggestion);
+                                setShowBankSuggestions(false);
+                              }}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {bankModal.assignedBanks && bankModal.assignedBanks.length > 0 && (
@@ -400,8 +485,8 @@ export default function ExecutivePage() {
                   </button>
                   <button
                     onClick={handleAssignBank}
-                    disabled={!selectedBank}
-                    className={`flex-1 px-4 py-2 rounded-xl font-medium text-white ${selectedBank ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'}`}
+                    disabled={selectedBank === 'Other' ? !customBankInput.trim() : !selectedBank}
+                    className={`flex-1 px-4 py-2 rounded-xl font-medium text-white ${selectedBank === 'Other' ? (customBankInput.trim() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed') : (selectedBank ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed')}`}
                   >
                     Assign Bank
                   </button>
@@ -503,6 +588,7 @@ export default function ExecutivePage() {
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Email</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Date</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -514,6 +600,7 @@ export default function ExecutivePage() {
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                             request.status === 'approved' ? 'bg-green-100 text-green-700' :
                             request.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            request.status === 'revoked' ? 'bg-gray-100 text-gray-600' :
                             'bg-yellow-100 text-yellow-700'
                           }`}>
                             {request.status}
@@ -522,6 +609,16 @@ export default function ExecutivePage() {
                         <td className="py-3 px-4 text-gray-500 text-sm">
                           {new Date(request.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </td>
+                        <td className="py-3 px-4">
+                          {request.status === 'approved' && (
+                            <button
+                              onClick={() => setShowRevokeModal(request)}
+                              className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-200 transition-colors"
+                            >
+                              🗑️ Delete
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -529,6 +626,76 @@ export default function ExecutivePage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Revoke Access Confirmation Modal */}
+      {showRevokeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowRevokeModal(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Revoke Executive Access</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-2">
+              Are you sure you want to revoke access for <strong>{showRevokeModal.name}</strong>?
+            </p>
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3 mb-6">
+              This will delete their user account. <strong>{showRevokeModal.email}</strong> will no longer be able to log in.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => {
+                  setProcessingId(showRevokeModal.id);
+                  try {
+                    const res = await fetch(`${API_BASE}/auth/revoke-access/${showRevokeModal.id}`, {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      setError(data.error || 'Failed to revoke access');
+                    } else {
+                      setSuccess(data.message);
+                    }
+                    setShowRevokeModal(null);
+                    fetchPendingRequests();
+                  } catch (err) {
+                    setError('Failed to revoke access');
+                    setShowRevokeModal(null);
+                  } finally {
+                    setProcessingId(null);
+                  }
+                }}
+                disabled={processingId === showRevokeModal.id}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {processingId === showRevokeModal.id ? (
+                  'Revoking...'
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Yes, Revoke Access
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowRevokeModal(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

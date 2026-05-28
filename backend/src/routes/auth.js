@@ -472,4 +472,65 @@ router.post('/reject-request/:id', authenticate, authorize('admin'), async (req,
   }
 });
 
+// POST /api/auth/revoke-access/:id (admin only) — Delete/revoke approved executive access
+router.post('/revoke-access/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[AUTH] 🗑️ Admin revoking access for request ID=${id} by admin user ID=${req.user.id}`);
+
+    // Fetch the access request
+    const { data: request, error: fetchError } = await supabase
+      .from('access_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !request) {
+      return res.status(404).json({ error: 'Access request not found' });
+    }
+
+    console.log(`[AUTH] Found request: name=${request.name} email=${request.email} status=${request.status}`);
+
+    if (request.status !== 'approved') {
+      return res.status(400).json({ error: 'Can only revoke approved requests' });
+    }
+
+    // Delete the user from the users table (makes login invalid)
+    const { error: deleteUserError } = await supabase
+      .from('users')
+      .delete()
+      .eq('email', request.email);
+
+    if (deleteUserError) {
+      console.error('[AUTH] ❌ Failed to delete user:', deleteUserError);
+      // Continue anyway — try to clean up other associations
+    }
+
+    // Delete from executives table
+    const { error: deleteExecError } = await supabase
+      .from('executives')
+      .delete()
+      .eq('name', request.name);
+
+    if (deleteExecError) {
+      console.error('[AUTH] ⚠️ Failed to delete from executives table:', deleteExecError.message);
+    }
+
+    // Update the access request status to 'revoked'
+    await supabase
+      .from('access_requests')
+      .update({ status: 'revoked', updated_at: new Date().toISOString(), reviewed_by: req.user.id })
+      .eq('id', id);
+
+    console.log(`[AUTH] ✅ Access revoked for ${request.name} (${request.email})`);
+
+    res.json({
+      message: `Access revoked for ${request.name}. They can no longer log in.`
+    });
+  } catch (error) {
+    console.error('[AUTH] ❌ Revoke access error:', error);
+    res.status(500).json({ error: 'Failed to revoke access' });
+  }
+});
+
 export default router;
