@@ -42,7 +42,7 @@ export default function SanctionPage() {
       // Initialize form state for each processing bank
       const forms = {};
       (data.banks || []).forEach(b => {
-        forms[b.id] = { amount: '', file: null, uploaded: false };
+        forms[b.id] = { amount: '', file: null, uploaded: false, description: '' };
       });
       setBankForms(forms);
     } catch (err) {
@@ -89,6 +89,7 @@ export default function SanctionPage() {
       formData.append('leadId', selectedLead.id);
       formData.append('documentId', `sanction_letter_${bank.bank_name}`);
       formData.append('documentName', `Sanction Letter - ${bank.bank_name}`);
+      formData.append('description', form.description || '');
       formData.append('file', form.file);
 
       const res = await fetch(`${API_BASE}/checklist-status/upload`, {
@@ -294,6 +295,22 @@ export default function SanctionPage() {
                       {/* Upload Sanction Letter */}
                       <div className="mb-4">
                         <label className="block text-sm font-semibold text-gray-700 mb-2">Sanction Letter</label>
+                        
+                        {/* Description field */}
+                        <div className="mb-3">
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">
+                            Description
+                          </label>
+                          <textarea
+                            value={form.description || ''}
+                            onChange={(e) => updateBankForm(bank.id, 'description', e.target.value)}
+                            placeholder="Describe the sanction letter (e.g. Final sanction letter, Revised terms, etc.)"
+                            rows={2}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                            disabled={loading}
+                          />
+                        </div>
+
                         <div className="flex items-center gap-4">
                           <label className={`flex-1 cursor-pointer border-2 border-dashed rounded-xl p-3 text-center transition-colors ${
                             form.uploaded ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-400'

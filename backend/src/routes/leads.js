@@ -781,6 +781,77 @@ router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res)
   }
 });
 
+// PUT /api/leads/:id/remove-bank - Remove/delete an assigned bank from a lead
+router.put('/:id/remove-bank', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { bankName } = req.body;
+    const leadId = req.params.id;
+
+    if (!bankName) {
+      return res.status(400).json({ error: 'Bank name is required' });
+    }
+
+    // Fetch current lead to get existing assigned_banks
+    const { data: lead, error: fetchError } = await supabase
+      .from('leads')
+      .select('assigned_banks, status')
+      .eq('id', leadId)
+      .single();
+
+    if (fetchError || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Remove bank from array
+    const existingBanks = lead.assigned_banks || [];
+    if (!existingBanks.includes(bankName)) {
+      return res.status(400).json({ error: 'Bank not assigned to this lead' });
+    }
+    const updatedBanks = existingBanks.filter(b => b !== bankName);
+
+    // Recalculate status: if no banks left, go back to 'Assigned' if previously processing
+    let newStatus = lead.status;
+    if (updatedBanks.length === 0 && (lead.status === 'Processing' || lead.status === 'Sanctioned' || lead.status === 'Partially Disbursed')) {
+      newStatus = 'Assigned';
+    }
+
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update({
+        assigned_banks: updatedBanks,
+        status: newStatus
+      })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Also delete the lead_banks record for tracking
+    const { error: bankRowError } = await supabase
+      .from('lead_banks')
+      .delete()
+      .eq('lead_id', leadId)
+      .eq('bank_name', bankName);
+
+    if (bankRowError) {
+      console.error('Failed to delete lead_banks row:', bankRowError);
+    }
+
+    res.json({
+      message: 'Bank removed successfully',
+      lead: {
+        id: updatedLead.id,
+        assignedBanks: updatedLead.assigned_banks,
+        status: updatedLead.status
+      }
+    });
+  } catch (error) {
+    console.error('Remove bank error:', error);
+    res.status(500).json({ error: 'Failed to remove bank' });
+  }
+});
+
 // PUT /api/leads/:id/disburse - Disburse amount (partial or full)
 router.put('/:id/disburse', authorize('admin', 'executive'), async (req, res) => {
   try {

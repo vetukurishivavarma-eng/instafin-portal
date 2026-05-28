@@ -130,10 +130,6 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
       return res.status(400).json({ error: 'leadId, documentId, and documentName are required' });
     }
 
-    if (!description || !description.trim()) {
-      return res.status(400).json({ error: 'Description is required for upload' });
-    }
-
     if (!req.file) {
       return res.status(400).json({ error: 'File is required' });
     }
@@ -175,7 +171,7 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
     }
 
     // Build the document_name JSON with description and original filename
-    const storedDocName = buildDocName(documentName, description.trim(), req.file.originalname);
+    const storedDocName = buildDocName(documentName, description || '', req.file.originalname);
 
     // INSERT a new row (NOT upsert) to allow multiple files per document
     const { data: statusRecord, error: insertError } = await supabase

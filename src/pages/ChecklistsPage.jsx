@@ -362,11 +362,6 @@ export default function ChecklistsPage() {
   // Handle file upload for a checklist item
   const handleFileUpload = async (documentId, documentName, file, description) => {
     if (!selectedLead) return;
-    if (!description || !description.trim()) {
-      setError('Description is required for upload');
-      setTimeout(() => setError(''), 5000);
-      return;
-    }
 
     setUploadingDoc(documentId);
     try {
@@ -374,7 +369,7 @@ export default function ChecklistsPage() {
       formData.append('leadId', selectedLead.id);
       formData.append('documentId', documentId);
       formData.append('documentName', documentName);
-      formData.append('description', description.trim());
+      formData.append('description', (description || '').trim());
       formData.append('file', file);
 
       const res = await fetch(`${API_BASE}/checklist-status/upload`, {
@@ -742,10 +737,10 @@ export default function ChecklistsPage() {
                                   {showForm && (
                                     <div className="ml-8 mb-3 p-4 bg-white border border-blue-200 rounded-xl">
                                       <div className="space-y-3">
-                                        {/* Description field (mandatory) */}
+                                        {/* Description field (optional) */}
                                         <div>
                                           <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                            Description <span className="text-red-500">*</span>
+                                            Description <span className="text-gray-400 font-normal">(optional)</span>
                                           </label>
                                           <textarea
                                             value={uploadDescription}
@@ -779,7 +774,7 @@ export default function ChecklistsPage() {
                                               type="file"
                                               className="hidden"
                                               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                              disabled={isUploading || !uploadDescription.trim()}
+                                              disabled={isUploading}
                                               onChange={(e) => {
                                                 if (e.target.files[0]) {
                                                   handleFileUpload(item.id, item.name, e.target.files[0], uploadDescription);

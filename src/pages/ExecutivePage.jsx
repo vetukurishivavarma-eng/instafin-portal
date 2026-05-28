@@ -470,7 +470,54 @@ export default function ExecutivePage() {
                     <p className="text-sm text-gray-500 mb-2">Already assigned:</p>
                     <div className="flex flex-wrap gap-2">
                       {bankModal.assignedBanks.map((bank, i) => (
-                        <span key={i} className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">{bank}</span>
+                        <span key={i} className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">
+                          {bank}
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!window.confirm(`Remove "${bank}" from ${bankModal.customerName}?`)) return;
+                              try {
+                                const res = await fetch(`${API_BASE}/leads/${bankModal.id}/remove-bank`, {
+                                  method: 'PUT',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${accessToken}`
+                                  },
+                                  body: JSON.stringify({ bankName: bank })
+                                });
+                                if (!res.ok) {
+                                  const errData = await res.json();
+                                  setError(errData.error || 'Failed to remove bank');
+                                  setTimeout(() => setError(''), 5000);
+                                  return;
+                                }
+                                const data = await res.json();
+                                setSuccess(`"${bank}" removed from ${bankModal.customerName}`);
+                                setTimeout(() => setSuccess(''), 3000);
+                                setBankModal(prev => ({
+                                  ...prev,
+                                  assignedBanks: prev.assignedBanks.filter(b => b !== bank),
+                                  status: data.lead.status
+                                }));
+                                setLeads(prev => prev.map(l => {
+                                  if (l.id === bankModal.id) {
+                                    return { ...l, assignedBanks: l.assignedBanks.filter(b => b !== bank), status: data.lead.status };
+                                  }
+                                  return l;
+                                }));
+                              } catch (err) {
+                                setError('Failed to remove bank');
+                                setTimeout(() => setError(''), 5000);
+                              }
+                            }}
+                            className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
+                            title={`Remove ${bank}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
                       ))}
                     </div>
                   </div>
