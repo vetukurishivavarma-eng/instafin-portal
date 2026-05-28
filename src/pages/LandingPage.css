@@ -23,29 +23,6 @@
 }
 
 /* ==========================================
-   INTERACTIVE 3D KNIFE CURSOR HIDING
-   ========================================== */
-.landing, .landing * {
-  cursor: none !important; /* Forces system cursor off so only the custom 3D Knife shows */
-}
-
-.custom-axe-cursor {
-  position: fixed;
-  width: 45px;
-  height: 45px;
-  pointer-events: none; /* CRITICAL: Permits clicks to pass straight to login inputs & buttons! */
-  z-index: 999999;
-  transform: translate(-10%, -10%) rotate(0deg);
-  transition: transform 0.15s cubic-bezier(0.25, 1, 0.5, 1);
-  overflow: visible;
-}
-
-.custom-axe-cursor.chopping {
-  transform: translate(-10%, -10%) rotate(-45deg) scale(1.15);
-  transition: transform 0.06s ease-out; /* Snappy tactile slicing swing */
-}
-
-/* ==========================================
    LANDING WRAPPER
    ========================================== */
 .landing {

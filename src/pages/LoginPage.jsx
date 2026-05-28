@@ -11,10 +11,9 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Mouse & Tactile Knife States
+  // Mouse States
   const [mouseX, setMouseX] = useState(0);
   const [mouseY, setMouseY] = useState(0);
-  const [isChopping, setIsChopping] = useState(false);
 
   // 3D Lion States
   const [isGrowling, setIsGrowling] = useState(false);
@@ -41,22 +40,10 @@ export default function LoginPage() {
       setMouseY(e.clientY);
     };
 
-    const handleMouseDown = () => {
-      setIsChopping(true);
-    };
-
-    const handleMouseUp = () => {
-      setIsChopping(false);
-    };
-
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
 
@@ -214,32 +201,6 @@ export default function LoginPage() {
           <linearGradient id="snoutGrad" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#FFFBEB" />
             <stop offset="100%" stopColor="#FDE68A" />
-          </linearGradient>
-
-          {/* Knife Handle (Carbon Fiber Ergonomic) */}
-          <linearGradient id="knifeHandleGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#374151" />
-            <stop offset="50%" stopColor="#1F2937" />
-            <stop offset="100%" stopColor="#111827" />
-          </linearGradient>
-
-          {/* Knife Guard (Brass/Bronze) */}
-          <linearGradient id="knifeGuardGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#FBBF24" />
-            <stop offset="100%" stopColor="#B45309" />
-          </linearGradient>
-
-          {/* Knife Blade Steel Gradients */}
-          <linearGradient id="knifeBladeFlatGrad" x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0%" stopColor="#F9FAFB" />
-            <stop offset="50%" stopColor="#E5E7EB" />
-            <stop offset="100%" stopColor="#9CA3AF" />
-          </linearGradient>
-          
-          <linearGradient id="knifeBladeBevelGrad" x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0%" stopColor="#9CA3AF" />
-            <stop offset="70%" stopColor="#4B5563" />
-            <stop offset="100%" stopColor="#1F2937" />
           </linearGradient>
 
           {/* 3D Elephant Gradients */}
@@ -879,33 +840,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* DYNAMIC 3D HIGH-FIDELITY COMBAT KNIFE CURSOR */}
-      <div 
-        className={`custom-axe-cursor ${isChopping ? 'chopping' : ''}`}
-        style={{
-          left: `${mouseX}px`,
-          top: `${mouseY}px`
-        }}
-      >
-        <svg width="45" height="45" viewBox="0 0 45 45" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
-          {/* Handle (Dark Ergonomic Carbon Fiber texture) */}
-          <rect x="5" y="34" width="5.5" height="15.5" rx="1.5" transform="rotate(-45 5 34)" fill="url(#knifeHandleGrad)" stroke="#111827" strokeWidth="0.8" />
-          {/* Steel Rivets on Handle */}
-          <circle cx="9" cy="38" r="0.75" fill="#E5E7EB" />
-          <circle cx="14" cy="33" r="0.75" fill="#E5E7EB" />
-          
-          {/* Gold Hilt Guard */}
-          <rect x="15" y="24" width="8.5" height="3" rx="1" transform="rotate(-45 15 24)" fill="url(#knifeGuardGrad)" stroke="#78350F" strokeWidth="0.5" />
-          
-          {/* 3D Beveled Knife Blade Steel */}
-          {/* Lower Blade Bevel (Silver-gray steel) */}
-          <path d="M 19,20 L 38,1 L 39,2 L 22,23 Z" fill="url(#knifeBladeFlatGrad)" />
-          {/* Upper Blade Bevel (Dark carbon steel) */}
-          <path d="M 19,20 L 38,1 L 34,12 L 22,23 Z" fill="url(#knifeBladeBevelGrad)" />
-          {/* Specular Edge Line (Shiny white highlight) */}
-          <path d="M 22,23 L 39,2 Q 40,0 38,1 Z" fill="#FFFFFF" opacity="0.9" />
-        </svg>
-      </div>
+
     </div>
   );
 }
