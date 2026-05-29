@@ -610,8 +610,36 @@ export default function SanctionPage() {
 
           {/* No processing banks */}
           {processingBanks.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              All banks have been processed for this lead.
+            <div className="text-center py-10 px-6">
+              {banks.length === 0 ? (
+                <>
+                  <div className="w-16 h-16 mx-auto mb-4 bg-amber-100 rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-600 font-semibold text-lg mb-2">No banks assigned to this lead</p>
+                  <p className="text-gray-400 text-sm max-w-md mx-auto leading-relaxed">
+                    This lead has no banks in its pipeline. To proceed with sanctioning, go to the{' '}
+                    <strong className="text-gray-500">Leads Portal</strong> and assign one or more banks
+                    to this lead first. Once banks are added and are in "Processing" status, they
+                    will appear here for sanction or rejection.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-600 font-semibold text-lg mb-2">All banks have been processed</p>
+                  <p className="text-gray-400 text-sm max-w-md mx-auto leading-relaxed">
+                    All banks for this lead have been either sanctioned or rejected.
+                    No further action is needed on the Sanction page for this lead.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>
