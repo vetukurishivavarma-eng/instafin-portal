@@ -6,7 +6,18 @@ import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
-  const { isAdmin, accessToken } = useAuth();
+  const { isAdmin, isImpersonating, accessToken } = useAuth();
+  
+  // Loan types loaded dynamically
+  const [loanTypes, setLoanTypes] = useState([
+    { name: 'Home Loan', key: 'home_loan' },
+    { name: 'LAP (Loan Against Property)', key: 'lap' },
+    { name: 'Mudra Loan', key: 'mudra' },
+    { name: 'MSME Loan', key: 'msme' },
+    { name: 'Business Loan', key: 'business_loan' },
+    { name: 'Personal Loan', key: 'personal_loan' },
+    { name: 'Education Loan', key: 'education_loan' },
+  ]);
   
   // Modal Triggers
   const [showAddModal, setShowAddModal] = useState(false);
@@ -68,6 +79,22 @@ export default function LeadEntryPage() {
       .then(r => r.json())
       .then(data => setExecutives(data))
       .catch(() => {});
+    
+    // Fetch loan types dynamically
+    fetch(`${API_BASE}/loan-types`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setLoanTypes(data.filter(lt => lt.active !== false).map(lt => ({
+            name: lt.name,
+            key: lt.key
+          })));
+        }
+      })
+      .catch(() => {});
+    
     loadLeads();
   }, [accessToken]);
 
@@ -616,13 +643,9 @@ export default function LeadEntryPage() {
                     onChange={(e) => { setFormData(p => ({ ...p, loanType: e.target.value })); setFieldErrors(prev => ({ ...prev, loanType: '' })); }}
                   >
                     <option value="">Select Loan Type</option>
-                    <option value="home_loan">Home Loan</option>
-                    <option value="lap">LAP (Loan Against Property)</option>
-                    <option value="mudra">Mudra Loan</option>
-                    <option value="msme">MSME Loan</option>
-                    <option value="business_loan">Business Loan</option>
-                    <option value="personal_loan">Personal Loan</option>
-                    <option value="education_loan">Education Loan</option>
+                    {loanTypes.map(lt => (
+                      <option key={lt.key} value={lt.key}>{lt.name}</option>
+                    ))}
                   </select>
                   {fieldErrors.loanType && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.loanType}</p>}
                 </div>
@@ -1126,13 +1149,9 @@ export default function LeadEntryPage() {
                   value={editForm.loanType || ''}
                   onChange={e => setEditForm({...editForm, loanType: e.target.value})}
                 >
-                  <option value="home_loan">Home Loan</option>
-                  <option value="lap">LAP</option>
-                  <option value="mudra">Mudra Loan</option>
-                  <option value="msme">MSME Loan</option>
-                  <option value="business_loan">Business Loan</option>
-                  <option value="personal_loan">Personal Loan</option>
-                  <option value="education_loan">Education Loan</option>
+                  {loanTypes.map(lt => (
+                    <option key={lt.key} value={lt.key}>{lt.name}</option>
+                  ))}
                 </select>
               </div>
               <div>

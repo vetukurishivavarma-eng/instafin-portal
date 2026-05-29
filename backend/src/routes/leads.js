@@ -7,6 +7,40 @@ import { authorize } from '../middleware/authorize.js';
 import leadBanksRouter from './leadBanks.js';
 import { deriveLeadStatus, computeLeadAggregates } from '../utils/statusDerivation.js';
 
+// Helper to record audit log for admin actions while impersonating
+async function recordAuditLog(leadId, adminId, action, details, adminName) {
+  try {
+    await supabase
+      .from('audit_logs')
+      .insert({
+        lead_id: leadId,
+        admin_id: adminId,
+        admin_name: adminName,
+        action,
+        details: details || null,
+        created_at: new Date().toISOString()
+      });
+  } catch (err) {
+    console.error('Failed to record audit log:', err);
+  }
+}
+
+// Helper to check if request is from admin and get admin info
+async function getAdminContext(req) {
+  if (req.user.role !== 'admin') return null;
+
+  const { data: adminUser } = await supabase
+    .from('users')
+    .select('name')
+    .eq('id', req.user.id)
+    .single();
+
+  return {
+    adminId: req.user.id,
+    adminName: adminUser?.name || req.user.email
+  };
+}
+
 const router = express.Router();
 
 // Helper to parse remarks containing co-applicant data
@@ -404,6 +438,18 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       throw error;
     }
 
+    // Record audit log if admin is impersonating
+    const adminCtx = await getAdminContext(req);
+    if (adminCtx) {
+      await recordAuditLog(
+        newLead.id,
+        adminCtx.adminId,
+        'created',
+        `Added by admin (${adminCtx.adminName}) - Customer: ${customerName}, Mobile: ${mobile}`,
+        adminCtx.adminName
+      );
+    }
+
     res.status(201).json({
       id: newLead.id,
       customerName: newLead.customer_name,
@@ -504,6 +550,19 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     if (error) throw error;
 
+    // Record audit log if admin is impersonating
+    const adminCtx = await getAdminContext(req);
+    if (adminCtx) {
+      const changedFields = Object.keys(updateData).filter(k => updateData[k] !== undefined).join(', ');
+      await recordAuditLog(
+        req.params.id,
+        adminCtx.adminId,
+        'modified',
+        `Modified by admin (${adminCtx.adminName}) - Fields: ${changedFields}`,
+        adminCtx.adminName
+      );
+    }
+
     res.json({
       id: updatedLead.id,
       customerName: updatedLead.customer_name,
@@ -525,12 +584,35 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 // DELETE lead - admin only
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
+    // Fetch lead info BEFORE deleting to capture for audit log
+    const adminCtx = await getAdminContext(req);
+    let delLead = null;
+    if (adminCtx) {
+      const { data } = await supabase
+        .from('leads')
+        .select('customer_name, mobile')
+        .eq('id', req.params.id)
+        .single();
+      delLead = data;
+    }
+
     const { error } = await supabase
       .from('leads')
       .delete()
       .eq('id', req.params.id);
 
     if (error) throw error;
+
+    // Record audit log
+    if (adminCtx && delLead) {
+      await recordAuditLog(
+        req.params.id,
+        adminCtx.adminId,
+        'deleted',
+        `Deleted by admin (${adminCtx.adminName}) - Customer: ${delLead.customer_name}, Mobile: ${delLead.mobile}`,
+        adminCtx.adminName
+      );
+    }
 
     res.json({ message: 'Lead deleted successfully' });
   } catch (error) {

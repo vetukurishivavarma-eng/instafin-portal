@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import ImpersonationBanner from './components/ImpersonationBanner'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import FeaturesPage from './pages/FeaturesPage'
@@ -27,7 +28,7 @@ import './index.css'
 
 // Protected Route wrapper
 function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useAuth();
+  const { user, loading, impersonating } = useAuth();
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
@@ -37,7 +38,13 @@ function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  // If impersonating, override the effective role
+  const effectiveRole = impersonating ? 'executive' : user.role;
+
+  if (allowedRoles && !allowedRoles.includes(effectiveRole) && !allowedRoles.includes(user.role)) {
+    // Admin can access all routes (for impersonation preview)
+    if (user.role === 'admin') return children;
+    
     // Redirect to appropriate dashboard based on role
     if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     if (user.role === 'executive') return <Navigate to="/executive/leads" replace />;
@@ -65,9 +72,13 @@ function RoleRedirect() {
 }
 
 function AppRoutes() {
+  const { isImpersonating } = useAuth();
+  
   return (
-    <Layout>
-      <Routes>
+    <>
+      <ImpersonationBanner />
+      <Layout>
+        <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -165,6 +176,7 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
+    </>
   );
 }
 

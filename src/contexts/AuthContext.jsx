@@ -7,14 +7,23 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [accessToken, setAccessToken] = useState(null);
+  const [impersonating, setImpersonating] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const savedUser = localStorage.getItem('instafin_user');
     const savedToken = localStorage.getItem('instafin_token');
+    const savedImpersonating = localStorage.getItem('instafin_impersonating');
     if (savedUser && savedToken) {
       setUser(JSON.parse(savedUser));
       setAccessToken(savedToken);
+      if (savedImpersonating) {
+        try {
+          setImpersonating(JSON.parse(savedImpersonating));
+        } catch (e) {
+          setImpersonating(null);
+        }
+      }
     }
     setLoading(false);
   }, []);
@@ -59,9 +68,11 @@ export function AuthProvider({ children }) {
     }
     setUser(null);
     setAccessToken(null);
+    setImpersonating(null);
     localStorage.removeItem('instafin_user');
     localStorage.removeItem('instafin_token');
     localStorage.removeItem('instafin_refresh');
+    localStorage.removeItem('instafin_impersonating');
     navigate('/login');
   };
 
@@ -81,12 +92,26 @@ export function AuthProvider({ children }) {
     return true;
   };
 
+  const impersonate = async (executiveUser) => {
+    setImpersonating(executiveUser);
+    localStorage.setItem('instafin_impersonating', JSON.stringify(executiveUser));
+  };
+
+  const stopImpersonation = () => {
+    setImpersonating(null);
+    localStorage.removeItem('instafin_impersonating');
+  };
+
+  // When impersonating, the effective role becomes 'executive'
+  const effectiveRole = impersonating ? 'executive' : user?.role;
+
   const isAdmin = user?.role === 'admin';
   const isExecutive = user?.role === 'executive';
   const isDSA = user?.role === 'dsa';
+  const isImpersonating = !!impersonating;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, accessToken, refreshAccessToken, isAdmin, isExecutive, isDSA, loading }}>
+    <AuthContext.Provider value={{ user, impersonating, impersonate, stopImpersonation, effectiveRole, isImpersonating, login, logout, accessToken, refreshAccessToken, isAdmin, isExecutive, isDSA, loading }}>
       {children}
     </AuthContext.Provider>
   );
