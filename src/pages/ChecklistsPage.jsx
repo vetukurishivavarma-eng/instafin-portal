@@ -7,7 +7,7 @@ import { downloadPDF, downloadProfilePDF, downloadEligibilityPDF } from '../expo
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
 
 export default function ChecklistsPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user, impersonating, isImpersonating } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [checklistItems, setChecklistItems] = useState([]);
@@ -58,7 +58,13 @@ export default function ChecklistsPage() {
     })
     .then(r => r.json())
     .then(data => {
-      setLeads(data.data || []);
+      const allLeads = data.data || [];
+      // Filter by impersonated executive if admin is impersonating
+      const executiveName = isImpersonating ? impersonating?.name : null;
+      const filtered = executiveName
+        ? allLeads.filter(l => l.assignedTo === executiveName)
+        : allLeads;
+      setLeads(filtered);
       setLoading(false);
     })
     .catch(err => {

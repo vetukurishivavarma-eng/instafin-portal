@@ -4,7 +4,7 @@ import API_BASE from '../config/api';
 import { downloadEligibilityPDF } from '../export/pdf';
 
 export default function EligibilityPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user, impersonating, isImpersonating } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLeadId, setSelectedLeadId] = useState('');
 
@@ -33,8 +33,13 @@ export default function EligibilityPage() {
       .then(r => r.json())
       .then(data => {
         const allLeads = data.data || [];
+        // Filter by impersonated executive if admin is impersonating
+        const executiveName = isImpersonating ? impersonating?.name : null;
+        const filteredLeads = executiveName
+          ? allLeads.filter(l => l.assignedTo === executiveName)
+          : allLeads;
         // Filter: Home Loan, LAP, Education Loan only (normalize case)
-        const eligible = allLeads.filter(l => {
+        const eligible = filteredLeads.filter(l => {
           const lt = (l.loanType || '').toLowerCase().replace(/\s+/g, '_');
           return ['home_loan', 'lap', 'education_loan'].includes(lt);
         });

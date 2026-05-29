@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Layout({ children }) {
-  const { user, isAdmin, isExecutive, logout } = useAuth();
+  const { user, effectiveRole, logout } = useAuth();
   const location = useLocation();
 
   // Public pages - no nav
@@ -22,7 +22,7 @@ export default function Layout({ children }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between min-h-[4rem] py-3 md:py-0 gap-4 md:gap-0">
             <div className="flex items-center">
-              <Link to={isAdmin ? '/admin/dashboard' : isExecutive ? '/executive/leads' : '/'} className="text-2xl font-bold text-blue-700">InstaFin</Link>
+              <Link to={effectiveRole === 'admin' ? '/admin/dashboard' : effectiveRole === 'executive' ? '/executive/leads' : '/'} className="text-2xl font-bold text-blue-700">InstaFin</Link>
               {user && (
                 <span className="ml-3 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full uppercase">
                   {user.role}
@@ -31,7 +31,7 @@ export default function Layout({ children }) {
             </div>
             <div className="flex flex-wrap items-center gap-x-4 lg:gap-x-5 gap-y-2">
               {/* Admin Navigation */}
-              {isAdmin && (
+              {effectiveRole === 'admin' && (
                 <>
                   <Link to="/admin/dashboard" className={getLinkClass('/admin/dashboard')}>Dashboard</Link>
                   <Link to="/admin/leads" className={getLinkClass('/admin/leads')}>Leads</Link>
@@ -45,7 +45,7 @@ export default function Layout({ children }) {
               )}
 
               {/* Executive Navigation */}
-              {isExecutive && (
+              {effectiveRole === 'executive' && (
                 <>
                   <Link to="/executive/leads" className={getLinkClass('/executive/leads')}>Leads</Link>
                   <Link to="/executive/customers" className={getLinkClass('/executive/customers')}>Customers</Link>

@@ -4,7 +4,7 @@ import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 
 export default function SanctionPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user, impersonating, isImpersonating } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [banks, setBanks] = useState([]);
@@ -30,8 +30,13 @@ export default function SanctionPage() {
       });
       const data = await res.json();
       const allLeads = data.data || data || [];
+      // Filter by impersonated executive if admin is impersonating
+      const executiveName = isImpersonating ? impersonating?.name : null;
+      let filteredLeads = executiveName
+        ? allLeads.filter(l => l.assignedTo === executiveName)
+        : allLeads;
       // Show leads that have at least one processing bank
-      setLeads(allLeads.filter(l => l.status === 'Processing'));
+      setLeads(filteredLeads.filter(l => l.status === 'Processing'));
     } catch (err) {
       setError('Failed to load leads');
     }

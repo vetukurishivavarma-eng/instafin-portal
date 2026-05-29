@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
 
 export default function CustomerListPage() {
-  const { user, accessToken, refreshAccessToken } = useAuth();
+  const { user, impersonating, isImpersonating, accessToken, refreshAccessToken } = useAuth();
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +28,8 @@ export default function CustomerListPage() {
       const data = await res.json();
       const allLeads = data.data || data || [];
       // Filter leads assigned to this executive
-      const myLeads = allLeads.filter(l => l.assignedTo === user?.name);
+      const executiveName = isImpersonating ? impersonating?.name : user?.name;
+      const myLeads = allLeads.filter(l => l.assignedTo === executiveName);
       setLeads(myLeads);
     } catch (err) {
       console.error('Failed to load leads:', err);

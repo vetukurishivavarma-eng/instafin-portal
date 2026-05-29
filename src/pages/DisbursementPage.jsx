@@ -4,7 +4,7 @@ import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 
 export default function DisbursementPage() {
-  const { accessToken, refreshAccessToken } = useAuth();
+  const { accessToken, refreshAccessToken, user, impersonating, isImpersonating } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [banks, setBanks] = useState([]);
@@ -35,8 +35,13 @@ export default function DisbursementPage() {
 
       const data = await res.json();
       const allLeads = data.data || data || [];
+      // Filter by impersonated executive if admin is impersonating
+      const executiveName = isImpersonating ? impersonating?.name : null;
+      const filteredByExecutive = executiveName
+        ? allLeads.filter(l => l.assignedTo === executiveName)
+        : allLeads;
       // Show leads with at least one sanctioned or partially-disbursed bank
-      const eligible = allLeads.filter(
+      const eligible = filteredByExecutive.filter(
         l => l.status === 'Sanctioned' || l.status === 'Partially Disbursed'
       );
       setLeads(eligible);
