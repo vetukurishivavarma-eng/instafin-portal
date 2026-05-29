@@ -280,25 +280,10 @@ router.post('/process', authorize('admin'), async (req, res) => {
       newColumns
     } = req.body;
 
-    // Whitelist of known/allowed columns in the leads table
-    const ALLOWED_COLUMNS = [
-      'customer_name', 'mobile', 'email', 'loan_type', 'loan_status',
-      'expected_amount', 'income_source', 'resident_type', 'business_type',
-      'referral_code', 'assigned_to', 'department', 'priority', 'follow_up',
-      'remarks', 'status', 'assigned_banks', 'sanctioned_amount', 'disbursed_amount',
-      'created_at', 'updated_at',
-    ];
-
     // Add new columns to DB if any
     if (newColumns && newColumns.length > 0) {
       for (const col of newColumns) {
         const dbColName = col.toLowerCase().replace(/[\s]+/g, '_');
-
-        // Only allow creating columns from the whitelist
-        if (!ALLOWED_COLUMNS.includes(dbColName)) {
-          console.warn(`Skipping disallowed column: ${dbColName}`);
-          continue;
-        }
 
         // Check if column already exists
         try {

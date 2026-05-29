@@ -1,42 +1,30 @@
-import React, { Suspense, lazy } from 'react'
+import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import ImpersonationBanner from './components/ImpersonationBanner'
-import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import FeaturesPage from './pages/FeaturesPage'
 import ContactPage from './pages/ContactPage'
-import NotFoundPage from './pages/NotFoundPage'
 
-// Code-split pages with React.lazy for faster initial load
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
-const CustomerTrackingPage = lazy(() => import('./pages/CustomerTrackingPage'))
-const DownloadFormsPage = lazy(() => import('./pages/DownloadFormsPage'))
-const SanctionPage = lazy(() => import('./pages/SanctionPage'))
-const DisbursementPage = lazy(() => import('./pages/DisbursementPage'))
-const RevenuePage = lazy(() => import('./pages/RevenuePage'))
-const ExecutivePage = lazy(() => import('./pages/ExecutivePage'))
-const LeadEntryPage = lazy(() => import('./pages/LeadEntryPage'))
-const CustomerListPage = lazy(() => import('./pages/CustomerListPage'))
-const ChecklistsPage = lazy(() => import('./pages/ChecklistsPage'))
-const EligibilityPage = lazy(() => import('./pages/EligibilityPage'))
+// Admin pages
+import DashboardPage from './pages/DashboardPage'
+import CustomerTrackingPage from './pages/CustomerTrackingPage'
+import DownloadFormsPage from './pages/DownloadFormsPage'
+import SanctionPage from './pages/SanctionPage'
+import DisbursementPage from './pages/DisbursementPage'
+import RevenuePage from './pages/RevenuePage'
+import ExecutivePage from './pages/ExecutivePage'
+
+// Executive pages
+import LeadEntryPage from './pages/LeadEntryPage'
+import CustomerListPage from './pages/CustomerListPage'
+import ChecklistsPage from './pages/ChecklistsPage'
+import EligibilityPage from './pages/EligibilityPage'
 
 import './index.css'
-
-// Loading skeleton for lazy-loaded pages
-function PageLoader() {
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center">
-        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
-        <p className="text-sm text-gray-400">Loading...</p>
-      </div>
-    </div>
-  );
-}
 
 // Protected Route wrapper
 function ProtectedRoute({ children, allowedRoles }) {
@@ -53,8 +41,9 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (allowedRoles && !allowedRoles.includes(effectiveRole) && !allowedRoles.includes(user.role)) {
     // Admin can access all routes (for impersonation preview)
     if (user.role === 'admin') return children;
-
+    
     // Redirect to appropriate dashboard based on role
+    if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     if (user.role === 'executive') return <Navigate to="/executive/leads" replace />;
     return <Navigate to="/dashboard" replace />;
   }
@@ -101,75 +90,75 @@ function AppRoutes() {
         {/* Admin routes */}
         <Route path="/admin/dashboard" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><DashboardPage /></Suspense>
+            <DashboardPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/leads" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><LeadEntryPage /></Suspense>
+            <LeadEntryPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/customer-tracking" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><CustomerTrackingPage /></Suspense>
+            <CustomerTrackingPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/download-forms" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><DownloadFormsPage /></Suspense>
+            <DownloadFormsPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/sanction" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><SanctionPage /></Suspense>
+            <SanctionPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/disburse" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><DisbursementPage /></Suspense>
+            <DisbursementPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/revenue" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><RevenuePage /></Suspense>
+            <RevenuePage />
           </ProtectedRoute>
         } />
         <Route path="/admin/executives" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <Suspense fallback={<PageLoader />}><ExecutivePage /></Suspense>
+            <ExecutivePage />
           </ProtectedRoute>
         } />
 
         {/* Executive routes */}
         <Route path="/executive/leads" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <Suspense fallback={<PageLoader />}><LeadEntryPage /></Suspense>
+            <LeadEntryPage />
           </ProtectedRoute>
         } />
 
         <Route path="/executive/customers" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <Suspense fallback={<PageLoader />}><CustomerListPage /></Suspense>
+            <CustomerListPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/checklists" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <Suspense fallback={<PageLoader />}><ChecklistsPage /></Suspense>
+            <ChecklistsPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/credit-query" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <Suspense fallback={<PageLoader />}><EligibilityPage /></Suspense>
+            <EligibilityPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/sanction" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <Suspense fallback={<PageLoader />}><SanctionPage /></Suspense>
+            <SanctionPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/disburse" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <Suspense fallback={<PageLoader />}><DisbursementPage /></Suspense>
+            <DisbursementPage />
           </ProtectedRoute>
         } />
 
@@ -180,8 +169,8 @@ function AppRoutes() {
         <Route path="/sanction" element={<RoleRedirect />} />
         <Route path="/disburse" element={<RoleRedirect />} />
 
-        {/* 404 page */}
-        <Route path="*" element={<NotFoundPage />} />
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
     </>
@@ -190,12 +179,10 @@ function AppRoutes() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </ErrorBoundary>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   </React.StrictMode>,
 )
