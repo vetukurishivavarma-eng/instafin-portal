@@ -95,6 +95,39 @@ const businessDocuments = {
 };
 
 // ============================================================
+// MSME / SME Documents (per the SME/Retail loan matrix)
+// ============================================================
+const msmeDocuments = {
+  // Section A - Project / Business Overview (all SME applicants)
+  projectReport: createChecklistItem('msme_project_report', 'Detailed Project Report', 'business_documents'),
+  companyProfile: createChecklistItem('msme_company_profile', 'Company Profile & Individual Partners/Director Profile', 'business_documents'),
+  cmaData: createChecklistItem('msme_cma_data', 'CMA Data', 'financial_documents'),
+
+  // Section C / Section E - Form 26AS
+  form26as3: createChecklistItem('msme_form26as_3', 'Form 26AS (Last 3 Years) — all partners/applicants', 'income_proof'),
+
+  // Section C - Entity Financials (Partnership Firm SME)
+  gstr3b1: createChecklistItem('msme_gstr3b_1', 'Firm GSTR-3B Returns filed (Last 1 Year)', 'business_documents'),
+
+  // Section B - Entity KYC
+  firmRegCert: createChecklistItem('msme_firm_reg_cert', 'Firm Registration Certificate', 'business_documents'),
+
+
+};
+
+// MSME property documents (Section F simplified)
+const msmePropertyDocs = [
+  propertyDocuments.titleDeed,
+  propertyNew.linkDocs,
+  propertyNew.planProceeding,
+  propertyNew.houseTax,
+  propertyNew.powerBill,
+];
+
+// Common existing loan documents for MSME
+const msmeExistingLoans = [existingLoanDocs.sanctionLetter, existingLoanDocs.loanAcctStmt];
+
+// ============================================================
 // Income Proofs - Self Employed (Individual)
 // ============================================================
 const incomeProofsSelfEmployed = {
@@ -1272,27 +1305,174 @@ export const DECISION_TREE: DecisionTree = {
   ],
 
   // ============================================================
-  // MSME / Mudra — existing entries preserved
+  // ============================================================
+  // MSME — SALARIED PROFILES
   // ============================================================
 
-  // MSME | Mudra | New | Non-Salaried | Indian Resident | Proprietor
-  'msme|mudra|new|non_salaried|indian_resident|proprietor': [
+  // MSME | New | Salaried | Indian Resident
+  // Uses: Section D (KYC) + Section H (Salaried-Specific) + Section F (Property)
+  'msme|new|salaried|indian_resident': [
+    // Section D - Individual KYC
     kycDocuments.aadhaar,
     kycDocuments.pan,
+    kycDocuments.addressProof,
     kycDocuments.photo,
-    kycDocuments.voterId,
-    incomeProofsNonSalaried.itReturns,
-    incomeProofsNonSalaried.bankStatements6,
-    businessDocuments.udyamAadhaar,
-    businessDocuments.gstRegistration,
-    businessDocuments.shopAct,
-    businessDocuments.tradelicense,
-    businessDocuments.msmeCert,
-    financialDocuments.balanceSheet,
-    financialDocuments.profitLoss,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    legalDocuments.undertaking,
+    // Section H - Salaried-Specific
+    incomeProofsSalaried.salarySlips,
+    incomeProofsSalaried.bankStatements,
+    incomeProofsSalaried.form16,
+    incomeProofsSalaried.offerLetter,
+    // Existing loans (conditional - marked optional in source)
+    ...msmeExistingLoans,
+    // Section F - Property Documents
+    ...msmePropertyDocs,
+  ],
+
+  // MSME | New | Salaried | NRI
+  'msme|new|salaried|nri': [
+    // Section D - Individual KYC with NRI overlays
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.passport,
+    kycDocuments.visa,
+    kycDocuments.workPermit,
+    kycDocuments.overseasAddress,
+    kycDocuments.poa,
+    kycDocuments.photo,
+    // Section H - Salaried-Specific with NRI overlays
+    incomeProofsSalaried.salaryAccountStmt12,
+    incomeProofsSalaried.paySlips12,
+    incomeProofsSalaried.form16,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.overseasBankStmt6,
+    // Existing loans
+    ...msmeExistingLoans,
+    // Section F - Property Documents
+    ...msmePropertyDocs,
+  ],
+
+  // ============================================================
+  // MSME — NON-SALARIED (SME / BUSINESS) PROFILES
+  // ============================================================
+
+  // MSME | New | Non-Salaried | Proprietor
+  // Uses: Section A (Overview) + D (KYC) + E (Financials) + F (Property)
+  'msme|new|non_salaried|indian_resident|proprietor': [
+    // Section A - Project / Business Overview
+    msmeDocuments.projectReport,
+    msmeDocuments.companyProfile,
+    msmeDocuments.cmaData,
+    // Section D - Individual KYC
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    // Section E - Individual Financials (Proprietor)
+    incomeProofsSelfEmployed.indITReturns3,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    msmeDocuments.form26as3,
+    firmDocuments.proprietorCurrentStmt1,
+    firmDocuments.latestProvisional,
+    firmDocuments.gstRegCert,
+    firmDocuments.udyamCert,
+    // Existing loans
+    ...msmeExistingLoans,
+    // Section F - Property Documents
+    ...msmePropertyDocs,
+  ],
+
+  // MSME | New | Non-Salaried | Partnership Firm
+  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F
+  'msme|new|non_salaried|indian_resident|partnership': [
+    // Section A - Project / Business Overview
+    msmeDocuments.projectReport,
+    msmeDocuments.companyProfile,
+    msmeDocuments.cmaData,
+    // Section B - Entity KYC (Partnership Firm)
+    firmDocuments.firmPan,
+    firmDocuments.udyamCert,
+    firmDocuments.gstRegCert,
+    firmDocuments.partnershipDeed,
+    msmeDocuments.firmRegCert,
+    // Section C - Entity Financials
+    firmDocuments.firmCurrentStmt1,
+    msmeDocuments.gstr3b1,
+    firmDocuments.firmITReturns3,
+    // Section D - Individual KYC (all partners)
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    // Section E - Individual Financials (all partners)
+    incomeProofsSelfEmployed.indITReturns3_partners,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    msmeDocuments.form26as3,
+    // Existing loans
+    ...msmeExistingLoans,
+    // Section F - Property Documents
+    ...msmePropertyDocs,
+  ],
+
+  // MSME | New | Non-Salaried | Pvt Ltd
+  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F
+  'msme|new|non_salaried|indian_resident|pvt_ltd': [
+    // Section A - Project / Business Overview
+    msmeDocuments.projectReport,
+    msmeDocuments.companyProfile,
+    msmeDocuments.cmaData,
+    // Section B - Entity KYC (Pvt Ltd)
+    firmDocuments.firmPan,
+    firmDocuments.udyamCert,
+    firmDocuments.gstRegCert,
+    firmDocuments.regCertAoaMoaPvt,
+    // Section C - Entity Financials
+    firmDocuments.companyCurrentStmt1,
+    msmeDocuments.gstr3b1,
+    firmDocuments.companyITReturns3,
+    // Section D - Individual KYC (all directors)
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    // Section E - Individual Financials (all directors)
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    msmeDocuments.form26as3,
+    // Existing loans
+    ...msmeExistingLoans,
+    // Section F - Property Documents
+    ...msmePropertyDocs,
+  ],
+
+  // MSME | New | Non-Salaried | LLP
+  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F
+  'msme|new|non_salaried|indian_resident|llp': [
+    // Section A - Project / Business Overview
+    msmeDocuments.projectReport,
+    msmeDocuments.companyProfile,
+    msmeDocuments.cmaData,
+    // Section B - Entity KYC (LLP)
+    firmDocuments.firmPan,
+    firmDocuments.udyamCert,
+    firmDocuments.gstRegCert,
+    firmDocuments.regCertAoaMoaLLP,
+    // Section C - Entity Financials
+    firmDocuments.llpCurrentStmt1,
+    msmeDocuments.gstr3b1,
+    firmDocuments.llpITReturns3,
+    // Section D - Individual KYC (all designated partners)
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    kycDocuments.photo,
+    // Section E - Individual Financials (all partners)
+    incomeProofsSelfEmployed.indITReturns3_directors,
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    msmeDocuments.form26as3,
+    // Existing loans
+    ...msmeExistingLoans,
+    // Section F - Property Documents
+    ...msmePropertyDocs,
   ],
 };
 
