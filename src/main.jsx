@@ -28,7 +28,7 @@ import './index.css'
 
 // Protected Route wrapper
 function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading, impersonating } = useAuth();
+  const { user, loading, effectiveRole } = useAuth();
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
@@ -37,9 +37,6 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-
-  // If impersonating, override the effective role
-  const effectiveRole = impersonating ? 'executive' : user.role;
 
   if (allowedRoles && !allowedRoles.includes(effectiveRole) && !allowedRoles.includes(user.role)) {
     // Admin can access all routes (for impersonation preview)

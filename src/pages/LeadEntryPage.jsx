@@ -6,7 +6,7 @@ import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
-  const { isAdmin, isImpersonating, accessToken } = useAuth();
+  const { isAdmin, isImpersonating, impersonating, accessToken } = useAuth();
   
   // Loan types loaded dynamically
   const [loanTypes, setLoanTypes] = useState([
@@ -48,6 +48,7 @@ export default function LeadEntryPage() {
   });
   const [executives, setExecutives] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [allLeads, setAllLeads] = useState([]); // Unfiltered leads for impersonation filtering
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -103,7 +104,16 @@ export default function LeadEntryPage() {
       headers: { Authorization: `Bearer ${accessToken}` }
     })
       .then(r => r.json())
-      .then(data => setLeads(data.data || []))
+      .then(data => {
+        const fetchedLeads = data.data || [];
+        setAllLeads(fetchedLeads);
+        // If impersonating, filter to only show this executive's leads
+        if (isImpersonating && impersonating?.name) {
+          setLeads(fetchedLeads.filter(l => l.assignedTo === impersonating.name));
+        } else {
+          setLeads(fetchedLeads);
+        }
+      })
       .catch(() => {});
   };
 
@@ -379,10 +389,12 @@ export default function LeadEntryPage() {
     }
   };
 
-  const unassignedLeads = leads.filter(l => !l.assignedTo);
-  const assignedLeads = leads.filter(l => l.assignedTo);
+  // Use allLeads for admin management view (shows everything), leads for current user/impersonation view
+  const displayLeads = isAdmin && !isImpersonating ? allLeads : leads;
+  const unassignedLeads = displayLeads.filter(l => !l.assignedTo);
+  const assignedLeads = displayLeads.filter(l => l.assignedTo);
 
-  const filteredLeads = leads.filter(lead => {
+  const filteredLeads = displayLeads.filter(lead => {
     const matchesSearch = !searchTerm ||
       lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.mobile?.includes(searchTerm);
