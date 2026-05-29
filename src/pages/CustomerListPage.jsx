@@ -73,7 +73,7 @@ export default function CustomerListPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="">All Status</option>
-            <option value="New">New</option>
+            <option value="Assigned">Assigned</option>
             <option value="Processing">Processing</option>
             <option value="Sanctioned">Sanctioned</option>
             <option value="Partially Disbursed">Partially Disbursed</option>
