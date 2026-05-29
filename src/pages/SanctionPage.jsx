@@ -35,8 +35,8 @@ export default function SanctionPage() {
       let filteredLeads = executiveName
         ? allLeads.filter(l => l.assignedTo === executiveName)
         : allLeads;
-      // Show leads that have at least one processing bank
-      setLeads(filteredLeads.filter(l => l.status === 'Processing'));
+      // Show leads that have at least one processing bank AND at least one assigned bank
+      setLeads(filteredLeads.filter(l => l.status === 'Processing' && l.assignedBanks?.length > 0));
     } catch (err) {
       setError('Failed to load leads');
     }
