@@ -76,9 +76,144 @@ const serializeRemarksField = (coapplicant, remarks) => {
 
 router.use(authenticate);
 
-
 // Mount bank-wise routes as sub-router
 router.use('/:leadId/banks', leadBanksRouter);
+
+// GET executives list (MUST be before /:id to avoid route shadowing)
+router.get('/meta/executives', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { data: executives, error } = await supabase
+      .from('executives')
+      .select('*')
+      .eq('active', true)
+      .order('name');
+
+    if (error) throw error;
+
+    res.json(executives.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      department: ex.department,
+      active: ex.active
+    })));
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch executives' });
+  }
+});
+
+// GET dashboard stats (MUST be before /:id to avoid route shadowing)
+router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    let query = supabase.from('leads').select('status');
+
+    if (req.user.role !== 'admin') {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
+    }
+
+    const { data: leads, error } = await query;
+
+    if (error) throw error;
+
+    const stats = {
+      totalLeads: leads.length,
+      newLeads: leads.filter(l => l.status === 'New').length,
+      assigned: leads.filter(l => l.status === 'Assigned').length,
+      processing: leads.filter(l => l.status === 'Processing').length,
+      sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
+      partiallyDisbursed: leads.filter(l => l.status === 'Partially Disbursed').length,
+      disbursed: leads.filter(l => l.status === 'Disbursed').length,
+      rejected: leads.filter(l => l.status === 'Rejected').length,
+    };
+
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// Status distribution for charts (MUST be before /:id to avoid route shadowing)
+router.get('/stats/status-distribution', authenticate, async (req, res) => {
+  try {
+    let query = supabase.from('leads').select('status');
+
+    if (req.user.role !== 'admin') {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
+    }
+
+    const { data: leads, error } = await query;
+
+    if (error) throw error;
+
+    const distribution = {
+      'New': leads.filter(l => l.status === 'New').length,
+      'Assigned': leads.filter(l => l.status === 'Assigned').length,
+      'Processing': leads.filter(l => l.status === 'Processing').length,
+      'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
+      'Partially Disbursed': leads.filter(l => l.status === 'Partially Disbursed').length,
+      'Disbursed': leads.filter(l => l.status === 'Disbursed').length,
+      'Rejected': leads.filter(l => l.status === 'Rejected').length
+    };
+
+    res.json(distribution);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch distribution' });
+  }
+});
+
+// Loan type distribution for charts (MUST be before /:id to avoid route shadowing)
+router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
+  try {
+    let query = supabase.from('leads').select('loan_type');
+
+    if (req.user.role !== 'admin') {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
+    }
+
+    const { data: leads, error } = await query;
+
+    if (error) throw error;
+
+    const loanTypes = {};
+    leads.forEach(lead => {
+      const type = lead.loan_type || 'Unknown';
+      loanTypes[type] = (loanTypes[type] || 0) + 1;
+    });
+
+    res.json(loanTypes);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch loan types' });
+  }
+});
 
 // GET all leads with search, filter and pagination
 router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
@@ -324,28 +459,6 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// GET executives list
-router.get('/meta/executives', authorize('admin', 'executive', 'dsa'), async (req, res) => {
-  try {
-    const { data: executives, error } = await supabase
-      .from('executives')
-      .select('*')
-      .eq('active', true)
-      .order('name');
-
-    if (error) throw error;
-
-    res.json(executives.map(ex => ({
-      id: ex.id,
-      name: ex.name,
-      department: ex.department,
-      active: ex.active
-    })));
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch executives' });
   }
 });
 
@@ -634,120 +747,6 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
     res.json({ message: 'Lead deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete lead' });
-  }
-});
-
-// GET dashboard stats
-router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
-  try {
-    let query = supabase.from('leads').select('status');
-
-    if (req.user.role !== 'admin') {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', req.user.id)
-        .maybeSingle();
-
-      if (userData?.name) {
-        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
-      } else {
-        query = query.eq('assigned_to', req.user.id);
-      }
-    }
-
-    const { data: leads, error } = await query;
-
-    if (error) throw error;
-
-    const stats = {
-      totalLeads: leads.length,
-      newLeads: leads.filter(l => l.status === 'New').length,
-      assigned: leads.filter(l => l.status === 'Assigned').length,
-      processing: leads.filter(l => l.status === 'Processing').length,
-      sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
-      partiallyDisbursed: leads.filter(l => l.status === 'Partially Disbursed').length,
-      disbursed: leads.filter(l => l.status === 'Disbursed').length,
-      rejected: leads.filter(l => l.status === 'Rejected').length,
-    };
-
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch stats' });
-  }
-});
-
-// Status distribution for charts
-router.get('/stats/status-distribution', authenticate, async (req, res) => {
-  try {
-    let query = supabase.from('leads').select('status');
-
-    if (req.user.role !== 'admin') {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', req.user.id)
-        .maybeSingle();
-
-      if (userData?.name) {
-        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
-      } else {
-        query = query.eq('assigned_to', req.user.id);
-      }
-    }
-
-    const { data: leads, error } = await query;
-
-    if (error) throw error;
-
-    const distribution = {
-      'New': leads.filter(l => l.status === 'New').length,
-      'Assigned': leads.filter(l => l.status === 'Assigned').length,
-      'Processing': leads.filter(l => l.status === 'Processing').length,
-      'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
-      'Partially Disbursed': leads.filter(l => l.status === 'Partially Disbursed').length,
-      'Disbursed': leads.filter(l => l.status === 'Disbursed').length,
-      'Rejected': leads.filter(l => l.status === 'Rejected').length
-    };
-
-    res.json(distribution);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch distribution' });
-  }
-});
-
-// Loan type distribution for charts
-router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
-  try {
-    let query = supabase.from('leads').select('loan_type');
-
-    if (req.user.role !== 'admin') {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', req.user.id)
-        .maybeSingle();
-
-      if (userData?.name) {
-        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
-      } else {
-        query = query.eq('assigned_to', req.user.id);
-      }
-    }
-
-    const { data: leads, error } = await query;
-
-    if (error) throw error;
-
-    const loanTypes = {};
-    leads.forEach(lead => {
-      const type = lead.loan_type || 'Unknown';
-      loanTypes[type] = (loanTypes[type] || 0) + 1;
-    });
-
-    res.json(loanTypes);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch loan types' });
   }
 });
 

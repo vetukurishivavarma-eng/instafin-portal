@@ -8,19 +8,27 @@ import { sendApprovalEmail, sendRejectionEmail, testEmailConnection } from '../s
 import { sendApprovalWhatsApp, sendRejectionWhatsApp } from '../services/whatsapp.service.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'instafin-dev-secret-2024';
+
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
+if (!ACCESS_SECRET || !REFRESH_SECRET) {
+  console.error('FATAL: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET environment variables are required');
+  process.exit(1);
+}
+
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
 function generateTokens(user) {
   const accessToken = jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
+    ACCESS_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRY }
   );
   const refreshToken = jwt.sign(
     { id: user.id },
-    JWT_SECRET,
+    REFRESH_SECRET,
     { expiresIn: REFRESH_TOKEN_EXPIRY }
   );
   return { accessToken, refreshToken };
@@ -46,7 +54,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already exists' });
     }
 
-    const validRoles = ['admin', 'executive', 'dsa'];
+    const validRoles = ['executive', 'dsa'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }
@@ -113,7 +121,7 @@ router.post('/refresh', async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, JWT_SECRET);
+    const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
 
     const { data: user, error } = await supabase
       .from('users')

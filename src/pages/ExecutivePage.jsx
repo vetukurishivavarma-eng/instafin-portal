@@ -53,7 +53,7 @@ export default function ExecutivePage() {
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [showRevokeModal, setShowRevokeModal] = useState(null);
   const [emailTesting, setEmailTesting] = useState(false);
-  const [testEmailAddress, setTestEmailAddress] = useState('yeshwantraavi4@gmail.com');
+  const [testEmailAddress, setTestEmailAddress] = useState('');
 
   // Test SMTP configuration
   const handleTestEmail = async () => {

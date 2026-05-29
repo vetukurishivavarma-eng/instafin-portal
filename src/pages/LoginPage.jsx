@@ -801,18 +801,20 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div style={{
-            marginTop: '1.5rem',
-            padding: '1.25rem',
-            background: 'rgba(255, 255, 255, 0.02)',
-            borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.05)'
-          }}>
-            <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', marginBottom: '0.5rem', fontWeight: '600' }}>Demo Accounts:</p>
-            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>admin@instafin.com / admin123</p>
-            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>exec@instafin.com / exec123</p>
-            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>dsa@instafin.com / dsa123</p>
-          </div>
+          {(import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_CREDENTIALS === 'true') && (
+            <div style={{
+              marginTop: '1.5rem',
+              padding: '1.25rem',
+              background: 'rgba(255, 255, 255, 0.02)',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.05)'
+            }}>
+              <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', marginBottom: '0.5rem', fontWeight: '600' }}>Demo Accounts:</p>
+              <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>admin@instafin.com / admin123</p>
+              <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>exec@instafin.com / exec123</p>
+              <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', margin: '0.25rem 0' }}>dsa@instafin.com / dsa123</p>
+            </div>
+          )}
 
           <p style={{
             textAlign: 'center',

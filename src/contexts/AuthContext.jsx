@@ -14,15 +14,17 @@ export function AuthProvider({ children }) {
     const savedUser = localStorage.getItem('instafin_user');
     const savedToken = localStorage.getItem('instafin_token');
     const savedImpersonating = localStorage.getItem('instafin_impersonating');
+    // Only restore session if both user meta and a token exist.
+    // Without a persisted access token, require re-login on page reload.
     if (savedUser && savedToken) {
       setUser(JSON.parse(savedUser));
       setAccessToken(savedToken);
-      if (savedImpersonating) {
-        try {
-          setImpersonating(JSON.parse(savedImpersonating));
-        } catch (e) {
-          setImpersonating(null);
-        }
+    }
+    if (savedImpersonating) {
+      try {
+        setImpersonating(JSON.parse(savedImpersonating));
+      } catch (e) {
+        setImpersonating(null);
       }
     }
     setLoading(false);
@@ -42,7 +44,9 @@ export function AuthProvider({ children }) {
     setUser(data.user);
     setAccessToken(data.accessToken);
     localStorage.setItem('instafin_user', JSON.stringify(data.user));
-    localStorage.setItem('instafin_token', data.accessToken);
+    // Security: Access token stored in memory only (React state).
+    // Refresh token is stored temporarily for the refresh flow;
+    // TODO: Migrate to httpOnly cookie in production.
     localStorage.setItem('instafin_refresh', data.refreshToken);
     // Role-based redirect
     if (data.user.role === 'admin') {
@@ -70,7 +74,6 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setImpersonating(null);
     localStorage.removeItem('instafin_user');
-    localStorage.removeItem('instafin_token');
     localStorage.removeItem('instafin_refresh');
     localStorage.removeItem('instafin_impersonating');
     navigate('/login');
@@ -87,7 +90,6 @@ export function AuthProvider({ children }) {
     if (!res.ok) return false;
     const data = await res.json();
     setAccessToken(data.accessToken);
-    localStorage.setItem('instafin_token', data.accessToken);
     localStorage.setItem('instafin_refresh', data.refreshToken);
     return true;
   };
