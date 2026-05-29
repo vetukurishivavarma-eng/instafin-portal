@@ -1142,7 +1142,13 @@ This JSON block MUST contain the following structured fields extracted from the 
     "gender": "Male / Female / Other",
     "aadhaar_number": "Aadhaar number if present (format: XXXX XXXX XXXX or masked)",
     "pan_number": "PAN number if present (format: XXXXX1234X)",
-    "address": "Full residential address as written on Aadhaar/proof"
+    "address": "Full residential address as written on Aadhaar/proof",
+    "gross_income": "Gross monthly income as a numeric value (e.g., 50000). Extract from Gross Monthly Income or similar fields. 0 if not found.",
+    "monthly_income": "Net monthly income as a numeric value (e.g., 45000). Extract from Net Monthly Income or similar fields. 0 if not found.",
+    "pf": "Provident Fund deduction amount as a numeric value (e.g., 2500). Extract from salary slip if visible. 0 if not found.",
+    "income_tax": "Income Tax / TDS deduction as a numeric value (e.g., 1500). Extract from salary slip if visible. 0 if not found.",
+    "profession_tax": "Profession Tax deduction as a numeric value (e.g., 200). Extract from salary slip if visible. 0 if not found.",
+    "rental_income": "Proposed or existing rental income as a numeric value (e.g., 10000). Extract from bank statement or income proofs. 0 if not found."
   },
   "face_bounding_box": [ymin, xmin, ymax, xmax]
 }
@@ -1307,7 +1313,13 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
     "gender": "Male",
     "aadhaar_number": "XXXX XXXX 1234",
     "pan_number": "ABCDE1234F",
-    "address": "123, High Street, Sector 5, Bengaluru, Karnataka - 560001"
+    "address": "123, High Street, Sector 5, Bengaluru, Karnataka - 560001",
+    "gross_income": 50000,
+    "monthly_income": 45000,
+    "pf": 2500,
+    "income_tax": 1500,
+    "profession_tax": 200,
+    "rental_income": 0
   },
   "face_bounding_box": [220, 150, 520, 420]
 }

@@ -567,31 +567,32 @@ export default function ChecklistsPage() {
       }
 
       if (parsedExtra) {
+        let foundAny = false;
         if (parsedExtra.gross_income) {
           const val = parseInt(String(parsedExtra.gross_income).replace(/,/g, ''));
-          if (val > 0) setEligGrossSalary(String(val));
+          if (val > 0) { setEligGrossSalary(String(val)); foundAny = true; }
         } else if (parsedExtra.monthly_income) {
           const val = parseInt(String(parsedExtra.monthly_income).replace(/,/g, ''));
-          if (val > 0) setEligGrossSalary(String(val));
+          if (val > 0) { setEligGrossSalary(String(val)); foundAny = true; }
         }
         if (parsedExtra.pf) {
           const val = parseInt(String(parsedExtra.pf).replace(/,/g, ''));
-          if (val > 0) setEligPF(String(val));
+          if (val > 0) { setEligPF(String(val)); foundAny = true; }
         }
         if (parsedExtra.income_tax) {
           const val = parseInt(String(parsedExtra.income_tax).replace(/,/g, ''));
-          if (val > 0) setEligIncomeTax(String(val));
+          if (val > 0) { setEligIncomeTax(String(val)); foundAny = true; }
         }
         if (parsedExtra.profession_tax) {
           const val = parseInt(String(parsedExtra.profession_tax).replace(/,/g, ''));
-          if (val > 0) setEligProfessionTax(String(val));
+          if (val > 0) { setEligProfessionTax(String(val)); foundAny = true; }
         }
         if (parsedExtra.rental_income) {
           const val = parseInt(String(parsedExtra.rental_income).replace(/,/g, ''));
-          if (val > 0) setEligRentalIncome(String(val));
+          if (val > 0) { setEligRentalIncome(String(val)); foundAny = true; }
         }
-        // If we got structured data, we're done — no need for regex fallback
-        return;
+        // Only skip regex fallback if we actually found financial fields in the JSON
+        if (foundAny) return;
       }
 
       // 2) Fallback: strip markdown bold/italic markers and try regex patterns
