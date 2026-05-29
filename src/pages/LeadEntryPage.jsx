@@ -6,7 +6,7 @@ import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
-  const { isAdmin, isImpersonating, impersonating, accessToken } = useAuth();
+  const { isImpersonating, impersonating, accessToken, effectiveRole } = useAuth();
   
   // Loan types loaded dynamically
   const [loanTypes, setLoanTypes] = useState([
@@ -390,7 +390,7 @@ export default function LeadEntryPage() {
   };
 
   // Use allLeads for admin management view (shows everything), leads for current user/impersonation view
-  const displayLeads = isAdmin && !isImpersonating ? allLeads : leads;
+  const displayLeads = effectiveRole === 'admin' ? allLeads : leads;
   const unassignedLeads = displayLeads.filter(l => !l.assignedTo);
   const assignedLeads = displayLeads.filter(l => l.assignedTo);
 
@@ -415,7 +415,7 @@ export default function LeadEntryPage() {
           <p className="text-gray-500 font-medium mt-1">Unified lead capture and pipeline tracking system.</p>
         </div>
         
-        {isAdmin && (
+        {effectiveRole === 'admin' && (
           <button
             onClick={() => setShowBulkUpload(true)}
             className="px-5 py-3 rounded-2xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 hover-lift shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
@@ -445,7 +445,7 @@ export default function LeadEntryPage() {
       <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
         
         {/* CARD 1: ADD NEW LEAD — visible only to executives */}
-        {!isAdmin && (
+        {effectiveRole === 'executive' && (
           <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
             <div>
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-6 shadow-md shadow-blue-500/20">
@@ -471,7 +471,7 @@ export default function LeadEntryPage() {
         )}
 
         {/* CARD 2: MANAGE & ASSIGN LEADS — visible only to admin */}
-        {isAdmin && (
+        {effectiveRole === 'admin' && (
           <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
             <div>
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-6 shadow-md shadow-indigo-500/20">
@@ -568,7 +568,7 @@ export default function LeadEntryPage() {
                   </div>
                   <StatusBadge status={lead.status} />
                 </div>
-                {isAdmin && (
+                {effectiveRole === 'admin' && (
                   <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100" onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => { setEditingLead(lead); setEditForm({...lead}); }}
@@ -817,7 +817,7 @@ export default function LeadEntryPage() {
               </div>
 
               {/* Instant Executive Assignment nested inside Form popup */}
-              {isAdmin && createdLead && (
+              {effectiveRole === 'admin' && createdLead && (
                 <div className="bg-indigo-50/50 border border-indigo-200/50 rounded-2xl p-5 mt-6 animate-fade-in-up">
                   <h3 className="text-lg font-bold text-indigo-800 mb-3">Assign Directly to Executive</h3>
                   <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -883,7 +883,7 @@ export default function LeadEntryPage() {
                     <table className="w-full text-left">
                       <thead className="bg-gray-50/70 border-b">
                         <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                          <th className="p-4">Customer</th><th className="p-4">Mobile</th><th className="p-4">Loan Type</th><th className="p-4">Amount</th><th className="p-4">Status</th>{isAdmin && <th className="p-4 text-center">Action</th>}
+                          <th className="p-4">Customer</th><th className="p-4">Mobile</th><th className="p-4">Loan Type</th><th className="p-4">Amount</th><th className="p-4">Status</th>{effectiveRole === 'admin' && <th className="p-4 text-center">Action</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y text-sm">
@@ -903,7 +903,7 @@ export default function LeadEntryPage() {
                             <td className="p-4 text-gray-650 capitalize font-medium">{lead.loanType?.replace('_', ' ')}</td>
                             <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount).toLocaleString('en-IN')}</td>
                             <td className="p-4"><StatusBadge status={lead.status} /></td>
-                            {isAdmin && (
+                            {effectiveRole === 'admin' && (
                               <td className="p-4 text-center">
                                 <button 
                                   onClick={() => setSelectedLead(lead.id)} 
