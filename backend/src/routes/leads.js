@@ -370,7 +370,8 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       remarks,
       hasCoapplicant,
       coapplicantName,
-      coapplicantIncomeSource
+      coapplicantIncomeSource,
+      impersonatedExecutive
     } = req.body;
 
     if (!customerName || !mobile) {
@@ -382,6 +383,22 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       name: coapplicantName || "",
       incomeSource: coapplicantIncomeSource || "salaried"
     } : null;
+
+    // When admin is impersonating an executive, look up the executive's user ID
+    let assignedTo = null;
+    if (req.user.role === 'admin' && impersonatedExecutive) {
+      const { data: execUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('name', impersonatedExecutive)
+        .eq('role', 'executive')
+        .maybeSingle();
+      if (execUser) {
+        assignedTo = execUser.id;
+      }
+    } else if (req.user.role !== 'admin') {
+      assignedTo = req.user.id;
+    }
 
     // Build insert object - conditionally include referral_code
     const insertData = {
@@ -395,8 +412,8 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       business_type: businessType || null,
       expected_amount: expectedAmount || null,
       assigned_banks: assignedBanks || [],
-      status: 'New',
-      assigned_to: req.user.role === 'admin' ? null : req.user.id,
+      status: assignedTo ? 'Assigned' : 'New',
+      assigned_to: assignedTo,
       priority: 'Medium',
       remarks: serializeRemarksField(coapplicantData, remarks)
     };

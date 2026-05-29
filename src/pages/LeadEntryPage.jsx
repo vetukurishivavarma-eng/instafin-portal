@@ -6,7 +6,7 @@ import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
 
 export default function LeadEntryPage() {
-  const { isImpersonating, impersonating, accessToken, effectiveRole } = useAuth();
+  const { isImpersonating, impersonating, user, accessToken, effectiveRole } = useAuth();
   
   // Loan types loaded dynamically
   const [loanTypes, setLoanTypes] = useState([
@@ -287,7 +287,11 @@ export default function LeadEntryPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          // When admin is impersonating an executive, auto-assign the lead to that executive
+          ...(isImpersonating && impersonating?.name ? { impersonatedExecutive: impersonating.name } : {})
+        }),
       });
       const lead = await res.json();
       if (!res.ok) {
@@ -568,7 +572,7 @@ export default function LeadEntryPage() {
                   </div>
                   <StatusBadge status={lead.status} />
                 </div>
-                {effectiveRole === 'admin' && (
+                {(effectiveRole === 'admin' || isImpersonating) && (
                   <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100" onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => { setEditingLead(lead); setEditForm({...lead}); }}
