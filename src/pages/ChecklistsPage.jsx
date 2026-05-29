@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
-import { getChecklist, getChecklistWithFallback } from '../utils/resolver';
+import { getChecklist, getChecklistWithFallback, getCoapplicantChecklist } from '../utils/resolver';
 import ChecklistDisplay from '../components/ChecklistDisplay';
 import { downloadPDF, downloadProfilePDF, downloadEligibilityPDF } from '../export/pdf';
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
@@ -288,15 +288,8 @@ export default function ChecklistsPage() {
     let items = getChecklistWithFallback(selection);
 
     if (lead.hasCoapplicant) {
-      items = [
-        ...items,
-        {
-          id: 'coapplicant_aadhaar',
-          name: `Co-applicant Aadhaar Card (${lead.coapplicantName || 'Co-applicant'})`,
-          category: 'kyc',
-          required: true
-        }
-      ];
+      const coapplicantItems = getCoapplicantChecklist(items, lead.coapplicantName);
+      items = [...items, ...coapplicantItems];
     }
 
     setChecklistItems(items);

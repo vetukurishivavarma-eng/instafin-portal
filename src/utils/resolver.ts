@@ -387,5 +387,21 @@ export function getChecklistWithFallback(selection: Selection): ChecklistItem[] 
   return COMMON_CHECKLIST || [];
 }
 
+/**
+ * Generates co-applicant versions of all checklist items.
+ * KYC category documents are marked as mandatory (required: true), all other categories are marked as optional (required: false).
+ * @param items - Primary applicant checklist items
+ * @param coapplicantName - Co-applicant name
+ * @returns ChecklistItem[] - Array of co-applicant checklist items
+ */
+export function getCoapplicantChecklist(items: ChecklistItem[], coapplicantName: string = 'Co-applicant'): ChecklistItem[] {
+  return items.map(item => ({
+    id: `coapplicant_${item.id}`,
+    name: `Co-applicant ${item.name} (${coapplicantName})`,
+    category: item.category,
+    required: item.category === 'kyc'
+  }));
+}
+
 // Default export for convenience
 export default getChecklist;
