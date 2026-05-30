@@ -21,6 +21,8 @@ export default function StatusBadge({ status }) {
         return "bg-orange-50 text-orange-700 border-orange-200";
       case "Rejected":
         return "bg-gray-100 text-gray-600 border-gray-200";
+      case "Inactive":
+        return "bg-red-50 text-red-800 border-red-300";
       default:
         return "bg-gray-50 text-gray-600 border-gray-200";
     }

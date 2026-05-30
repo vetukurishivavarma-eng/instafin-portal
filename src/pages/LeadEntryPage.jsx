@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
+import { ALL_BANKS } from '../data/banks';
 
 export default function LeadEntryPage() {
   const { isImpersonating, impersonating, user, accessToken, effectiveRole } = useAuth();
@@ -67,7 +68,6 @@ export default function LeadEntryPage() {
   }, [searchParams]);
   const [editingLead, setEditingLead] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [viewLead, setViewLead] = useState(null);
   const [sanctionLetterUrl, setSanctionLetterUrl] = useState(null);
   const [loadingLetter, setLoadingLetter] = useState(false);
@@ -448,31 +448,29 @@ export default function LeadEntryPage() {
       {/* CENTRAL ACTION DASHBOARD CARDS */}
       <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
         
-        {/* CARD 1: ADD NEW LEAD — visible only to executives */}
-        {effectiveRole === 'executive' && (
-          <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
-            <div>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-6 shadow-md shadow-blue-500/20">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="8.5" cy="7" r="4" />
-                  <line x1="20" y1="8" x2="20" y2="14" />
-                  <line x1="23" y1="11" x2="17" y2="11" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Add New Lead</h2>
-              <p className="text-gray-500 leading-relaxed mb-6 font-medium">
-                Manually capture new customer loan requirements, co-applicant parameters, and banks selection to calculate credit risk.
-              </p>
+        {/* CARD 1: ADD NEW LEAD — visible to all roles */}
+        <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
+          <div>
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white mb-6 shadow-md shadow-blue-500/20">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
             </div>
-            <button
-              onClick={() => { setShowAddModal(true); setError(''); setSuccess(''); }}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-bold hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-500/10 hover-lift transition-all"
-            >
-              Create Lead Form
-            </button>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Add New Lead</h2>
+            <p className="text-gray-500 leading-relaxed mb-6 font-medium">
+              Manually capture new customer loan requirements, co-applicant parameters, and banks selection to calculate credit risk.
+            </p>
           </div>
-        )}
+          <button
+            onClick={() => { setShowAddModal(true); setError(''); setSuccess(''); }}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-bold hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-500/10 hover-lift transition-all"
+          >
+            Create Lead Form
+          </button>
+        </div>
 
         {/* CARD 2: MANAGE & ASSIGN LEADS — visible only to admin */}
         {effectiveRole === 'admin' && (
@@ -530,6 +528,7 @@ export default function LeadEntryPage() {
               <option value="Partially Disbursed">Partially Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </div>
         </div>
@@ -541,55 +540,98 @@ export default function LeadEntryPage() {
             No leads found matching current criteria.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredLeads.map(lead => (
-              <div
-                key={lead.id}
-                onClick={() => handleViewLead(lead)}
-                className={`bg-white rounded-3xl shadow-md hover:shadow-xl transition-all duration-300 border-l-4 ${getStatusBorder(lead.status)} cursor-pointer p-6 border border-gray-150 hover-lift relative`}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="max-w-[70%]">
-                    <h3 className="text-lg font-bold text-gray-900 leading-tight truncate">{lead.customerName}</h3>
-                    {lead.hasCoapplicant && (
-                      <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 shadow-sm">
-                        👥 Co-applicant
+          <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50/70 border-b">
+                <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="p-4">Customer</th>
+                  <th className="p-4">Mobile</th>
+                  <th className="p-4">Loan Type</th>
+                  <th className="p-4">Amount</th>
+                  <th className="p-4">Banks</th>
+                  <th className="p-4">Status</th>
+                  {(effectiveRole === 'admin' || isImpersonating) && <th className="p-4 text-center">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y text-sm">
+                {filteredLeads.map(lead => (
+                  <tr
+                    key={lead.id}
+                    onClick={() => handleViewLead(lead)}
+                    className={`hover:bg-gray-50/40 transition-colors cursor-pointer ${lead.isActive === false ? 'bg-red-50/40 opacity-75' : ''}`}
+                  >
+                    <td className="p-4">
+                      <div className="flex flex-col">
+                        <span className="text-gray-900 font-bold">{lead.customerName}</span>
+                        {lead.hasCoapplicant && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm">
+                            👥 Co-applicant
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4 font-medium text-gray-600">{lead.mobile}</td>
+                    <td className="p-4">
+                      <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">
+                        {lead.loanType?.replace('_', ' ') || 'N/A'}
                       </span>
+                    </td>
+                    <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>
+                    <td className="p-4">
+                      {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {lead.assignedBanks.map((bank, i) => (
+                            <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">None</span>
+                      )}
+                    </td>
+                    <td className="p-4"><StatusBadge status={lead.status} /></td>
+                    {(effectiveRole === 'admin' || isImpersonating) && (
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
+                            className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
+                                  method: 'PUT',
+                                  headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+                                });
+                                if (res.ok) {
+                                  setSuccess(`Lead ${lead.isActive === false ? 'restored' : 'marked inactive'} successfully`);
+                                  loadLeads();
+                                } else {
+                                  const err = await res.json();
+                                  setError(err.error || 'Failed to toggle status');
+                                }
+                              } catch (err) {
+                                setError('Failed to toggle status');
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                              lead.isActive === false
+                                ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                                : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+                            }`}
+                          >
+                            {lead.isActive === false ? 'Restore' : 'Mark Inactive'}
+                          </button>
+                        </div>
+                      </td>
                     )}
-                  </div>
-                  <span className="bg-indigo-50 text-indigo-700 border border-indigo-150 px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wider">
-                    {lead.loanType?.replace('_', ' ')}
-                  </span>
-                </div>
-                <p className="text-2xl font-black text-gray-900 mb-2">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</p>
-                <p className="text-blue-700 text-xs font-bold mb-4 flex items-center gap-1.5">
-                  🏦 {lead.assignedBanks && lead.assignedBanks.length > 0 ? lead.assignedBanks.join(', ') : 'No banks assigned'}
-                </p>
-                <div className="flex justify-between items-center border-t border-gray-100 pt-4 mt-2">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Assigned To</span>
-                    <span className="text-xs font-bold text-gray-700">{lead.assignedTo || 'Unassigned'}</span>
-                  </div>
-                  <StatusBadge status={lead.status} />
-                </div>
-                {(effectiveRole === 'admin' || isImpersonating) && (
-                  <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100" onClick={e => e.stopPropagation()}>
-                    <button
-                      onClick={() => { setEditingLead(lead); setEditForm({...lead}); }}
-                      className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 py-2 px-3 rounded-xl text-xs font-bold hover-lift transition-all"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(lead)}
-                      className="flex-1 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 py-2 px-3 rounded-xl text-xs font-bold hover-lift transition-all"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -1140,45 +1182,50 @@ export default function LeadEntryPage() {
             <p className="text-gray-500 text-sm mb-5 font-semibold">Modify core customer loan details or update status category.</p>
 
             <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer Full Name</label>
-                <input
-                  type="text"
-                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
-                  value={editForm.customerName || ''}
-                  onChange={e => setEditForm({...editForm, customerName: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Mobile Number</label>
-                <input
-                  type="text"
-                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
-                  value={editForm.mobile || ''}
-                  onChange={e => setEditForm({...editForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Type</label>
-                <select
-                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                  value={editForm.loanType || ''}
-                  onChange={e => setEditForm({...editForm, loanType: e.target.value})}
-                >
-                  {loanTypes.map(lt => (
-                    <option key={lt.key} value={lt.key}>{lt.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expected Amount (INR)</label>
-                <input
-                  type="text"
-                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
-                  value={editForm.expectedAmount || ''}
-                  onChange={e => setEditForm({...editForm, expectedAmount: e.target.value.replace(/\D/g, '')})}
-                />
-              </div>
+              {/* Admin sees all fields; executive sees only File Status + Bank Assignment */}
+              {(effectiveRole === 'admin' && !isImpersonating) && (
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer Full Name</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                      value={editForm.customerName || ''}
+                      onChange={e => setEditForm({...editForm, customerName: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Mobile Number</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                      value={editForm.mobile || ''}
+                      onChange={e => setEditForm({...editForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Type</label>
+                    <select
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                      value={editForm.loanType || ''}
+                      onChange={e => setEditForm({...editForm, loanType: e.target.value})}
+                    >
+                      {loanTypes.map(lt => (
+                        <option key={lt.key} value={lt.key}>{lt.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expected Amount (INR)</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                      value={editForm.expectedAmount || ''}
+                      onChange={e => setEditForm({...editForm, expectedAmount: e.target.value.replace(/\D/g, '')})}
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">File Status</label>
                 <select
@@ -1195,6 +1242,45 @@ export default function LeadEntryPage() {
                   <option>Rejected</option>
                 </select>
               </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Assigned Bank</label>
+                <select
+                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                  value={editForm.assignedBanks?.[0] || ''}
+                  onChange={async (e) => {
+                    const selectedBank = e.target.value;
+                    if (!selectedBank || !editingLead) return;
+                    try {
+                      const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
+                        method: 'PUT',
+                        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bankName: selectedBank })
+                      });
+                      if (res.ok) {
+                        setSuccess(`Bank "${selectedBank}" assigned!`);
+                        loadLeads();
+                      } else {
+                        const err = await res.json();
+                        setError(err.error || 'Failed to assign bank');
+                      }
+                    } catch (err) {
+                      setError('Failed to assign bank');
+                    }
+                  }}
+                >
+                  <option value="">Select a bank to assign</option>
+                  {ALL_BANKS.map(bank => (
+                    <option key={bank} value={bank}>{bank}</option>
+                  ))}
+                </select>
+                {editForm.assignedBanks && editForm.assignedBanks.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {editForm.assignedBanks.map((bank, i) => (
+                      <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4 mt-6">
@@ -1202,16 +1288,17 @@ export default function LeadEntryPage() {
               <button
                 onClick={async () => {
                   try {
+                    const updateBody = { status: editForm.status };
+                    if (effectiveRole === 'admin' && !isImpersonating) {
+                      updateBody.customerName = editForm.customerName;
+                      updateBody.mobile = editForm.mobile;
+                      updateBody.loanType = editForm.loanType;
+                      updateBody.expectedAmount = editForm.expectedAmount;
+                    }
                     const res = await fetch(`${API_BASE}/leads/${editingLead.id}`, {
                       method: 'PUT',
                       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        customerName: editForm.customerName,
-                        mobile: editForm.mobile,
-                        loanType: editForm.loanType,
-                        expectedAmount: editForm.expectedAmount,
-                        status: editForm.status
-                      })
+                      body: JSON.stringify(updateBody)
                     });
                     if (res.ok) {
                       setLeads(leads.map(l => l.id === editingLead.id ? {...l, ...editForm} : l));
@@ -1226,44 +1313,6 @@ export default function LeadEntryPage() {
                 className="flex-1 bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-800 hover-lift transition-all shadow-md shadow-blue-500/10"
               >
                 Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm relative shadow-2xl border border-gray-150 animate-slide-up my-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-2 text-red-655 flex items-center gap-2">
-              ⚠️ Purge Loan File?
-            </h3>
-            <p className="text-gray-650 mb-6 text-sm font-semibold leading-relaxed">
-              Are you sure you want to completely delete the file for <strong className="text-gray-900 font-extrabold">{deleteConfirm.customerName}</strong>? This action is permanent and cannot be undone.
-            </p>
-            <div className="flex gap-4">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold transition-all hover-lift">Cancel</button>
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`${API_BASE}/leads/${deleteConfirm.id}`, {
-                      method: 'DELETE',
-                      headers: { Authorization: `Bearer ${accessToken}` }
-                    });
-                    if (res.ok) {
-                      setLeads(leads.filter(l => l.id !== deleteConfirm.id));
-                      setDeleteConfirm(null);
-                      setSuccess('Lead deleted successfully.');
-                      loadLeads();
-                    }
-                  } catch (err) {
-                    setError('Failed to delete lead');
-                  }
-                }}
-                className="flex-1 bg-red-600 hover:bg-red-750 text-white py-3 rounded-2xl font-bold transition-all hover-lift shadow-md shadow-red-500/10"
-              >
-                Delete File
               </button>
             </div>
           </div>

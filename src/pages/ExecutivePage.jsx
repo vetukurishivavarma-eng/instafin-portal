@@ -3,30 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
-
-const BANK_OPTIONS = [
-  'SBI', 'PNB', 'HDFC', 'ICICI', 'Axis Bank', 'Bank of Baroda',
-  'Canara Bank', 'Union Bank', 'Kotak Mahindra', 'IDFC First',
-  'Bajaj Finserv', 'Tata Capital', 'L&T Finance', 'Muthoot Finance',
-  'Manappuram Finance', 'Other'
-];
-
-const COMMON_BANKS = [
-  'SBI', 'PNB', 'HDFC', 'ICICI', 'Axis Bank', 'Bank of Baroda',
-  'Canara Bank', 'Union Bank', 'Kotak Mahindra', 'IDFC First',
-  'Bajaj Finserv', 'Tata Capital', 'L&T Finance', 'Muthoot Finance',
-  'Manappuram Finance', 'Yes Bank', 'RBL Bank', 'IndusInd Bank',
-  'Federal Bank', 'South Indian Bank', 'Bank of India', 'Indian Bank',
-  'Central Bank of India', 'Indian Overseas Bank', 'UCO Bank',
-  'Punjab & Sind Bank', 'Bank of Maharashtra', 'Jammu & Kashmir Bank',
-  'DCB Bank', 'Karur Vysya Bank', 'City Union Bank', 'Dhanlaxmi Bank',
-  'Karnataka Bank', 'CSB Bank', 'Tamilnad Mercantile Bank',
-  'Shriram Finance', 'Aditya Birla Finance', 'HDB Financial Services',
-  'Cholamandalam Finance', 'Piramal Finance', 'IIFL Finance',
-  'Poonawalla Fincorp', 'Hero FinCorp', 'IndiaBulls Finance',
-  'SMFG India Credit', 'TVS Credit', 'Sundaram Finance',
-  'Mahindra Finance', 'Reliance Capital', 'Edelweiss Finance'
-];
+import { ALL_BANKS, COMMON_BANKS } from '../data/banks';
 
 export default function ExecutivePage() {
   const { accessToken, impersonate, user } = useAuth();
@@ -529,7 +506,7 @@ export default function ExecutivePage() {
                     }}
                   >
                     <option value="">Choose a bank</option>
-                    {BANK_OPTIONS.map(bank => (
+                    {ALL_BANKS.map(bank => (
                       <option key={bank} value={bank}>{bank}</option>
                     ))}
                   </select>

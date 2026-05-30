@@ -227,6 +227,7 @@ export default function PipelinePage() {
               <option value="Partially Disbursed">Partially Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </div>
         </div>
@@ -235,45 +236,99 @@ export default function PipelinePage() {
         ) : filteredLeads.length === 0 ? (
           <div className="text-center py-12 text-gray-500">No leads found</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-            {filteredLeads.map(lead => (
-              <div
-                key={lead.id}
-                onClick={() => handleViewLead(lead)}
-                className={`bg-white rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 ${getStatusBorder(lead.status)} cursor-pointer`}
-              >
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-bold text-gray-900">{lead.customerName}</h3>
-                    <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-semibold">
-                      {lead.loanType}
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-800 mb-2">₹{lead.expectedAmount?.toLocaleString()}</p>
-                  <p className="text-blue-600 text-sm mb-4">{lead.assignedBanks?.[0] || 'No bank assigned'}</p>
-                  <div className="flex justify-between items-center border-t pt-4">
-                    <span className="text-sm text-gray-500">{lead.assignedTo || 'Unassigned'}</span>
-                    <StatusBadge status={lead.status} />
-                  </div>
-                  {isAdmin && (
-                    <div className="flex gap-2 mt-4 pt-3 border-t">
-                      <button
-                        onClick={() => { setEditingLead(lead); setEditForm({...lead}); }}
-                        className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg text-sm font-semibold hover:bg-blue-700"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(lead)}
-                        className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg text-sm font-semibold hover:bg-red-700"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="p-6">
+            <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50/70 border-b">
+                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="p-4">Customer</th>
+                    <th className="p-4">Mobile</th>
+                    <th className="p-4">Loan Type</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Banks</th>
+                    <th className="p-4">Status</th>
+                    {isAdmin && <th className="p-4 text-center">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y text-sm">
+                  {filteredLeads.map(lead => (
+                    <tr
+                      key={lead.id}
+                      onClick={() => handleViewLead(lead)}
+                      className={`hover:bg-gray-50/40 transition-colors cursor-pointer ${lead.isActive === false ? 'bg-red-50/40 opacity-75' : ''}`}
+                    >
+                      <td className="p-4">
+                        <div className="flex flex-col">
+                          <span className="text-gray-900 font-bold">{lead.customerName}</span>
+                          {lead.hasCoapplicant && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm">
+                              👥 Co-applicant
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 font-medium text-gray-600">{lead.mobile}</td>
+                      <td className="p-4">
+                        <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">
+                          {lead.loanType?.replace('_', ' ') || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>
+                      <td className="p-4">
+                        {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {lead.assignedBanks.map((bank, i) => (
+                              <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">None</span>
+                        )}
+                      </td>
+                      <td className="p-4"><StatusBadge status={lead.status} /></td>
+                      {isAdmin && (
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
+                              className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
+                                    method: 'PUT',
+                                    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+                                  });
+                                  if (res.ok) {
+                                    loadData();
+                                  } else {
+                                    const err = await res.json();
+                                    setError(err.error || 'Failed to toggle status');
+                                  }
+                                } catch (err) {
+                                  setError('Failed to toggle status');
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                lead.isActive === false
+                                  ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                                  : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+                              }`}
+                            >
+                              {lead.isActive === false ? 'Restore' : 'Mark Inactive'}
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -284,45 +339,49 @@ export default function PipelinePage() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-xl font-bold mb-4">Edit Lead</h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-                <input
-                  type="text"
-                  className="w-full border rounded-xl px-4 py-2"
-                  value={editForm.customerName || ''}
-                  onChange={e => setEditForm({...editForm, customerName: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-                <input
-                  type="text"
-                  className="w-full border rounded-xl px-4 py-2"
-                  value={editForm.mobile || ''}
-                  onChange={e => setEditForm({...editForm, mobile: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Loan Type</label>
-                <select
-                  className="w-full border rounded-xl px-4 py-2"
-                  value={editForm.loanType || ''}
-                  onChange={e => setEditForm({...editForm, loanType: e.target.value})}
-                >
-                  <option value="">Select Loan Type</option>
-                  <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option>
-                  <option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option><option>Education Loan</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Expected Amount</label>
-                <input
-                  type="text"
-                  className="w-full border rounded-xl px-4 py-2"
-                  value={editForm.expectedAmount || ''}
-                  onChange={e => setEditForm({...editForm, expectedAmount: e.target.value})}
-                />
-              </div>
+              {isAdmin && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-xl px-4 py-2"
+                      value={editForm.customerName || ''}
+                      onChange={e => setEditForm({...editForm, customerName: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-xl px-4 py-2"
+                      value={editForm.mobile || ''}
+                      onChange={e => setEditForm({...editForm, mobile: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Loan Type</label>
+                    <select
+                      className="w-full border rounded-xl px-4 py-2"
+                      value={editForm.loanType || ''}
+                      onChange={e => setEditForm({...editForm, loanType: e.target.value})}
+                    >
+                      <option value="">Select Loan Type</option>
+                      <option>Home Loan</option><option>LAP</option><option>Mudra Loan</option>
+                      <option>MSME Loan</option><option>Business Loan</option><option>Personal Loan</option><option>Education Loan</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Expected Amount</label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-xl px-4 py-2"
+                      value={editForm.expectedAmount || ''}
+                      onChange={e => setEditForm({...editForm, expectedAmount: e.target.value})}
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                 <select
@@ -331,7 +390,7 @@ export default function PipelinePage() {
                   onChange={e => setEditForm({...editForm, status: e.target.value})}
                 >
                   <option>New</option><option>Processing</option><option>Assigned</option>
-                  <option>Sanctioned</option><option>Disbursed</option>
+                  <option>Sanctioned</option><option>Disbursed</option><option>Partially Disbursed</option><option>Rejected</option>
                 </select>
               </div>
             </div>
@@ -339,16 +398,17 @@ export default function PipelinePage() {
               <button
                 onClick={async () => {
                   try {
+                    const updateBody = { status: editForm.status };
+                    if (isAdmin) {
+                      updateBody.customerName = editForm.customerName;
+                      updateBody.mobile = editForm.mobile;
+                      updateBody.loanType = editForm.loanType;
+                      updateBody.expectedAmount = editForm.expectedAmount;
+                    }
                     const res = await fetch(`${API_BASE}/leads/${editingLead.id}`, {
                       method: 'PUT',
                       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        customerName: editForm.customerName,
-                        mobile: editForm.mobile,
-                        loanType: editForm.loanType,
-                        expectedAmount: editForm.expectedAmount,
-                        status: editForm.status
-                      })
+                      body: JSON.stringify(updateBody)
                     });
                     if (res.ok) {
                       setLeads(leads.map(l => l.id === editingLead.id ? {...l, ...editForm} : l));
@@ -364,45 +424,6 @@ export default function PipelinePage() {
               </button>
               <button
                 onClick={() => setEditingLead(null)}
-                className="flex-1 bg-gray-500 text-white py-2 rounded-xl font-semibold hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-2 text-red-600">Delete Lead?</h3>
-            <p className="text-gray-600 mb-4">
-              Are you sure you want to delete <strong>{deleteConfirm.customerName}</strong>? This action cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`${API_BASE}/leads/${deleteConfirm.id}`, {
-                      method: 'DELETE',
-                      headers: { Authorization: `Bearer ${accessToken}` }
-                    });
-                    if (res.ok) {
-                      setLeads(leads.filter(l => l.id !== deleteConfirm.id));
-                      setDeleteConfirm(null);
-                    }
-                  } catch (err) {
-                    setError('Failed to delete lead');
-                  }
-                }}
-                className="flex-1 bg-red-600 text-white py-2 rounded-xl font-semibold hover:bg-red-700"
-              >
-                Delete
-              </button>
-              <button
-                onClick={() => setDeleteConfirm(null)}
                 className="flex-1 bg-gray-500 text-white py-2 rounded-xl font-semibold hover:bg-gray-600"
               >
                 Cancel
