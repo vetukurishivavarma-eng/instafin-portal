@@ -7,6 +7,7 @@ import bulkUploadRouter from './routes/bulkUpload.js';
 import checklistStatusRouter from './routes/checklistStatus.js';
 import loanTypesRouter from './routes/loanTypes.js';
 import auditLogsRouter from './routes/auditLogs.js';
+import formsRouter from './routes/forms.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,7 @@ app.use('/api/bulk', bulkUploadRouter);
 app.use('/api/checklist-status', checklistStatusRouter);
 app.use('/api/loan-types', loanTypesRouter);
 app.use('/api/audit-logs', auditLogsRouter);
+app.use('/api/forms', formsRouter);
 
 // Health check
 app.get('/', (req, res) => {
