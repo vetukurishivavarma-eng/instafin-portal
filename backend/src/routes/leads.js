@@ -133,8 +133,9 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       }
 
       // Active filter (skip if retrying due to missing column)
+      // Uses PostgREST .or() syntax: is_active = true OR is_active IS NULL
       if (!skipActiveFilter && !filters.showInactive) {
-        q = q.filter('is_active', 'in', '(true,null)');
+        q = q.or('is_active.eq.true,is_active.is.null');
       }
 
       // Filter by status
