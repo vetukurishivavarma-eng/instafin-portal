@@ -697,10 +697,10 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
   try {
     const leadId = req.params.id;
 
-    // Get current lead
+    // Get current lead — also fetch assigned_to and assigned_banks for status derivation on restore
     const { data: lead } = await supabase
       .from('leads')
-      .select('is_active, customer_name')
+      .select('is_active, customer_name, assigned_to')
       .eq('id', leadId)
       .single();
 
@@ -710,9 +710,30 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
 
     const newActive = lead.is_active === false ? true : false;
 
+    // Determine new status based on is_active toggle
+    let newStatus;
+    if (newActive) {
+      // Restoring — derive status from assigned banks, or fallback to Assigned/New
+      const { data: banks } = await supabase
+        .from('lead_banks')
+        .select('status')
+        .eq('lead_id', leadId);
+
+      if (banks && banks.length > 0) {
+        const bankStatuses = banks.map(b => b.status);
+        const derived = deriveLeadStatus(bankStatuses);
+        newStatus = derived || (lead.assigned_to ? 'Assigned' : 'New');
+      } else {
+        newStatus = lead.assigned_to ? 'Assigned' : 'New';
+      }
+    } else {
+      // Marking inactive — set status to Inactive
+      newStatus = 'Inactive';
+    }
+
     const { data: updatedLead, error } = await supabase
       .from('leads')
-      .update({ is_active: newActive })
+      .update({ is_active: newActive, status: newStatus })
       .eq('id', leadId)
       .select()
       .single();
@@ -736,7 +757,8 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
       lead: {
         id: updatedLead.id,
         customerName: updatedLead.customer_name,
-        isActive: updatedLead.is_active
+        isActive: updatedLead.is_active,
+        status: updatedLead.status
       }
     });
   } catch (error) {
