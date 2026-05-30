@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { supabase } from './lib/supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const formsDir = path.join(__dirname, '..', 'uploads', 'forms');
+const formsDir = path.join(__dirname, '..', '..', 'uploads', 'forms');
 
 const FORMS = [
   {
