@@ -64,20 +64,27 @@ const ChecklistPage: React.FC = () => {
       steps.push('loanStatus');
     }
 
-    if (selection.loanStatus) {
-      steps.push('incomeSource');
-    }
+    // For MSME, skip incomeSource and residentType — go straight to businessType
+    if (selection.loanType === 'msme') {
+      if (selection.loanStatus) {
+        steps.push('businessType');
+      }
+    } else {
+      if (selection.loanStatus) {
+        steps.push('incomeSource');
+      }
 
-    if (selection.incomeSource) {
-      steps.push('residentType');
-    }
+      if (selection.incomeSource) {
+        steps.push('residentType');
+      }
 
-    // Business type is only for non_salaried + indian_resident
-    if (
-      selection.incomeSource === 'non_salaried' &&
-      selection.residentType === 'indian_resident'
-    ) {
-      steps.push('businessType');
+      // Business type is only for non_salaried + indian_resident
+      if (
+        selection.incomeSource === 'non_salaried' &&
+        selection.residentType === 'indian_resident'
+      ) {
+        steps.push('businessType');
+      }
     }
 
     return steps;
@@ -92,22 +99,29 @@ const ChecklistPage: React.FC = () => {
       disabled.push('loanStatus');
     }
 
-    // incomeSource disabled if loanStatus not selected
-    if (!selection.loanStatus) {
-      disabled.push('incomeSource');
-    }
+    if (selection.loanType === 'msme') {
+      // For MSME: businessType disabled if loanStatus not selected
+      if (!selection.loanStatus) {
+        disabled.push('businessType');
+      }
+    } else {
+      // incomeSource disabled if loanStatus not selected
+      if (!selection.loanStatus) {
+        disabled.push('incomeSource');
+      }
 
-    // residentType disabled if incomeSource not selected
-    if (!selection.incomeSource) {
-      disabled.push('residentType');
-    }
+      // residentType disabled if incomeSource not selected
+      if (!selection.incomeSource) {
+        disabled.push('residentType');
+      }
 
-    // businessType disabled if not non_salaried + indian_resident
-    if (
-      selection.incomeSource !== 'non_salaried' ||
-      selection.residentType !== 'indian_resident'
-    ) {
-      disabled.push('businessType');
+      // businessType disabled if not non_salaried + indian_resident
+      if (
+        selection.incomeSource !== 'non_salaried' ||
+        selection.residentType !== 'indian_resident'
+      ) {
+        disabled.push('businessType');
+      }
     }
 
     return disabled;
@@ -128,6 +142,11 @@ const ChecklistPage: React.FC = () => {
       newSelection.incomeSource = undefined;
       newSelection.residentType = undefined;
       newSelection.businessType = undefined;
+      // For MSME, set defaults for income/resident (simplified tree)
+      if (value === 'msme') {
+        newSelection.incomeSource = undefined;
+        newSelection.residentType = undefined;
+      }
     } else if (key === 'loanStatus') {
       newSelection.incomeSource = undefined;
       newSelection.residentType = undefined;
@@ -150,8 +169,14 @@ const ChecklistPage: React.FC = () => {
     return disabledSteps.includes(stepKey);
   };
 
-  const isChecklistVisible = visibleSteps.includes('businessType') ||
-    (visibleSteps.includes('residentType') && selection.incomeSource === 'salaried');
+  const isChecklistVisible = 
+    // MSME: show when businessType is selected
+    (selection.loanType === 'msme' && selection.businessType) ||
+    // Non-MSME: show when businessType step visible or (residentType visible AND salaried)
+    (selection.loanType !== 'msme' && (
+      visibleSteps.includes('businessType') ||
+      (visibleSteps.includes('residentType') && selection.incomeSource === 'salaried')
+    ));
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">

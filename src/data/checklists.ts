@@ -282,6 +282,32 @@ const bizCoApplicantPan = createChecklistItem('biz_co_pan', 'PAN Card (Co-applic
 const bizCoApplicantAadhaar = createChecklistItem('biz_co_aadhaar', 'Aadhaar Card (Co-applicant)', 'kyc');
 const bizOwnHouseProof = createChecklistItem('biz_own_house_proof', 'Sale Deed or Latest Property Tax', 'property_documents');
 
+// ============================================================
+// MSME Standalone Items
+// ============================================================
+
+// Partner loan documents for MSME
+const msmePartnerSanctionLetter = createChecklistItem('msme_partner_sanc', 'If any loan for Partners – Sanction Letters', 'financial_documents', false);
+const msmePartnerLoanAcctStmt = createChecklistItem('msme_partner_loan_stmt', 'If any loan for Partners – Loan A/C Statements (Last 1 Year)', 'financial_documents', false);
+
+// Property documents for MSME (standalone, not reusing existing items)
+const msmeSaleDeed = createChecklistItem('msme_sale_deed', 'Sale Deed', 'property_documents');
+const msmeLinkDocs = createChecklistItem('msme_link_docs', 'Link Documents', 'property_documents');
+const msmePlanProceeding = createChecklistItem('msme_plan_proceeding', 'Plan and Proceeding Copy', 'property_documents');
+const msmePropertyTax = createChecklistItem('msme_prop_tax', 'Latest Property Tax', 'property_documents');
+const msmeCurrentBill = createChecklistItem('msme_current_bill', 'Latest Current Bill', 'property_documents');
+
+// Other Group Entity documents for MSME
+const msmeGroupPan = createChecklistItem('msme_group_pan', 'Other Group Entity - Firm PAN Card', 'business_documents');
+const msmeGroupUdyam = createChecklistItem('msme_group_udyam', 'Other Group Entity - Udyam Certificate', 'business_documents');
+const msmeGroupGst = createChecklistItem('msme_group_gst', 'Other Group Entity - GST Certificate', 'business_documents');
+const msmeGroupPartnershipDeed = createChecklistItem('msme_group_partnership', 'Other Group Entity - Partnership Deed', 'business_documents');
+const msmeGroupRegCert = createChecklistItem('msme_group_reg_cert', 'Other Group Entity - Firm Registration Certificate', 'business_documents');
+const msmeGroupCurrentStmt = createChecklistItem('msme_group_current_stmt', 'Other Group Entity - Firm Current Account Statement (Last 1 Year)', 'business_documents');
+const msmeGroupGstr3b = createChecklistItem('msme_group_gstr3b', 'Other Group Entity - Firm GSTR-3B Returns (Last 1 Year)', 'business_documents');
+const msmeGroupLoanStmt = createChecklistItem('msme_group_loan_stmt', 'Other Group Entity - If any loan - Loan A/C Statement (Last 1 Year)', 'financial_documents', false);
+const msmeGroupItReturns = createChecklistItem('msme_group_it_returns', 'Other Group Entity - Firm IT Returns (Last 3 Years) with BS & P&L', 'business_documents');
+
 // Helper: property docs by loan subtype for Home Loan
 const hlPropertyDocs = {
   new: [
@@ -1362,58 +1388,59 @@ export const DECISION_TREE: DecisionTree = {
 
   // ============================================================
   // ============================================================
-  // MSME — SALARIED PROFILES
+  // MSME — PROFILES (simplified: no incomeSource/residentType)
+  // Key format: msme|<loanStatus>|<businessType>
   // ============================================================
 
-  // MSME | New | Salaried | Indian Resident
-  // Uses: Section D (KYC) + Section H (Salaried-Specific) + Section F (Property)
-  'msme|new|salaried|indian_resident': [
-    // Section D - Individual KYC
-    kycDocuments.aadhaar,
+  // MSME | New | Partnership Firm
+  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F (Property)
+  'msme|new|partnership': [
+    // Section A - Project / Business Overview
+    msmeDocuments.projectReport,
+    msmeDocuments.companyProfile,
+    msmeDocuments.cmaData,
+    // Partnership Firm Business KYC
+    firmDocuments.firmPan,
+    firmDocuments.udyamCert,
+    firmDocuments.gstRegCert,
+    firmPartnershipDeed,
+    firmRegistrationCert,
+    // Partnership Firm Business Financials
+    firmDocuments.firmCurrentStmt1,
+    msmeDocuments.gstr3b1,
+    existingLoanDocs.sanctionLetter,
+    existingLoanDocs.loanAcctStmt,
+    firmDocuments.firmITReturns3,
+    // Individual KYC (all partners)
     kycDocuments.pan,
+    kycDocuments.aadhaar,
     kycDocuments.addressProof,
-    kycDocuments.photo,
-    // Section H - Salaried-Specific
-    incomeProofsSalaried.salarySlips,
-    incomeProofsSalaried.bankStatements,
-    incomeProofsSalaried.form16,
-    incomeProofsSalaried.offerLetter,
-    // Existing loans (conditional - marked optional in source)
-    ...msmeExistingLoans,
-    // Section F - Property Documents
-    ...msmePropertyDocs,
+    // Individual Financials (all partners)
+    incomeProofsSelfEmployed.indSavingsStmt1,
+    msmeDocuments.form26as3,
+    msmePartnerSanctionLetter,
+    msmePartnerLoanAcctStmt,
+    incomeProofsSelfEmployed.indITReturns3_partners,
+    // Property Documents
+    msmeSaleDeed,
+    msmeLinkDocs,
+    msmePlanProceeding,
+    msmePropertyTax,
+    msmeCurrentBill,
+    // Other Group Entity
+    msmeGroupPan,
+    msmeGroupUdyam,
+    msmeGroupGst,
+    msmeGroupPartnershipDeed,
+    msmeGroupRegCert,
+    msmeGroupCurrentStmt,
+    msmeGroupGstr3b,
+    msmeGroupLoanStmt,
+    msmeGroupItReturns,
   ],
 
-  // MSME | New | Salaried | NRI
-  'msme|new|salaried|nri': [
-    // Section D - Individual KYC with NRI overlays
-    kycDocuments.aadhaar,
-    kycDocuments.pan,
-    kycDocuments.passport,
-    kycDocuments.visa,
-    kycDocuments.workPermit,
-    kycDocuments.overseasAddress,
-    kycDocuments.poa,
-    kycDocuments.photo,
-    // Section H - Salaried-Specific with NRI overlays
-    incomeProofsSalaried.salaryAccountStmt12,
-    incomeProofsSalaried.paySlips12,
-    incomeProofsSalaried.form16,
-    incomeProofsSalaried.offerLetter,
-    incomeProofsSalaried.overseasBankStmt6,
-    // Existing loans
-    ...msmeExistingLoans,
-    // Section F - Property Documents
-    ...msmePropertyDocs,
-  ],
-
-  // ============================================================
-  // MSME — NON-SALARIED (SME / BUSINESS) PROFILES
-  // ============================================================
-
-  // MSME | New | Non-Salaried | Proprietor
-  // Uses: Section A (Overview) + D (KYC) + E (Financials) + F (Property)
-  'msme|new|non_salaried|indian_resident|proprietor': [
+  // MSME | New | Proprietor
+  'msme|new|proprietor': [
     // Section A - Project / Business Overview
     msmeDocuments.projectReport,
     msmeDocuments.companyProfile,
@@ -1437,41 +1464,8 @@ export const DECISION_TREE: DecisionTree = {
     ...msmePropertyDocs,
   ],
 
-  // MSME | New | Non-Salaried | Partnership Firm
-  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F
-  'msme|new|non_salaried|indian_resident|partnership': [
-    // Section A - Project / Business Overview
-    msmeDocuments.projectReport,
-    msmeDocuments.companyProfile,
-    msmeDocuments.cmaData,
-    // Section B - Entity KYC (Partnership Firm)
-    firmDocuments.firmPan,
-    firmDocuments.udyamCert,
-    firmDocuments.gstRegCert,
-    firmDocuments.partnershipDeed,
-    msmeDocuments.firmRegCert,
-    // Section C - Entity Financials
-    firmDocuments.firmCurrentStmt1,
-    msmeDocuments.gstr3b1,
-    firmDocuments.firmITReturns3,
-    // Section D - Individual KYC (all partners)
-    kycDocuments.aadhaar,
-    kycDocuments.pan,
-    kycDocuments.addressProof,
-    kycDocuments.photo,
-    // Section E - Individual Financials (all partners)
-    incomeProofsSelfEmployed.indITReturns3_partners,
-    incomeProofsSelfEmployed.indSavingsStmt1,
-    msmeDocuments.form26as3,
-    // Existing loans
-    ...msmeExistingLoans,
-    // Section F - Property Documents
-    ...msmePropertyDocs,
-  ],
-
-  // MSME | New | Non-Salaried | Pvt Ltd
-  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F
-  'msme|new|non_salaried|indian_resident|pvt_ltd': [
+  // MSME | New | Pvt Ltd
+  'msme|new|pvt_ltd': [
     // Section A - Project / Business Overview
     msmeDocuments.projectReport,
     msmeDocuments.companyProfile,
@@ -1500,9 +1494,8 @@ export const DECISION_TREE: DecisionTree = {
     ...msmePropertyDocs,
   ],
 
-  // MSME | New | Non-Salaried | LLP
-  // Uses: Section A (Overview) + B (Entity KYC) + C (Entity Financials) + D (KYC) + E (Financials) + F
-  'msme|new|non_salaried|indian_resident|llp': [
+  // MSME | New | LLP
+  'msme|new|llp': [
     // Section A - Project / Business Overview
     msmeDocuments.projectReport,
     msmeDocuments.companyProfile,

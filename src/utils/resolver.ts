@@ -103,6 +103,7 @@ function applyOverridesForKey(items: ChecklistItem[], overrideKey: string): Chec
 /**
  * Converts Selection object to a lookup key
  * Format: "loanType|loanStatus|incomeSource|residentType|businessType?"
+ * For MSME: "loanType|loanStatus|businessType?" (incomeSource/residentType omitted)
  * @param selection - User selection object
  * @returns ChecklistKey string or null if incomplete
  */
@@ -121,6 +122,14 @@ export function selectionToKey(selection: Selection): ChecklistKey | null {
     parts.push(loanStatus);
   } else {
     return null; // loanStatus is required for lookup
+  }
+
+  // MSME uses simplified key: msme|loanStatus|businessType
+  if (loanType === 'msme') {
+    if (businessType) {
+      parts.push(businessType);
+    }
+    return parts.join('|') as ChecklistKey;
   }
 
   if (incomeSource) {
@@ -310,12 +319,19 @@ export function validateSelection(selection: Selection): {
 
   if (!selection.loanType) missingFields.push('loanType');
   if (!selection.loanStatus) missingFields.push('loanStatus');
-  if (!selection.incomeSource) missingFields.push('incomeSource');
-  if (!selection.residentType) missingFields.push('residentType');
 
-  // businessType is only required for non_salaried
-  if (selection.incomeSource === 'non_salaried' && !selection.businessType) {
-    missingFields.push('businessType');
+  // For MSME, incomeSource and residentType are not required
+  if (selection.loanType !== 'msme') {
+    if (!selection.incomeSource) missingFields.push('incomeSource');
+    if (!selection.residentType) missingFields.push('residentType');
+
+    // businessType is only required for non_salaried
+    if (selection.incomeSource === 'non_salaried' && !selection.businessType) {
+      missingFields.push('businessType');
+    }
+  } else {
+    // For MSME, businessType is optional but nice to have for non-trivial cases
+    // (not required since there could be generic MSME entries)
   }
 
   return {

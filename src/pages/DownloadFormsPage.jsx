@@ -78,6 +78,18 @@ export default function DownloadFormsPage() {
     businessType: '',
   });
 
+  // When loanType changes to/from MSME, reset dependent fields
+  const handleLoanTypeChange = (loanType) => {
+    setBuilderSelection(p => ({
+      ...p,
+      loanType,
+      loanStatus: 'new',
+      incomeSource: loanType === 'msme' ? '' : 'salaried',
+      residentType: loanType === 'msme' ? '' : 'indian_resident',
+      businessType: '',
+    }));
+  };
+
   const [downloading, setDownloading] = useState(false);
   const [success, setSuccess] = useState('');
 
@@ -169,11 +181,24 @@ export default function DownloadFormsPage() {
   const allFlowKeys = getAvailableKeys();
 
   // Parse a checklist key "home_loan|new|salaried|indian_resident" into structured labels
+  // For MSME: "msme|new|partnership" (incomeSource/residentType omitted)
   const parseFlowKey = (key) => {
     const parts = key.split('|');
+    const loanType = parts[0] || '';
+    const loanStatus = parts[1] || '';
+    // MSME uses simplified keys: msme|loanStatus|businessType
+    if (loanType === 'msme') {
+      return {
+        loanType,
+        loanStatus,
+        incomeSource: 'non_salaried',
+        residentType: 'indian_resident',
+        businessType: parts[2] || '',
+      };
+    }
     return {
-      loanType: parts[0] || '',
-      loanStatus: parts[1] || '',
+      loanType,
+      loanStatus,
       incomeSource: parts[2] || '',
       residentType: parts[3] || '',
       businessType: parts[4] || '',
@@ -200,7 +225,12 @@ export default function DownloadFormsPage() {
     previewItems = getChecklistByKey(selectedFlowKey) || [];
     previewSelection = parseFlowKey(selectedFlowKey);
   } else {
-    previewItems = getChecklist(builderSelection) || [];
+    // For MSME in builder, require businessType to be selected before showing preview
+    if (builderSelection.loanType === 'msme' && !builderSelection.businessType) {
+      previewItems = [];
+    } else {
+      previewItems = getChecklist(builderSelection) || [];
+    }
     previewSelection = builderSelection;
   }
 
@@ -250,14 +280,13 @@ export default function DownloadFormsPage() {
       {/* Tabs Menu */}
       <div className="flex gap-4 max-w-6xl mx-auto mb-8 border-b pb-4">
         <button
-          onClick={() => { setActiveTab('browse'); setSuccess(''); }}
-          className={`px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center gap-2 ${
+          onClick={() => { setActiveTab('browse'); setSuccess(''); }}              className={`px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center gap-2 ${
             activeTab === 'browse'
               ? 'bg-blue-700 text-white shadow-md shadow-blue-500/10'
               : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
           }`}
         >
-          📂 All Code Logic Flows ({allFlowKeys.length})
+          📂 All Checklists ({allFlowKeys.length})
         </button>
         <button
           onClick={() => { setActiveTab('builder'); setSuccess(''); }}
@@ -322,10 +351,16 @@ export default function DownloadFormsPage() {
                           </span>
                           <span className="text-[10px] text-gray-400 font-semibold">{loanStatusLabels[parsed.loanStatus] || parsed.loanStatus}</span>
                         </div>
-                        <span className="text-sm font-bold text-gray-900 leading-tight">
-                          {incomeSourceLabels[parsed.incomeSource]} ({residentTypeLabels[parsed.residentType]})
-                        </span>
-                        {parsed.businessType && (
+                        {parsed.loanType === 'msme' ? (
+                          <span className="text-sm font-bold text-gray-900 leading-tight">
+                            {businessTypeLabels[parsed.businessType] || 'Self Employed'}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-bold text-gray-900 leading-tight">
+                            {incomeSourceLabels[parsed.incomeSource]} ({residentTypeLabels[parsed.residentType]})
+                          </span>
+                        )}
+                        {parsed.businessType && parsed.loanType !== 'msme' && (
                           <span className="text-xs text-indigo-750 font-bold bg-indigo-50 border border-indigo-100/60 px-2 py-0.5 rounded-full self-start shadow-sm mt-0.5">
                             💼 Structure: {businessTypeLabels[parsed.businessType]}
                           </span>
@@ -351,7 +386,7 @@ export default function DownloadFormsPage() {
                   <select
                     className="border rounded-2xl px-4 py-3 w-full bg-gray-50/50 font-bold focus:ring-2 focus:ring-blue-100"
                     value={builderSelection.loanType}
-                    onChange={e => setBuilderSelection(p => ({ ...p, loanType: e.target.value }))}
+                    onChange={e => handleLoanTypeChange(e.target.value)}
                   >
                     {Object.entries(loanTypeLabels).map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
@@ -374,41 +409,63 @@ export default function DownloadFormsPage() {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Resident Type *</label>
-                    <select
-                      className="border rounded-2xl px-4 py-3 w-full bg-gray-50/50 font-semibold focus:ring-2 focus:ring-blue-100"
-                      value={builderSelection.residentType}
-                      onChange={e => setBuilderSelection(p => ({ ...p, residentType: e.target.value }))}
-                    >
-                      <option value="indian_resident">Indian Resident</option>
-                      <option value="nri">NRI</option>
-                      <option value="merchant_navy">Merchant Navy</option>
-                    </select>
-                  </div>
+                  {/* Resident Type - hidden for MSME */}
+                  {builderSelection.loanType !== 'msme' && (
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Resident Type *</label>
+                      <select
+                        className="border rounded-2xl px-4 py-3 w-full bg-gray-50/50 font-semibold focus:ring-2 focus:ring-blue-100"
+                        value={builderSelection.residentType}
+                        onChange={e => setBuilderSelection(p => ({ ...p, residentType: e.target.value }))}
+                      >
+                        <option value="indian_resident">Indian Resident</option>
+                        <option value="nri">NRI</option>
+                        <option value="merchant_navy">Merchant Navy</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Income Source *</label>
-                    <select
-                      className="border rounded-2xl px-4 py-3 w-full bg-gray-50/50 font-semibold focus:ring-2 focus:ring-blue-100"
-                      value={builderSelection.incomeSource}
-                      onChange={e => {
-                        const source = e.target.value;
-                        setBuilderSelection(p => ({ 
-                          ...p, 
-                          incomeSource: source, 
-                          businessType: source === 'salaried' ? '' : 'proprietor' 
-                        }));
-                      }}
-                    >
-                      <option value="salaried">Salaried</option>
-                      <option value="non_salaried">Self Employed</option>
-                    </select>
-                  </div>
+                  {/* Income Source - hidden for MSME */}
+                  {builderSelection.loanType !== 'msme' && (
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Income Source *</label>
+                      <select
+                        className="border rounded-2xl px-4 py-3 w-full bg-gray-50/50 font-semibold focus:ring-2 focus:ring-blue-100"
+                        value={builderSelection.incomeSource}
+                        onChange={e => {
+                          const source = e.target.value;
+                          setBuilderSelection(p => ({ 
+                            ...p, 
+                            incomeSource: source, 
+                            businessType: source === 'salaried' ? '' : 'proprietor' 
+                          }));
+                        }}
+                      >
+                        <option value="salaried">Salaried</option>
+                        <option value="non_salaried">Self Employed</option>
+                      </select>
+                    </div>
+                  )}
 
-                  {builderSelection.incomeSource === 'non_salaried' && (
+                  {/* Show Business Structure for non_salaried (non-MSME) or always for MSME */}
+                  {builderSelection.loanType === 'msme' ? (
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Business Structure *</label>
+                      <select
+                        className="border rounded-2xl px-4 py-3 w-full bg-gray-50/50 font-semibold focus:ring-2 focus:ring-blue-100"
+                        value={builderSelection.businessType}
+                        onChange={e => setBuilderSelection(p => ({ ...p, businessType: e.target.value }))}
+                      >
+                        <option value="">Select Structure</option>
+                        <option value="proprietor">Proprietorship</option>
+                        <option value="partnership">Partnership</option>
+                        <option value="pvt_ltd">Private Limited</option>
+                        <option value="llp">LLP</option>
+                      </select>
+                    </div>
+                  ) : (builderSelection.incomeSource === 'non_salaried' && (
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Business Structure *</label>
                       <select
@@ -422,7 +479,7 @@ export default function DownloadFormsPage() {
                         <option value="llp">LLP</option>
                       </select>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
@@ -442,11 +499,21 @@ export default function DownloadFormsPage() {
               </h2>
               <p className="text-xs text-gray-500 font-semibold mt-1 flex flex-wrap items-center gap-1.5">
                 📁 {loanStatusLabels[previewSelection.loanStatus] || previewSelection.loanStatus}
-                <span className="text-gray-300">•</span> 👤 {incomeSourceLabels[previewSelection.incomeSource]}
-                <span className="text-gray-300">•</span> 🌎 {residentTypeLabels[previewSelection.residentType]}
-                {previewSelection.businessType && (
+                {previewSelection.loanType === 'msme' ? (
                   <>
-                    <span className="text-gray-300">•</span> 💼 {businessTypeLabels[previewSelection.businessType]}
+                    {previewSelection.businessType && (
+                      <><span className="text-gray-300">•</span> 💼 {businessTypeLabels[previewSelection.businessType]}</>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-gray-300">•</span> 👤 {incomeSourceLabels[previewSelection.incomeSource]}
+                    <span className="text-gray-300">•</span> 🌎 {residentTypeLabels[previewSelection.residentType]}
+                    {previewSelection.businessType && (
+                      <>
+                        <span className="text-gray-300">•</span> 💼 {businessTypeLabels[previewSelection.businessType]}
+                      </>
+                    )}
                   </>
                 )}
               </p>
