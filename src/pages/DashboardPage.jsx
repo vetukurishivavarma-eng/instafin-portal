@@ -9,12 +9,15 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalLeads: 0,
-    freshLeads: 0,
+    activeLeads: 0,
+    inactiveLeads: 0,
+    newLeads: 0,
     assigned: 0,
     processing: 0,
     sanctioned: 0,
     partiallyDisbursed: 0,
     disbursed: 0,
+    rejected: 0,
     revenue: '₹0L'
   });
   const [error, setError] = useState('');
@@ -78,8 +81,8 @@ export default function DashboardPage() {
       )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard label="Total Leads" value={stats.totalLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus={null} />
-        <StatCard label="Fresh Leads" value={stats.newLeads || stats.freshLeads} gradient="from-cyan-400 to-cyan-600" filterStatus="New" />
+        <StatCard label="Total Active Leads" value={stats.activeLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus={null} />
+        <StatCard label="Inactive Leads" value={stats.inactiveLeads || 0} gradient="from-gray-400 to-gray-600" filterStatus={null} />
         <StatCard label="Assigned" value={stats.assigned} gradient="from-orange-400 to-orange-600" filterStatus="Assigned" />
         <StatCard label="Processing" value={stats.processing} gradient="from-yellow-400 to-orange-500" filterStatus="Processing" />
       </div>

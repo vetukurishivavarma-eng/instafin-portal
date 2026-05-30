@@ -103,6 +103,12 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       }
     }
 
+    // Filter by is_active (default: show only active)
+    const showInactive = req.query.show_inactive === 'true';
+    if (!showInactive) {
+      query = query.is('is_active', true).or('is_active.is.null');
+    }
+
     // Filter by status
     if (req.query.status) {
       query = query.eq('status', req.query.status);
@@ -208,6 +214,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         coapplicantName: coapplicant?.name || "",
         coapplicantIncomeSource: coapplicant?.incomeSource || "",
         createdAt: lead.created_at,
+        isActive: lead.is_active !== false,
         bankDetails: banks.map(b => ({
           id: b.id,
           bankName: b.bank_name,
@@ -598,7 +605,7 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   }
 });
 
-// DELETE lead - admin only
+// DELETE lead - admin only (hard delete)
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
     // Fetch lead info BEFORE deleting to capture for audit log
@@ -637,10 +644,63 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
   }
 });
 
+// PUT /api/leads/:id/toggle-active - Toggle lead active/inactive status (soft-delete/restore)
+router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
+  try {
+    const leadId = req.params.id;
+
+    // Get current lead
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('is_active, customer_name')
+      .eq('id', leadId)
+      .single();
+
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    const newActive = lead.is_active === false ? true : false;
+
+    const { data: updatedLead, error } = await supabase
+      .from('leads')
+      .update({ is_active: newActive })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Record audit log
+    const adminCtx = await getAdminContext(req);
+    if (adminCtx) {
+      await recordAuditLog(
+        leadId,
+        adminCtx.adminId,
+        newActive ? 'restored' : 'marked_inactive',
+        `${newActive ? 'Restored' : 'Marked inactive'} by admin (${adminCtx.adminName}) - Customer: ${lead.customer_name}`,
+        adminCtx.adminName
+      );
+    }
+
+    res.json({
+      message: newActive ? 'Lead restored successfully' : 'Lead marked as inactive',
+      lead: {
+        id: updatedLead.id,
+        customerName: updatedLead.customer_name,
+        isActive: updatedLead.is_active
+      }
+    });
+  } catch (error) {
+    console.error('Toggle active error:', error);
+    res.status(500).json({ error: 'Failed to toggle lead status' });
+  }
+});
+
 // GET dashboard stats
 router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    let query = supabase.from('leads').select('status');
+    let query = supabase.from('leads').select('status, is_active');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -660,15 +720,20 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
 
     if (error) throw error;
 
+    const activeLeads = leads.filter(l => l.is_active !== false);
+    const inactiveLeads = leads.filter(l => l.is_active === false);
+
     const stats = {
-      totalLeads: leads.length,
-      newLeads: leads.filter(l => l.status === 'New').length,
-      assigned: leads.filter(l => l.status === 'Assigned').length,
-      processing: leads.filter(l => l.status === 'Processing').length,
-      sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
-      partiallyDisbursed: leads.filter(l => l.status === 'Partially Disbursed').length,
-      disbursed: leads.filter(l => l.status === 'Disbursed').length,
-      rejected: leads.filter(l => l.status === 'Rejected').length,
+      totalLeads: activeLeads.length,
+      activeLeads: activeLeads.length,
+      inactiveLeads: inactiveLeads.length,
+      newLeads: activeLeads.filter(l => l.status === 'New').length,
+      assigned: activeLeads.filter(l => l.status === 'Assigned').length,
+      processing: activeLeads.filter(l => l.status === 'Processing').length,
+      sanctioned: activeLeads.filter(l => l.status === 'Sanctioned').length,
+      partiallyDisbursed: activeLeads.filter(l => l.status === 'Partially Disbursed').length,
+      disbursed: activeLeads.filter(l => l.status === 'Disbursed').length,
+      rejected: activeLeads.filter(l => l.status === 'Rejected').length,
     };
 
     res.json(stats);
