@@ -273,6 +273,15 @@ const legalDocuments = {
 const firmPartnershipDeed = createChecklistItem('biz_partnership_deed', 'Partnership Deed', 'business_documents');
 const firmRegistrationCert = createChecklistItem('biz_reg_cert', 'Partnership Firm Registration Certificate', 'business_documents');
 
+// Standalone items for Business Loan Proprietorship (clean items without redundancy)
+const bizProprietorPan = createChecklistItem('biz_prop_pan', 'Proprietor PAN Card', 'business_documents');
+const bizProprietorGstr3b = createChecklistItem('biz_prop_gstr3b', 'Proprietor GSTR-3B Returns filed (Last 1 Year)', 'business_documents');
+const bizBusinessPhotos = createChecklistItem('biz_prop_photos', 'Business Photos', 'business_documents');
+const bizOfficeCurrentBill = createChecklistItem('biz_prop_current_bill', 'Office Current Bill', 'business_documents');
+const bizCoApplicantPan = createChecklistItem('biz_co_pan', 'PAN Card (Co-applicant)', 'kyc');
+const bizCoApplicantAadhaar = createChecklistItem('biz_co_aadhaar', 'Aadhaar Card (Co-applicant)', 'kyc');
+const bizOwnHouseProof = createChecklistItem('biz_own_house_proof', 'Sale Deed or Latest Property Tax', 'property_documents');
+
 // Helper: property docs by loan subtype for Home Loan
 const hlPropertyDocs = {
   new: [
@@ -1289,23 +1298,26 @@ export const DECISION_TREE: DecisionTree = {
 
   // Business Loan | New | Non-Salaried | Indian Resident | Proprietor
   'business_loan|new|non_salaried|indian_resident|proprietor': [
+    // Proprietor Business KYC
+    bizProprietorPan,
+    firmDocuments.udyamCert,
+    firmDocuments.gstRegCert,
+    firmDocuments.labourCert,
+    // Proprietor Business Financials
+    firmDocuments.proprietorCurrentStmt1,
+    bizProprietorGstr3b,
+    incomeProofsSelfEmployed.indITReturns3,
+    bizBusinessPhotos,
+    bizOfficeCurrentBill,
+    // Individual KYC
     kycDocuments.aadhaar,
-    kycDocuments.pan,
+    bizCoApplicantPan,
+    bizCoApplicantAadhaar,
+    kycDocuments.addressProof,
+    // Own House Proof
+    bizOwnHouseProof,
+    // Others
     kycDocuments.photo,
-    incomeProofsNonSalaried.itReturns,
-    incomeProofsNonSalaried.bankStatements,
-    businessDocuments.gstReturns,
-    businessDocuments.udyamAadhaar,
-    businessDocuments.shopAct,
-    financialDocuments.balanceSheet,
-    financialDocuments.profitLoss,
-    financialDocuments.auditReport,
-    financialDocuments.caStatement,
-    financialDocuments.creditReport,
-    financialDocuments.existingLoans,
-    propertyDocuments.titleDeed,
-    legalDocuments.legalOpinion,
-    legalDocuments.undertaking,
   ],
 
   // Business Loan | New | Non-Salaried | Indian Resident | Pvt Ltd
