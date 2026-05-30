@@ -269,6 +269,10 @@ const legalDocuments = {
 // Key format: loanType|loanStatus|incomeSource|residentType|businessType?
 // ============================================================
 
+// Standalone items for Business Loan Partnership (un-combined from firmDocuments.partnershipDeed)
+const firmPartnershipDeed = createChecklistItem('biz_partnership_deed', 'Partnership Deed', 'business_documents');
+const firmRegistrationCert = createChecklistItem('biz_reg_cert', 'Partnership Firm Registration Certificate', 'business_documents');
+
 // Helper: property docs by loan subtype for Home Loan
 const hlPropertyDocs = {
   new: [
@@ -1330,8 +1334,8 @@ export const DECISION_TREE: DecisionTree = {
     firmDocuments.firmPan,
     firmDocuments.udyamCert,
     firmDocuments.gstRegCert,
-    firmDocuments.partnershipDeed,
-    msmeDocuments.firmRegCert,
+    firmPartnershipDeed,
+    firmRegistrationCert,
     // Partnership Firm Business Financials
     firmDocuments.firmCurrentStmt1,
     msmeDocuments.gstr3b1,
