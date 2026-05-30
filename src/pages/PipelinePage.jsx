@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
+import { ALL_BANKS } from '../data/banks';
 
 const getStatusBorder = (status) => {
   const colors = {
@@ -273,12 +274,43 @@ export default function PipelinePage() {
                           {lead.loanType?.replace('_', ' ') || 'N/A'}
                         </span>
                       </td>
-                      <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>
-                      <td className="p-4">
+                      <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>                            <td className="p-4">
                         {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {lead.assignedBanks.map((bank, i) => (
-                              <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                              <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                {bank}
+                                {isAdmin && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (!window.confirm(`Remove "${bank}"?`)) return;
+                                      try {
+                                        const res = await fetch(`${API_BASE}/leads/${lead.id}/remove-bank`, {
+                                          method: 'PUT',
+                                          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ bankName: bank })
+                                        });
+                                        if (res.ok) {
+                                          setLeads(prev => prev.map(l =>
+                                            l.id === lead.id
+                                              ? { ...l, assignedBanks: (l.assignedBanks || []).filter(b => b !== bank) }
+                                              : l
+                                          ));
+                                        }
+                                      } catch (err) {
+                                        console.error('Failed to remove bank');
+                                      }
+                                    }}
+                                    className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
+                                    title={`Remove ${bank}`}
+                                  >
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </span>
                             ))}
                           </div>
                         ) : (
@@ -393,6 +425,112 @@ export default function PipelinePage() {
                   <option>Sanctioned</option><option>Disbursed</option><option>Partially Disbursed</option><option>Rejected</option>
                 </select>
               </div>
+              {/* Bank Assignment Section */}
+              <div className="border-t pt-4 mt-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Manage Banks</label>
+                
+                {editForm.assignedBanks && editForm.assignedBanks.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {editForm.assignedBanks.map((bank, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
+                        {bank}
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Remove "${bank}"?`)) return;
+                            try {
+                              const res = await fetch(`${API_BASE}/leads/${editingLead.id}/remove-bank`, {
+                                method: 'PUT',
+                                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bankName: bank })
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setEditForm(prev => ({ ...prev, assignedBanks: (prev.assignedBanks || []).filter(b => b !== bank), status: data.lead?.status || prev.status }));
+                                loadData();
+                              }
+                            } catch (err) {
+                              setError('Failed to remove bank');
+                            }
+                          }}
+                          className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
+                          title={`Remove ${bank}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <select
+                      className="w-full border rounded-xl px-4 py-2 text-sm"
+                      value={editForm._newBankSelection || ''}
+                      onChange={e => setEditForm({...editForm, _newBankSelection: e.target.value, _customBankName: e.target.value === 'Other' ? '' : (editForm._customBankName || '')})}
+                    >
+                      <option value="">— Select Bank —</option>
+                      {ALL_BANKS.map(bank => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                    {editForm._newBankSelection === 'Other' && (
+                      <input
+                        type="text"
+                        placeholder="Type custom bank name..."
+                        className="w-full border rounded-xl px-4 py-2 text-sm mt-2"
+                        value={editForm._customBankName || ''}
+                        onChange={e => setEditForm({...editForm, _customBankName: e.target.value})}
+                      />
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const selectedBank = editForm._newBankSelection === 'Other'
+                        ? (editForm._customBankName || '').trim()
+                        : editForm._newBankSelection;
+                      if (!selectedBank || !editingLead) {
+                        setError('Please select or type a bank name');
+                        return;
+                      }
+                      try {
+                        const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
+                          method: 'PUT',
+                          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ bankName: selectedBank })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setEditForm(prev => ({
+                            ...prev,
+                            assignedBanks: [...(prev.assignedBanks || []), selectedBank],
+                            status: data.lead?.status || prev.status,
+                            _newBankSelection: '',
+                            _customBankName: ''
+                          }));
+                          loadData();
+                        } else {
+                          const err = await res.json();
+                          setError(err.error || 'Failed to assign bank');
+                        }
+                      } catch (err) {
+                        setError('Failed to assign bank');
+                      }
+                    }}
+                    disabled={!editForm._newBankSelection || (editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())}
+                    className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap ${
+                      editForm._newBankSelection && !(editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Assign
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button
@@ -431,7 +569,7 @@ export default function PipelinePage() {
             </div>
           </div>
         </div>
-      )}
+      )
 
       {/* View Lead Details Modal */}
       {viewLead && (

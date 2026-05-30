@@ -581,7 +581,39 @@ export default function LeadEntryPage() {
                       {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {lead.assignedBanks.map((bank, i) => (
-                            <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                            <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                              {bank}
+                              {(effectiveRole === 'admin' || isImpersonating) && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!window.confirm(`Remove "${bank}" from this lead?`)) return;
+                                    try {
+                                      const res = await fetch(`${API_BASE}/leads/${lead.id}/remove-bank`, {
+                                        method: 'PUT',
+                                        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ bankName: bank })
+                                      });
+                                      if (res.ok) {
+                                        setSuccess(`"${bank}" removed!`);
+                                        loadLeads();
+                                      } else {
+                                        const err = await res.json();
+                                        setError(err.error || 'Failed to remove bank');
+                                      }
+                                    } catch (err) {
+                                      setError('Failed to remove bank');
+                                    }
+                                  }}
+                                  className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
+                                  title={`Remove ${bank}`}
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
+                            </span>
                           ))}
                         </div>
                       ) : (
@@ -1242,44 +1274,118 @@ export default function LeadEntryPage() {
                   <option>Rejected</option>
                 </select>
               </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Assigned Bank</label>
-                <select
-                  className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                  value={editForm.assignedBanks?.[0] || ''}
-                  onChange={async (e) => {
-                    const selectedBank = e.target.value;
-                    if (!selectedBank || !editingLead) return;
-                    try {
-                      const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
-                        method: 'PUT',
-                        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ bankName: selectedBank })
-                      });
-                      if (res.ok) {
-                        setSuccess(`Bank "${selectedBank}" assigned!`);
-                        loadLeads();
-                      } else {
-                        const err = await res.json();
-                        setError(err.error || 'Failed to assign bank');
-                      }
-                    } catch (err) {
-                      setError('Failed to assign bank');
-                    }
-                  }}
-                >
-                  <option value="">Select a bank to assign</option>
-                  {ALL_BANKS.map(bank => (
-                    <option key={bank} value={bank}>{bank}</option>
-                  ))}
-                </select>
+              {/* Bank Assignment Section */}
+              <div className="border-t pt-4 mt-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Manage Assigned Banks</label>
+                
+                {/* Current assigned banks with Remove buttons */}
                 {editForm.assignedBanks && editForm.assignedBanks.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-2 mb-3">
                     {editForm.assignedBanks.map((bank, i) => (
-                      <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
+                      <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
+                        {bank}
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Remove "${bank}" from this lead?`)) return;
+                            try {
+                              const res = await fetch(`${API_BASE}/leads/${editingLead.id}/remove-bank`, {
+                                method: 'PUT',
+                                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bankName: bank })
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setSuccess(`"${bank}" removed!`);
+                                setEditForm(prev => ({ ...prev, assignedBanks: (prev.assignedBanks || []).filter(b => b !== bank), status: data.lead?.status || prev.status }));
+                                loadLeads();
+                              } else {
+                                const err = await res.json();
+                                setError(err.error || 'Failed to remove bank');
+                              }
+                            } catch (err) {
+                              setError('Failed to remove bank');
+                            }
+                          }}
+                          className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
+                          title={`Remove ${bank}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
                     ))}
                   </div>
                 )}
+
+                {/* Bank assignment dropdown + button (no auto-save) */}
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <select
+                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold text-sm"
+                      value={editForm._newBankSelection || ''}
+                      onChange={e => setEditForm({...editForm, _newBankSelection: e.target.value, _customBankName: e.target.value === 'Other' ? '' : (editForm._customBankName || '')})}
+                    >
+                      <option value="">— Select Bank —</option>
+                      {ALL_BANKS.map(bank => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                    {editForm._newBankSelection === 'Other' && (
+                      <input
+                        type="text"
+                        placeholder="Type custom bank name..."
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold text-sm mt-2"
+                        value={editForm._customBankName || ''}
+                        onChange={e => setEditForm({...editForm, _customBankName: e.target.value})}
+                      />
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const selectedBank = editForm._newBankSelection === 'Other'
+                        ? (editForm._customBankName || '').trim()
+                        : editForm._newBankSelection;
+                      if (!selectedBank || !editingLead) {
+                        setError('Please select or type a bank name');
+                        return;
+                      }
+                      try {
+                        const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
+                          method: 'PUT',
+                          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ bankName: selectedBank })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setSuccess(`Bank "${selectedBank}" assigned!`);
+                          setEditForm(prev => ({
+                            ...prev,
+                            assignedBanks: [...(prev.assignedBanks || []), selectedBank],
+                            status: data.lead?.status || prev.status,
+                            _newBankSelection: '',
+                            _customBankName: ''
+                          }));
+                          loadLeads();
+                        } else {
+                          const err = await res.json();
+                          setError(err.error || 'Failed to assign bank');
+                        }
+                      } catch (err) {
+                        setError('Failed to assign bank');
+                      }
+                    }}
+                    disabled={!editForm._newBankSelection || (editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())}
+                    className={`px-4 py-3 rounded-2xl font-bold transition-all whitespace-nowrap ${
+                      editForm._newBankSelection && !(editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())
+                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Assign
+                  </button>
+                </div>
               </div>
             </div>
 
