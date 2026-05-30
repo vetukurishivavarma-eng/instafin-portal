@@ -1305,26 +1305,6 @@ export const DECISION_TREE: DecisionTree = {
     legalDocuments.undertaking,
   ],
 
-  // Business Loan | New | Non-Salaried | Indian Resident | Partnership
-  'business_loan|new|non_salaried|indian_resident|partnership': [
-    // Partnership Firm Business KYC
-    firmDocuments.firmPan,
-    firmDocuments.udyamCert,
-    firmDocuments.gstRegCert,
-    firmDocuments.partnershipDeed,
-    msmeDocuments.firmRegCert,
-    // Partnership Firm Business Financials
-    firmDocuments.firmCurrentStmt1,
-    msmeDocuments.gstr3b1,
-    firmDocuments.firmITReturns3,
-    // Individual KYC (all partners)
-    kycDocuments.pan,
-    kycDocuments.aadhaar,
-    kycDocuments.addressProof,
-    // Others
-    kycDocuments.photo,
-  ],
-
   // ============================================================
   // ============================================================
   // MSME — SALARIED PROFILES

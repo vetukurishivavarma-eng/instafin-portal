@@ -11,7 +11,6 @@ import {
   Font,
   PDFDownloadLink,
   Image,
-  pdf,
 } from '@react-pdf/renderer';
 import type { ChecklistItem, Selection } from '../checklist-spec';
 
@@ -359,6 +358,9 @@ export async function downloadPDF(
   selection: Selection,
   items: ChecklistItem[]
 ): Promise<void> {
+  // Dynamic import to avoid SSR issues
+  const { pdf } = await import('@react-pdf/renderer');
+
   const blob = await pdf(<ChecklistPDF selection={selection} items={items} />).toBlob();
 
   // Create download link
@@ -563,6 +565,7 @@ const EligibilityPDF: React.FC<{ data: EligibilityData }> = ({ data }) => {
 };
 
 export async function downloadEligibilityPDF(data: EligibilityData): Promise<void> {
+  const { pdf } = await import('@react-pdf/renderer');
   const blob = await pdf(<EligibilityPDF data={data} />).toBlob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -906,6 +909,7 @@ export async function downloadProfilePDF(
   summary: string,
   photoUrl?: string
 ): Promise<void> {
+  const { pdf } = await import('@react-pdf/renderer');
   const blob = await pdf(
     <UnderwritingProfilePDF lead={lead} details={details} summary={summary} photoUrl={photoUrl} />
   ).toBlob();
