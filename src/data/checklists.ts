@@ -115,17 +115,6 @@ const msmeDocuments = {
 
 };
 
-// MSME property documents (Section F simplified)
-const msmePropertyDocs = [
-  propertyDocuments.titleDeed,
-  propertyNew.linkDocs,
-  propertyNew.planProceeding,
-  propertyNew.houseTax,
-  propertyNew.powerBill,
-];
-
-// Common existing loan documents for MSME
-const msmeExistingLoans = [existingLoanDocs.sanctionLetter, existingLoanDocs.loanAcctStmt];
 
 // ============================================================
 // Income Proofs - Self Employed (Individual)
@@ -234,6 +223,18 @@ const propertyDocuments = {
   paymentReceipts: createChecklistItem('prop_payment', 'Payment Receipts / Booking Receipt', 'property_documents'),
   noc: createChecklistItem('prop_noc', 'No Objection Certificate (from Society/Builder)', 'property_documents'),
 };
+
+// MSME property documents (Section F simplified)
+const msmePropertyDocs = [
+  propertyDocuments.titleDeed,
+  propertyNew.linkDocs,
+  propertyNew.planProceeding,
+  propertyNew.houseTax,
+  propertyNew.powerBill,
+];
+
+// Common existing loan documents for MSME
+const msmeExistingLoans = [existingLoanDocs.sanctionLetter, existingLoanDocs.loanAcctStmt];
 
 // ============================================================
 // Financial Documents (legacy, kept for non-Home Loan entries)
