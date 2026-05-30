@@ -268,7 +268,6 @@ export const ALL_BANKS = [
   'Mpower Microfinance',
   'Sindhuja Microcredit',
   'Navachetana Microfin Services',
-  'NBFCs - Other',
   'Other'
 ];
 
