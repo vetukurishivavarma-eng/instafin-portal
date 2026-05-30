@@ -279,12 +279,12 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     // Build response - include pagination only if limit was specified
     const response = { data: mappedLeads };
-    if (limit) {
+    if (filters.limit) {
       response.pagination = {
         total: count,
-        page,
-        limit,
-        totalPages: Math.ceil(count / limit)
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(count / filters.limit)
       };
     } else {
       response.total = count;
