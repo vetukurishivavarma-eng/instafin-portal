@@ -748,7 +748,7 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
 // GET dashboard stats
 router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    let query = supabase.from('leads').select('status');
+    let query = supabase.from('leads').select('status, is_active');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -766,23 +766,60 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
 
     const { data: leads, error } = await query;
 
+    // Retry without is_active if column doesn't exist yet
+    if (error && error.message &&
+        (error.message.includes('is_active') || error.message.includes('column') || error.message.includes('does not exist'))) {
+      console.warn('is_active column not found in stats, falling back:', error.message);
+      query = supabase.from('leads').select('status');
+      if (req.user.role !== 'admin') {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', req.user.id)
+          .maybeSingle();
+        if (userData?.name) {
+          query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+        } else {
+          query = query.eq('assigned_to', req.user.id);
+        }
+      }
+      const { data: retryData } = await query;
+      const fallbackLeads = retryData || [];
+      return res.json({
+        totalLeads: fallbackLeads.length,
+        activeLeads: fallbackLeads.length,
+        inactiveLeads: 0,
+        newLeads: fallbackLeads.filter(l => l.status === 'New').length,
+        assigned: fallbackLeads.filter(l => l.status === 'Assigned').length,
+        processing: fallbackLeads.filter(l => l.status === 'Processing').length,
+        sanctioned: fallbackLeads.filter(l => l.status === 'Sanctioned').length,
+        partiallyDisbursed: fallbackLeads.filter(l => l.status === 'Partially Disbursed').length,
+        disbursed: fallbackLeads.filter(l => l.status === 'Disbursed').length,
+        rejected: fallbackLeads.filter(l => l.status === 'Rejected').length,
+      });
+    }
+
     if (error) throw error;
 
+    const allLeads = leads || [];
+    const inactiveCount = allLeads.filter(l => l.is_active === false).length;
+
     const stats = {
-      totalLeads: leads.length,
-      activeLeads: leads.length,
-      inactiveLeads: 0,
-      newLeads: leads.filter(l => l.status === 'New').length,
-      assigned: leads.filter(l => l.status === 'Assigned').length,
-      processing: leads.filter(l => l.status === 'Processing').length,
-      sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
-      partiallyDisbursed: leads.filter(l => l.status === 'Partially Disbursed').length,
-      disbursed: leads.filter(l => l.status === 'Disbursed').length,
-      rejected: leads.filter(l => l.status === 'Rejected').length,
+      totalLeads: allLeads.length,
+      activeLeads: allLeads.length - inactiveCount,
+      inactiveLeads: inactiveCount,
+      newLeads: allLeads.filter(l => l.status === 'New').length,
+      assigned: allLeads.filter(l => l.status === 'Assigned').length,
+      processing: allLeads.filter(l => l.status === 'Processing').length,
+      sanctioned: allLeads.filter(l => l.status === 'Sanctioned').length,
+      partiallyDisbursed: allLeads.filter(l => l.status === 'Partially Disbursed').length,
+      disbursed: allLeads.filter(l => l.status === 'Disbursed').length,
+      rejected: allLeads.filter(l => l.status === 'Rejected').length,
     };
 
     res.json(stats);
   } catch (error) {
+    console.error('Error fetching stats:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
