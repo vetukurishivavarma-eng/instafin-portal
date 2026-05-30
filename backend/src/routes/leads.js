@@ -132,11 +132,9 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         }
       }
 
-      // Active filter (skip if retrying due to missing column)
-      // Uses PostgREST .or() syntax: is_active = true OR is_active IS NULL
-      if (!skipActiveFilter && !filters.showInactive) {
-        q = q.or('is_active.eq.true,is_active.is.null');
-      }
+      // No active filter — ALL leads (active + inactive) are returned.
+      // Inactive leads are shown with an 'Inactive' badge on the frontend.
+      // The toggle-active endpoint just flips is_active, it doesn't hide them.
 
       // Filter by status
       if (filters.status) {
@@ -176,8 +174,8 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       queryError = filterErr;
     }
 
-    // If error is about missing is_active column, retry without the filter
-    if (queryError && !filters.showInactive && queryError.message &&
+    // If error is about missing is_active column, retry without referencing it
+    if (queryError && queryError.message &&
         (queryError.message.includes('is_active') || queryError.message.includes('column') || queryError.message.includes('does not exist'))) {
       console.warn('is_active column not found, retrying query without filter:', queryError.message);
       try {

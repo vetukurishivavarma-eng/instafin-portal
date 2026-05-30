@@ -402,7 +402,7 @@ export default function LeadEntryPage() {
     const matchesSearch = !searchTerm ||
       lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.mobile?.includes(searchTerm);
-    const matchesStatus = !statusFilter || lead.status === statusFilter;
+    const matchesStatus = !statusFilter || lead.status === statusFilter || (statusFilter === 'Inactive' && lead.isActive === false);
     return matchesSearch && matchesStatus;
   });
 
