@@ -45,6 +45,7 @@ const kycDocuments = {
 // ============================================================
 const incomeProofsSalaried = {
   salaryAccountStmt12: createChecklistItem('inc_salary_acct_12', 'Salary Account Statement (Last 1 Year)', 'income_proof'),
+  salaryAcctStmt6: createChecklistItem('inc_salary_acct_6', 'Salary Account Statement (Last 6 Months)', 'income_proof'),
   paySlips6: createChecklistItem('inc_payslips_6', 'Pay Slips (Last 6 Months)', 'income_proof'),
   paySlips12: createChecklistItem('inc_payslips_12', 'Pay Slips (Last 12 Months)', 'income_proof'),
   offerLetter: createChecklistItem('inc_offer_letter', 'Offer Letter / Previous Relieving Letter', 'income_proof'),
@@ -1246,6 +1247,24 @@ export const DECISION_TREE: DecisionTree = {
   ],
 
   // ============================================================
+  // PERSONAL LOAN — New (1 profile)
+  // ============================================================
+
+  // Personal Loan | New | Salaried | Indian Resident
+  'personal_loan|new|salaried|indian_resident': [
+    kycDocuments.aadhaar,
+    kycDocuments.pan,
+    kycDocuments.addressProof,
+    incomeProofsSalaried.salaryAcctStmt6,
+    incomeProofsSalaried.paySlips6,
+    incomeProofsSalaried.companyID,
+    incomeProofsSalaried.offerLetter,
+    incomeProofsSalaried.form16_2y,
+    existingLoanDocs.loanAcctStmt,
+    propertyDocuments.propertyTax,
+  ],
+
+  // ============================================================
   // Business Loan — existing entries preserved
   // ============================================================
 
@@ -1303,6 +1322,26 @@ export const DECISION_TREE: DecisionTree = {
     propertyDocuments.titleDeed,
     legalDocuments.legalOpinion,
     legalDocuments.undertaking,
+  ],
+
+  // Business Loan | New | Non-Salaried | Indian Resident | Partnership
+  'business_loan|new|non_salaried|indian_resident|partnership': [
+    // Partnership Firm Business KYC
+    firmDocuments.firmPan,
+    firmDocuments.udyamCert,
+    firmDocuments.gstRegCert,
+    firmDocuments.partnershipDeed,
+    msmeDocuments.firmRegCert,
+    // Partnership Firm Business Financials
+    firmDocuments.firmCurrentStmt1,
+    msmeDocuments.gstr3b1,
+    firmDocuments.firmITReturns3,
+    // Individual KYC (all partners)
+    kycDocuments.pan,
+    kycDocuments.aadhaar,
+    kycDocuments.addressProof,
+    // Others
+    kycDocuments.photo,
   ],
 
   // ============================================================
