@@ -103,43 +103,92 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       }
     }
 
-    // Filter by is_active (default: show only active)
-    const showInactive = req.query.show_inactive === 'true';
-    if (!showInactive) {
-      query = query.is('is_active', true).or('is_active.is.null');
+    // Build filter state for retry logic
+    const filters = {
+      status: req.query.status,
+      loanType: req.query.loanType,
+      search: req.query.search,
+      page: parseInt(req.query.page) || 1,
+      limit: req.query.limit ? parseInt(req.query.limit) : null,
+      showInactive: req.query.show_inactive === 'true'
+    };
+
+    // Async function to build and execute a query with (or without) the is_active filter
+    const executeLeadsQuery = async (skipActiveFilter) => {
+      let q = supabase.from('leads').select('*', { count: 'exact' });
+
+      // Role-based filtering
+      if (req.user.role !== 'admin') {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', req.user.id)
+          .maybeSingle();
+
+        if (userData?.name) {
+          q = q.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+        } else {
+          q = q.eq('assigned_to', req.user.id);
+        }
+      }
+
+      // Active filter (skip if retrying due to missing column)
+      if (!skipActiveFilter && !filters.showInactive) {
+        q = q.filter('is_active', 'in', '(true,null)');
+      }
+
+      // Filter by status
+      if (filters.status) {
+        q = q.eq('status', filters.status);
+      }
+
+      // Filter by loan type
+      if (filters.loanType) {
+        q = q.ilike('loan_type', `%${filters.loanType}%`);
+      }
+
+      // Search
+      if (filters.search) {
+        q = q.or(`customer_name.ilike.%${filters.search}%,mobile.ilike.%${filters.search}%`);
+      }
+
+      // Pagination
+      if (filters.limit) {
+        const startIndex = (filters.page - 1) * filters.limit;
+        q = q.range(startIndex, startIndex + filters.limit - 1);
+      }
+
+      // Order by created_at desc
+      q = q.order('created_at', { ascending: false });
+
+      return await q;
+    };
+
+    // Execute query — retry without is_active filter if column doesn't exist
+    // Supabase returns errors in the response (not as thrown exceptions), so we must check both paths
+    let queryResult;
+    let queryError;
+    try {
+      queryResult = await executeLeadsQuery(false);
+      queryError = queryResult.error;
+    } catch (filterErr) {
+      queryError = filterErr;
     }
 
-    // Filter by status
-    if (req.query.status) {
-      query = query.eq('status', req.query.status);
+    // If error is about missing is_active column, retry without the filter
+    if (queryError && !filters.showInactive && queryError.message &&
+        (queryError.message.includes('is_active') || queryError.message.includes('column') || queryError.message.includes('does not exist'))) {
+      console.warn('is_active column not found, retrying query without filter:', queryError.message);
+      try {
+        queryResult = await executeLeadsQuery(true);
+        queryError = queryResult.error;
+      } catch (retryErr) {
+        queryError = retryErr;
+      }
     }
 
-    // Filter by loan type
-    if (req.query.loanType) {
-      query = query.ilike('loan_type', `%${req.query.loanType}%`);
-    }
-
-    // Search
-    if (req.query.search) {
-      query = query.or(`customer_name.ilike.%${req.query.search}%,mobile.ilike.%${req.query.search}%`);
-    }
-
-    // Pagination - allow client to specify page and limit
-    const page = parseInt(req.query.page) || 1;
-    const limit = req.query.limit ? parseInt(req.query.limit) : null; // No default limit - return all if not specified
-
-    // Only apply pagination if limit is explicitly provided
-    if (limit) {
-      const startIndex = (page - 1) * limit;
-      query = query.range(startIndex, startIndex + limit - 1);
-    }
-
-    // Order by created_at desc
-    query = query.order('created_at', { ascending: false });
-
-    const { data: leads, error, count } = await query;
-
-    if (error) throw error;
+    if (queryError) throw queryError;
+    const { data: leads, error, count } = queryResult;
 
     // Resolve UUID assigned_to values to display names
     const execIds = [...new Set(leads.filter(l => l.assigned_to && l.assigned_to.length > 20).map(l => l.assigned_to))];
@@ -700,7 +749,7 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
 // GET dashboard stats
 router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    let query = supabase.from('leads').select('status, is_active');
+    let query = supabase.from('leads').select('status');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -720,20 +769,17 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
 
     if (error) throw error;
 
-    const activeLeads = leads.filter(l => l.is_active !== false);
-    const inactiveLeads = leads.filter(l => l.is_active === false);
-
     const stats = {
-      totalLeads: activeLeads.length,
-      activeLeads: activeLeads.length,
-      inactiveLeads: inactiveLeads.length,
-      newLeads: activeLeads.filter(l => l.status === 'New').length,
-      assigned: activeLeads.filter(l => l.status === 'Assigned').length,
-      processing: activeLeads.filter(l => l.status === 'Processing').length,
-      sanctioned: activeLeads.filter(l => l.status === 'Sanctioned').length,
-      partiallyDisbursed: activeLeads.filter(l => l.status === 'Partially Disbursed').length,
-      disbursed: activeLeads.filter(l => l.status === 'Disbursed').length,
-      rejected: activeLeads.filter(l => l.status === 'Rejected').length,
+      totalLeads: leads.length,
+      activeLeads: leads.length,
+      inactiveLeads: 0,
+      newLeads: leads.filter(l => l.status === 'New').length,
+      assigned: leads.filter(l => l.status === 'Assigned').length,
+      processing: leads.filter(l => l.status === 'Processing').length,
+      sanctioned: leads.filter(l => l.status === 'Sanctioned').length,
+      partiallyDisbursed: leads.filter(l => l.status === 'Partially Disbursed').length,
+      disbursed: leads.filter(l => l.status === 'Disbursed').length,
+      rejected: leads.filter(l => l.status === 'Rejected').length,
     };
 
     res.json(stats);
