@@ -514,7 +514,8 @@ export default function ChecklistsPage() {
         residentType: selectedLead.residentType,
         businessType: selectedLead.businessType
       };
-      await downloadPDF(selection, checklistItems);
+      const bankName = getBankDetailsWithBranches() || getBankNamesString();
+      await downloadPDF(selection, checklistItems, bankName);
     } catch (err) {
       console.error('PDF generation error:', err);
       setError('Failed to generate PDF');

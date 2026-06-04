@@ -574,16 +574,20 @@ export default function PipelinePage() {
                       Assign
                     </button>
                   </div>
-                  {/* Branch Name Input */}
+                  {/* Branch Name Input - appears when a bank is selected */}
                   {editForm._newBankSelection && (
-                    <div>
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                      <label className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5 block">
+                        Branch Name <span className="text-gray-400 font-normal normal-case">(optional)</span>
+                      </label>
                       <input
                         type="text"
-                        placeholder="Enter branch name (optional)"
-                        className="w-full border rounded-xl px-4 py-2 text-sm"
+                        placeholder="e.g. Andheri Main Branch, MG Road Branch..."
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold text-sm"
                         value={editForm._newBranchName || ''}
                         onChange={e => setEditForm({...editForm, _newBranchName: e.target.value})}
                       />
+                      <p className="text-[10px] text-gray-400 mt-1">Branch details will appear in lead details and shared checklists.</p>
                     </div>
                   )}
                 </div>

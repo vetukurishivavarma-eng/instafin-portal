@@ -223,9 +223,11 @@ function groupByCategory(items: ChecklistItem[]): Record<string, ChecklistItem[]
 interface ChecklistPDFProps {
   selection: Selection;
   items: ChecklistItem[];
+  bankName?: string;
+  branchName?: string;
 }
 
-const ChecklistPDF: React.FC<ChecklistPDFProps> = ({ selection, items }) => {
+const ChecklistPDF: React.FC<ChecklistPDFProps> = ({ selection, items, bankName, branchName }) => {
   const generatedDate = formatDate(new Date());
   const selectionSummary = getSelectionSummary(selection);
 
@@ -280,6 +282,13 @@ const ChecklistPDF: React.FC<ChecklistPDFProps> = ({ selection, items }) => {
           <Text style={styles.title}>Loan Checklist</Text>
           <Text style={styles.subtitle}>{loanTypeLabels[selection.loanType] || selection.loanType}</Text>
           <Text style={styles.selections}>{selectionSummary}</Text>
+
+          {/* Bank Info */}
+          {bankName && (
+            <Text style={{ fontSize: 10, color: '#475569', marginTop: 4, fontWeight: 'bold' }}>
+              Assigned Bank{bankName.includes(', ') ? 's' : ''}: {bankName}{branchName ? ` (Branch: ${branchName})` : ''}
+            </Text>
+          )}
 
           {/* Summary */}
           <View style={styles.summary}>
@@ -356,12 +365,14 @@ export const PDFExportLink: React.FC<PDFExportLinkProps> = ({
  */
 export async function downloadPDF(
   selection: Selection,
-  items: ChecklistItem[]
+  items: ChecklistItem[],
+  bankName?: string,
+  branchName?: string
 ): Promise<void> {
   // Dynamic import to avoid SSR issues
   const { pdf } = await import('@react-pdf/renderer');
 
-  const blob = await pdf(<ChecklistPDF selection={selection} items={items} />).toBlob();
+  const blob = await pdf(<ChecklistPDF selection={selection} items={items} bankName={bankName} branchName={branchName} />).toBlob();
 
   // Create download link
   const url = URL.createObjectURL(blob);
