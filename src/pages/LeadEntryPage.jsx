@@ -71,6 +71,9 @@ export default function LeadEntryPage() {
   const [viewLead, setViewLead] = useState(null);
   const [sanctionLetterUrl, setSanctionLetterUrl] = useState(null);
   const [loadingLetter, setLoadingLetter] = useState(false);
+  const [statusHistory, setStatusHistory] = useState([]);
+  const [showStatusHistory, setShowStatusHistory] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -135,11 +138,43 @@ export default function LeadEntryPage() {
     }
   };
 
+  const fetchStatusHistory = async (leadId) => {
+    try {
+      const res = await fetch(`${API_BASE}/status-history/${leadId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setStatusHistory(data.data || []);
+    } catch (err) {
+      setStatusHistory([]);
+    }
+  };
+
+  const handleCloseLead = async (leadId) => {
+    setShowCloseConfirm(false);
+    try {
+      const res = await fetch(`${API_BASE}/leads/${leadId}/close`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        setSuccess('Lead closed successfully!');
+        loadLeads();
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to close lead');
+      }
+    } catch (err) {
+      setError('Failed to close lead');
+    }
+  };
+
   const handleViewLead = (lead) => {
     setViewLead(lead);
     if (lead.status === 'Sanctioned') {
       fetchSanctionLetter(lead.id);
     }
+    fetchStatusHistory(lead.id);
   };
 
   const handleDownloadSanctionLetter = async (leadId) => {
@@ -528,6 +563,7 @@ export default function LeadEntryPage() {
               <option value="Partially Disbursed">Partially Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
+              <option value="Closed">Closed</option>
               <option value="Inactive">Inactive</option>
             </select>
           </div>
@@ -550,6 +586,7 @@ export default function LeadEntryPage() {
                   <th className="p-4">Amount</th>
                   <th className="p-4">Banks</th>
                   <th className="p-4">Status</th>
+                  <th className="p-4">Entry Date</th>
                   {(effectiveRole === 'admin' || isImpersonating) && <th className="p-4 text-center">Actions</th>}
                 </tr>
               </thead>
@@ -621,6 +658,9 @@ export default function LeadEntryPage() {
                       )}
                     </td>
                     <td className="p-4"><StatusBadge status={lead.status} /></td>
+                    <td className="p-4 text-xs text-gray-500">
+                      {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                    </td>
                     {(effectiveRole === 'admin' || isImpersonating) && (
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-end gap-2">
@@ -1100,13 +1140,11 @@ export default function LeadEntryPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* VIEW LEAD DETAILS MODAL */}
+      )}            {/* VIEW LEAD DETAILS MODAL */}
       {viewLead && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); setShowStatusHistory(false); }}>
           <div className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl border border-gray-150 animate-slide-up my-auto" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+            <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); setShowStatusHistory(false); }} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -1149,6 +1187,10 @@ export default function LeadEntryPage() {
                 <p className="text-xs uppercase font-bold text-gray-400">Lead Status Badge</p>
                 <div className="mt-1"><StatusBadge status={viewLead.status} /></div>
               </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs uppercase font-bold text-gray-400">Date of Entry</p>
+                <p className="font-bold text-gray-800 mt-1">{viewLead.entryDate || viewLead.createdAt ? new Date(viewLead.entryDate || viewLead.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
+              </div>
             </div>
 
             {viewLead.hasCoapplicant && (
@@ -1165,6 +1207,124 @@ export default function LeadEntryPage() {
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mt-4">
                 <p className="text-xs uppercase font-bold text-gray-400 mb-1">Remarks & Details</p>
                 <p className="font-medium text-gray-700 text-sm">{viewLead.remarks}</p>
+              </div>
+            )}
+
+            {/* Assigned Banks with Branch Names */}
+            {(viewLead.bankDetails && viewLead.bankDetails.length > 0) && (
+              <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-5 mt-4">
+                <h4 className="font-extrabold text-blue-900 text-sm mb-2 uppercase tracking-wide flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  Assigned Banks & Branches
+                </h4>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {viewLead.bankDetails.map((bank, i) => (
+                    <div key={i} className="bg-white border border-blue-200 rounded-xl px-3 py-2 text-sm">
+                      <p className="font-bold text-gray-900">{bank.bankName}</p>
+                      {bank.branchName && <p className="text-xs text-gray-500">Branch: {bank.branchName}</p>}
+                      {bank.status && (
+                        <p className="text-xs">
+                          <StatusBadge status={bank.status} />
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Close Lead Button (only for Disbursed leads) */}
+            {viewLead.status === 'Disbursed' && !viewLead.isClosed && (
+              <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5 mt-4">
+                <h4 className="font-extrabold text-purple-900 text-sm mb-2 uppercase tracking-wide">Close Lead</h4>
+                <p className="text-sm text-purple-700 mb-3">This lead has been fully disbursed. You can close it to mark it as completed.</p>
+                <div className="flex gap-3">
+                  {showCloseConfirm ? (
+                    <>
+                      <button
+                        onClick={() => handleCloseLead(viewLead.id)}
+                        className="px-5 py-2.5 bg-purple-700 text-white rounded-xl font-bold text-sm hover:bg-purple-800 transition-all"
+                      >
+                        Confirm Close
+                      </button>
+                      <button
+                        onClick={() => setShowCloseConfirm(false)}
+                        className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-300 transition-all"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setShowCloseConfirm(true)}
+                      className="px-5 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-all flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Close This Lead
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Status History Timeline */}
+            {statusHistory.length > 0 && (
+              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-extrabold text-gray-900 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    Status History
+                  </h4>
+                  <button
+                    onClick={() => setShowStatusHistory(!showStatusHistory)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                  >
+                    {showStatusHistory ? 'Hide' : 'Show All'} ({statusHistory.length})
+                  </button>
+                </div>
+                <div className="space-y-0">
+                  {(showStatusHistory ? statusHistory : statusHistory.slice(-3)).map((entry, index) => (
+                    <div key={entry.id} className="relative flex items-start gap-4 pb-4 pl-6">
+                      {index < (showStatusHistory ? statusHistory : statusHistory.slice(-3)).length - 1 && (
+                        <div className="absolute left-[7px] top-3 bottom-0 w-0.5 bg-gray-200" />
+                      )}
+                      <div className={`absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full border-2 ${
+                        entry.isCurrent ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            entry.isCurrent ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {entry.new_status}
+                          </span>
+                          {entry.duration && (
+                            <span className="text-[10px] font-semibold text-gray-400">
+                              Duration: {entry.duration}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {new Date(entry.changed_at).toLocaleString('en-IN', {
+                            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                          })}
+                          {entry.changed_by && ` by ${entry.changed_by}`}
+                        </p>
+                        {entry.notes && (
+                          <p className="text-xs text-gray-500 mt-0.5">{entry.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1274,7 +1434,7 @@ export default function LeadEntryPage() {
                   <option>Rejected</option>
                 </select>
               </div>
-              {/* Bank Assignment Section */}
+              {/* Bank Assignment Section with Branch Name */}
               <div className="border-t pt-4 mt-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Manage Assigned Banks</label>
                 
@@ -1284,6 +1444,9 @@ export default function LeadEntryPage() {
                     {editForm.assignedBanks.map((bank, i) => (
                       <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
                         {bank}
+                        {editForm.bankDetails?.[i]?.branchName && (
+                          <span className="text-[10px] text-green-500 ml-1">({editForm.bankDetails[i].branchName})</span>
+                        )}
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -1319,72 +1482,90 @@ export default function LeadEntryPage() {
                   </div>
                 )}
 
-                {/* Bank assignment dropdown + button (no auto-save) */}
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <select
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold text-sm"
-                      value={editForm._newBankSelection || ''}
-                      onChange={e => setEditForm({...editForm, _newBankSelection: e.target.value, _customBankName: e.target.value === 'Other' ? '' : (editForm._customBankName || '')})}
+                {/* Bank assignment dropdown + branch name + button */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <select
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold text-sm"
+                        value={editForm._newBankSelection || ''}
+                        onChange={e => setEditForm({...editForm, _newBankSelection: e.target.value, _customBankName: e.target.value === 'Other' ? '' : (editForm._customBankName || '')})}
+                      >
+                        <option value="">— Select Bank —</option>
+                        {ALL_BANKS.map(bank => (
+                          <option key={bank} value={bank}>{bank}</option>
+                        ))}
+                      </select>
+                      {editForm._newBankSelection === 'Other' && (
+                        <input
+                          type="text"
+                          placeholder="Type custom bank name..."
+                          className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold text-sm mt-2"
+                          value={editForm._customBankName || ''}
+                          onChange={e => setEditForm({...editForm, _customBankName: e.target.value})}
+                        />
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const selectedBank = editForm._newBankSelection === 'Other'
+                          ? (editForm._customBankName || '').trim()
+                          : editForm._newBankSelection;
+                        if (!selectedBank || !editingLead) {
+                          setError('Please select or type a bank name');
+                          return;
+                        }
+                        try {
+                          const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
+                            method: 'PUT',
+                            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              bankName: selectedBank,
+                              branchName: editForm._newBranchName || null
+                            })
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setSuccess(`Bank "${selectedBank}" assigned!`);
+                            setEditForm(prev => ({
+                              ...prev,
+                              assignedBanks: [...(prev.assignedBanks || []), selectedBank],
+                              status: data.lead?.status || prev.status,
+                              _newBankSelection: '',
+                              _customBankName: '',
+                              _newBranchName: ''
+                            }));
+                            loadLeads();
+                          } else {
+                            const err = await res.json();
+                            setError(err.error || 'Failed to assign bank');
+                          }
+                        } catch (err) {
+                          setError('Failed to assign bank');
+                        }
+                      }}
+                      disabled={!editForm._newBankSelection || (editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())}
+                      className={`px-4 py-3 rounded-2xl font-bold transition-all whitespace-nowrap ${
+                        editForm._newBankSelection && !(editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
                     >
-                      <option value="">— Select Bank —</option>
-                      {ALL_BANKS.map(bank => (
-                        <option key={bank} value={bank}>{bank}</option>
-                      ))}
-                    </select>
-                    {editForm._newBankSelection === 'Other' && (
+                      Assign
+                    </button>
+                  </div>
+                  {/* Branch Name Input */}
+                  {editForm._newBankSelection && (
+                    <div className="ml-1">
                       <input
                         type="text"
-                        placeholder="Type custom bank name..."
-                        className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold text-sm mt-2"
-                        value={editForm._customBankName || ''}
-                        onChange={e => setEditForm({...editForm, _customBankName: e.target.value})}
+                        placeholder="Enter branch name (optional)"
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-2.5 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold text-sm"
+                        value={editForm._newBranchName || ''}
+                        onChange={e => setEditForm({...editForm, _newBranchName: e.target.value})}
                       />
-                    )}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      const selectedBank = editForm._newBankSelection === 'Other'
-                        ? (editForm._customBankName || '').trim()
-                        : editForm._newBankSelection;
-                      if (!selectedBank || !editingLead) {
-                        setError('Please select or type a bank name');
-                        return;
-                      }
-                      try {
-                        const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
-                          method: 'PUT',
-                          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ bankName: selectedBank })
-                        });
-                        if (res.ok) {
-                          const data = await res.json();
-                          setSuccess(`Bank "${selectedBank}" assigned!`);
-                          setEditForm(prev => ({
-                            ...prev,
-                            assignedBanks: [...(prev.assignedBanks || []), selectedBank],
-                            status: data.lead?.status || prev.status,
-                            _newBankSelection: '',
-                            _customBankName: ''
-                          }));
-                          loadLeads();
-                        } else {
-                          const err = await res.json();
-                          setError(err.error || 'Failed to assign bank');
-                        }
-                      } catch (err) {
-                        setError('Failed to assign bank');
-                      }
-                    }}
-                    disabled={!editForm._newBankSelection || (editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())}
-                    className={`px-4 py-3 rounded-2xl font-bold transition-all whitespace-nowrap ${
-                      editForm._newBankSelection && !(editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())
-                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    Assign
-                  </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

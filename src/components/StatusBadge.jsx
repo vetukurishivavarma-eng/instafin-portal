@@ -23,6 +23,8 @@ export default function StatusBadge({ status }) {
         return "bg-gray-100 text-gray-600 border-gray-200";
       case "Inactive":
         return "bg-red-50 text-red-800 border-red-300";
+      case "Closed":
+        return "bg-gray-800 text-white border-gray-800";
       default:
         return "bg-gray-50 text-gray-600 border-gray-200";
     }

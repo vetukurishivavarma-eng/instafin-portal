@@ -459,7 +459,22 @@ export default function ChecklistsPage() {
     }
   };
 
-  // Share via email (opens Gmail compose)
+  // Get assigned bank names string for the selected lead
+  const getBankNamesString = () => {
+    if (!selectedLead) return '';
+    const banks = selectedLead.assignedBanks || [];
+    if (banks.length === 0) return 'No bank assigned';
+    return banks.join(', ');
+  };
+
+  const getBankDetailsWithBranches = () => {
+    if (!selectedLead || !selectedLead.bankDetails) return '';
+    return selectedLead.bankDetails.map(b => 
+      `${b.bankName}${b.branchName ? ` (${b.branchName})` : ''}`
+    ).join(', ');
+  };
+
+  // Share via email (opens Gmail compose) - includes bank name
   const handleShareEmail = () => {
     const pendingItems = checklistItems.filter(item => {
       const files = checklistStatuses[item.id];
@@ -473,10 +488,12 @@ export default function ChecklistsPage() {
       return;
     }
 
+    const bankInfo = getBankDetailsWithBranches() || getBankNamesString();
     const subject = `Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType || 'Loan'})`;
     const body =
       `Dear ${selectedLead.customerName},\n\n` +
-      `Please submit the following pending documents for your ${selectedLead.loanType || 'loan'} application:\n\n` +
+      `Please submit the following pending documents for your ${selectedLead.loanType || 'loan'} application.\n` +
+      `Bank(s): ${bankInfo}\n\n` +
       pendingItems.map((item, i) => `${i + 1}. ${item.name} (${item.category.replace(/_/g, ' ')})`).join('\n') +
       `\n\nPlease upload these at your earliest convenience.\n\nThank you.`;
 
@@ -507,7 +524,7 @@ export default function ChecklistsPage() {
     }
   };
 
-  // Share pending documents via WhatsApp
+  // Share pending documents via WhatsApp (includes bank name)
   const handleSharePendingWhatsApp = async () => {
     const pendingItems = checklistItems.filter(item => {
       const files = checklistStatuses[item.id];
@@ -523,6 +540,7 @@ export default function ChecklistsPage() {
 
     setIsSharing(true);
     try {
+      const bankName = getBankDetailsWithBranches() || getBankNamesString();
       await shareOnWhatsApp({
         loanType: selectedLead.loanType,
         title: `Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType ? selectedLead.loanType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Loan'})`,
@@ -530,7 +548,8 @@ export default function ChecklistsPage() {
           name: item.name,
           category: item.category,
           required: item.required
-        }))
+        })),
+        bankName: bankName
       });
     } catch (err) {
       console.error('WhatsApp share error:', err);
@@ -1290,19 +1309,21 @@ export default function ChecklistsPage() {
               )}
             </button>
 
-            {/* Share All via WhatsApp */}
+            {/* Share All via WhatsApp (includes bank name) */}
             <button
               onClick={async () => {
                 if (checklistItems.length === 0) return;
                 setIsSharing(true);
                 try {
+                  const bankName = getBankDetailsWithBranches() || getBankNamesString();
                   await shareOnWhatsApp({
                     loanType: selectedLead.loanType,
                     items: checklistItems.filter(i => i.required).map(item => ({
                       name: item.name,
                       category: item.category,
                       required: item.required
-                    }))
+                    })),
+                    bankName: bankName
                   });
                 } catch (err) {
                   setError('Failed to share on WhatsApp');

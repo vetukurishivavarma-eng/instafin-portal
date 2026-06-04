@@ -32,6 +32,9 @@ export default function PipelinePage() {
   const [viewLead, setViewLead] = useState(null);
   const [sanctionLetterUrl, setSanctionLetterUrl] = useState(null);
   const [loadingLetter, setLoadingLetter] = useState(false);
+  const [statusHistory, setStatusHistory] = useState([]);
+  const [showStatusHistory, setShowStatusHistory] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const intervalRef = useRef(null);
 
   const loadData = async () => {
@@ -118,11 +121,42 @@ export default function PipelinePage() {
     }
   };
 
+  const fetchStatusHistory = async (leadId) => {
+    try {
+      const res = await fetch(`${API_BASE}/status-history/${leadId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setStatusHistory(data.data || []);
+    } catch (err) {
+      setStatusHistory([]);
+    }
+  };
+
+  const handleCloseLead = async (leadId) => {
+    setShowCloseConfirm(false);
+    try {
+      const res = await fetch(`${API_BASE}/leads/${leadId}/close`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        loadData();
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to close lead');
+      }
+    } catch (err) {
+      setError('Failed to close lead');
+    }
+  };
+
   const handleViewLead = (lead) => {
     setViewLead(lead);
     if (lead.status === 'Sanctioned') {
       fetchSanctionLetter(lead.id);
     }
+    fetchStatusHistory(lead.id);
   };
 
   const handleDownloadSanctionLetter = async (leadId) => {
@@ -228,6 +262,7 @@ export default function PipelinePage() {
               <option value="Partially Disbursed">Partially Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
+              <option value="Closed">Closed</option>
               <option value="Inactive">Inactive</option>
             </select>
           </div>
@@ -248,6 +283,7 @@ export default function PipelinePage() {
                     <th className="p-4">Amount</th>
                     <th className="p-4">Banks</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4">Entry Date</th>
                     {isAdmin && <th className="p-4 text-center">Actions</th>}
                   </tr>
                 </thead>
@@ -318,6 +354,9 @@ export default function PipelinePage() {
                         )}
                       </td>
                       <td className="p-4"><StatusBadge status={lead.status} /></td>
+                      <td className="p-4 text-xs text-gray-500">
+                        {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                      </td>
                       {isAdmin && (
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-end gap-2">
@@ -425,7 +464,7 @@ export default function PipelinePage() {
                   <option>Sanctioned</option><option>Disbursed</option><option>Partially Disbursed</option><option>Rejected</option>
                 </select>
               </div>
-              {/* Bank Assignment Section */}
+              {/* Bank Assignment Section with Branch Name */}
               <div className="border-t pt-4 mt-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Manage Banks</label>
                 
@@ -465,70 +504,88 @@ export default function PipelinePage() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <select
-                      className="w-full border rounded-xl px-4 py-2 text-sm"
-                      value={editForm._newBankSelection || ''}
-                      onChange={e => setEditForm({...editForm, _newBankSelection: e.target.value, _customBankName: e.target.value === 'Other' ? '' : (editForm._customBankName || '')})}
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <select
+                        className="w-full border rounded-xl px-4 py-2 text-sm"
+                        value={editForm._newBankSelection || ''}
+                        onChange={e => setEditForm({...editForm, _newBankSelection: e.target.value, _customBankName: e.target.value === 'Other' ? '' : (editForm._customBankName || '')})}
+                      >
+                        <option value="">— Select Bank —</option>
+                        {ALL_BANKS.map(bank => (
+                          <option key={bank} value={bank}>{bank}</option>
+                        ))}
+                      </select>
+                      {editForm._newBankSelection === 'Other' && (
+                        <input
+                          type="text"
+                          placeholder="Type custom bank name..."
+                          className="w-full border rounded-xl px-4 py-2 text-sm mt-2"
+                          value={editForm._customBankName || ''}
+                          onChange={e => setEditForm({...editForm, _customBankName: e.target.value})}
+                        />
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const selectedBank = editForm._newBankSelection === 'Other'
+                          ? (editForm._customBankName || '').trim()
+                          : editForm._newBankSelection;
+                        if (!selectedBank || !editingLead) {
+                          setError('Please select or type a bank name');
+                          return;
+                        }
+                        try {
+                          const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
+                            method: 'PUT',
+                            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              bankName: selectedBank,
+                              branchName: editForm._newBranchName || null
+                            })
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setEditForm(prev => ({
+                              ...prev,
+                              assignedBanks: [...(prev.assignedBanks || []), selectedBank],
+                              status: data.lead?.status || prev.status,
+                              _newBankSelection: '',
+                              _customBankName: '',
+                              _newBranchName: ''
+                            }));
+                            loadData();
+                          } else {
+                            const err = await res.json();
+                            setError(err.error || 'Failed to assign bank');
+                          }
+                        } catch (err) {
+                          setError('Failed to assign bank');
+                        }
+                      }}
+                      disabled={!editForm._newBankSelection || (editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())}
+                      className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap ${
+                        editForm._newBankSelection && !(editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
                     >
-                      <option value="">— Select Bank —</option>
-                      {ALL_BANKS.map(bank => (
-                        <option key={bank} value={bank}>{bank}</option>
-                      ))}
-                    </select>
-                    {editForm._newBankSelection === 'Other' && (
+                      Assign
+                    </button>
+                  </div>
+                  {/* Branch Name Input */}
+                  {editForm._newBankSelection && (
+                    <div>
                       <input
                         type="text"
-                        placeholder="Type custom bank name..."
-                        className="w-full border rounded-xl px-4 py-2 text-sm mt-2"
-                        value={editForm._customBankName || ''}
-                        onChange={e => setEditForm({...editForm, _customBankName: e.target.value})}
+                        placeholder="Enter branch name (optional)"
+                        className="w-full border rounded-xl px-4 py-2 text-sm"
+                        value={editForm._newBranchName || ''}
+                        onChange={e => setEditForm({...editForm, _newBranchName: e.target.value})}
                       />
-                    )}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      const selectedBank = editForm._newBankSelection === 'Other'
-                        ? (editForm._customBankName || '').trim()
-                        : editForm._newBankSelection;
-                      if (!selectedBank || !editingLead) {
-                        setError('Please select or type a bank name');
-                        return;
-                      }
-                      try {
-                        const res = await fetch(`${API_BASE}/leads/${editingLead.id}/assign-bank`, {
-                          method: 'PUT',
-                          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ bankName: selectedBank })
-                        });
-                        if (res.ok) {
-                          const data = await res.json();
-                          setEditForm(prev => ({
-                            ...prev,
-                            assignedBanks: [...(prev.assignedBanks || []), selectedBank],
-                            status: data.lead?.status || prev.status,
-                            _newBankSelection: '',
-                            _customBankName: ''
-                          }));
-                          loadData();
-                        } else {
-                          const err = await res.json();
-                          setError(err.error || 'Failed to assign bank');
-                        }
-                      } catch (err) {
-                        setError('Failed to assign bank');
-                      }
-                    }}
-                    disabled={!editForm._newBankSelection || (editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())}
-                    className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap ${
-                      editForm._newBankSelection && !(editForm._newBankSelection === 'Other' && !(editForm._customBankName || '').trim())
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    Assign
-                  </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -573,11 +630,11 @@ export default function PipelinePage() {
 
       {/* View Lead Details Modal */}
       {viewLead && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setViewLead(null); setSanctionLetterUrl(null); setShowStatusHistory(false); }}>
           <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-2xl font-bold text-gray-900">Lead Details</h3>
-              <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+              <button onClick={() => { setViewLead(null); setSanctionLetterUrl(null); setShowStatusHistory(false); }} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
             </div>
 
             <div className="space-y-4">
@@ -607,16 +664,8 @@ export default function PipelinePage() {
                   <p className="font-semibold">{viewLead.assignedTo || 'Unassigned'}</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4">
-                  <p className="text-sm text-gray-500">Assigned Banks</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {viewLead.assignedBanks && viewLead.assignedBanks.length > 0 ? (
-                      viewLead.assignedBanks.map((bank, i) => (
-                        <span key={i} className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">{bank}</span>
-                      ))
-                    ) : (
-                      <span className="text-gray-400 text-sm">None</span>
-                    )}
-                  </div>
+                  <p className="text-sm text-gray-500">Date of Entry</p>
+                  <p className="font-semibold">{viewLead.entryDate || viewLead.createdAt ? new Date(viewLead.entryDate || viewLead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4">
                   <p className="text-sm text-gray-500">Priority</p>

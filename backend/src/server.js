@@ -8,6 +8,8 @@ import checklistStatusRouter from './routes/checklistStatus.js';
 import loanTypesRouter from './routes/loanTypes.js';
 import auditLogsRouter from './routes/auditLogs.js';
 import formsRouter from './routes/forms.js';
+import creditQueriesRouter from './routes/creditQueries.js';
+import statusHistoryRouter from './routes/statusHistory.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +33,8 @@ app.use('/api/checklist-status', checklistStatusRouter);
 app.use('/api/loan-types', loanTypesRouter);
 app.use('/api/audit-logs', auditLogsRouter);
 app.use('/api/forms', formsRouter);
+app.use('/api/credit-queries', creditQueriesRouter);
+app.use('/api/status-history', statusHistoryRouter);
 
 // Health check
 app.get('/', (req, res) => {

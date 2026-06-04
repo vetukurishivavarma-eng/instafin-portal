@@ -37,6 +37,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/leads" className={getLinkClass('/admin/leads')}>Leads</Link>
                   <Link to="/admin/customer-tracking" className={getLinkClass('/admin/customer-tracking')}>Customer Tracking</Link>
                   <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
+                  <Link to="/admin/credit-query" className={getLinkClass('/admin/credit-query')}>Credit Query</Link>
                   <Link to="/admin/sanction" className={getLinkClass('/admin/sanction')}>Sanction</Link>
                   <Link to="/admin/disburse" className={getLinkClass('/admin/disburse')}>Disburse</Link>
                   <Link to="/admin/revenue" className={getLinkClass('/admin/revenue')}>Revenue</Link>

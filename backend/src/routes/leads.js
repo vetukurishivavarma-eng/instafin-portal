@@ -7,6 +7,27 @@ import { authorize } from '../middleware/authorize.js';
 import leadBanksRouter from './leadBanks.js';
 import { deriveLeadStatus, computeLeadAggregates } from '../utils/statusDerivation.js';
 
+// Helper to record status change in status_history
+async function recordStatusChange(leadId, previousStatus, newStatus, changedBy, notes) {
+  try {
+    await supabase
+      .from('status_history')
+      .insert({
+        lead_id: leadId,
+        previous_status: previousStatus,
+        new_status: newStatus,
+        changed_by: changedBy || 'system',
+        changed_at: new Date().toISOString(),
+        notes: notes || null
+      });
+  } catch (err) {
+    // Table may not exist yet - silently fail
+    if (!err.message || (!err.message.includes('relation') && !err.message.includes('does not exist'))) {
+      console.error('Failed to record status history:', err);
+    }
+  }
+}
+
 // Helper to record audit log for admin actions while impersonating
 async function recordAuditLog(leadId, adminId, action, details, adminName) {
   try {
@@ -266,12 +287,16 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         bankDetails: banks.map(b => ({
           id: b.id,
           bankName: b.bank_name,
+          branchName: b.branch_name,
           status: b.status,
           sanctionedAmount: b.sanctioned_amount,
           disbursedAmount: b.disbursed_amount,
           sanctionLetterPath: b.sanction_letter_path,
           remarks: b.remarks
-        }))
+        })),
+        entryDate: lead.entry_date,
+        isClosed: lead.is_closed === true,
+        closedAt: lead.closed_at
       };
     });
 
@@ -367,9 +392,13 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       coapplicantName: coapplicant?.name || "",
       coapplicantIncomeSource: coapplicant?.incomeSource || "",
       createdAt: lead.created_at,
+      entryDate: lead.entry_date,
+      isClosed: lead.is_closed === true,
+      closedAt: lead.closed_at,
       bankDetails: (banks || []).map(b => ({
         id: b.id,
         bankName: b.bank_name,
+        branchName: b.branch_name,
         status: b.status,
         sanctionedAmount: b.sanctioned_amount,
         disbursedAmount: b.disbursed_amount,
@@ -510,6 +539,15 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       throw error;
     }
 
+    // Record initial status in status_history
+    await recordStatusChange(
+      newLead.id,
+      null,
+      newLead.status,
+      req.user?.name || req.user?.email || 'system',
+      'Lead created'
+    );
+
     // Record audit log if admin is impersonating
     const adminCtx = await getAdminContext(req);
     if (adminCtx) {
@@ -622,6 +660,17 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 
     if (error) throw error;
 
+    // Record status change in status_history if status changed
+    if (updateData.status && existingLead.status !== updateData.status) {
+      await recordStatusChange(
+        req.params.id,
+        existingLead.status,
+        updateData.status,
+        req.user?.name || req.user?.email || 'system',
+        `Status changed via lead update`
+      );
+    }
+
     // Record audit log if admin is impersonating
     const adminCtx = await getAdminContext(req);
     if (adminCtx) {
@@ -689,6 +738,64 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
     res.json({ message: 'Lead deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
+// PUT /api/leads/:id/close - Close a lead (only for Disbursed leads)
+router.put('/:id/close', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const leadId = req.params.id;
+
+    // Get current lead
+    const { data: lead, error: fetchError } = await supabase
+      .from('leads')
+      .select('status, customer_name, is_closed')
+      .eq('id', leadId)
+      .single();
+
+    if (fetchError || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    if (lead.is_closed) {
+      return res.status(400).json({ error: 'Lead is already closed' });
+    }
+
+    if (lead.status !== 'Disbursed') {
+      return res.status(400).json({ error: 'Only leads with Disbursed status can be closed' });
+    }
+
+    const closedAt = new Date().toISOString();
+
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update({
+        is_closed: true,
+        closed_at: closedAt,
+        status: 'Closed'
+      })
+      .eq('id', leadId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Record status history
+    await recordStatusChange(leadId, lead.status, 'Closed', req.user?.name || req.user?.email, 'Lead closed after disbursement');
+
+    res.json({
+      message: 'Lead closed successfully',
+      lead: {
+        id: updatedLead.id,
+        customerName: updatedLead.customer_name,
+        isClosed: updatedLead.is_closed,
+        closedAt: updatedLead.closed_at,
+        status: updatedLead.status
+      }
+    });
+  } catch (error) {
+    console.error('Close lead error:', error);
+    res.status(500).json({ error: 'Failed to close lead' });
   }
 });
 
@@ -837,6 +944,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       partiallyDisbursed: allLeads.filter(l => l.status === 'Partially Disbursed').length,
       disbursed: allLeads.filter(l => l.status === 'Disbursed').length,
       rejected: allLeads.filter(l => l.status === 'Rejected').length,
+      closed: allLeads.filter(l => l.is_closed === true || l.status === 'Closed').length,
     };
 
     res.json(stats);
@@ -932,6 +1040,13 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
       return res.status(400).json({ error: 'Executive name is required' });
     }
 
+    // Fetch current lead to get existing status for history tracking
+    const { data: currentLead } = await supabase
+      .from('leads')
+      .select('status')
+      .eq('id', leadId)
+      .single();
+
     // Look up the user's UUID from users table (NOT the executives table)
     // The assigned_to field stores users table UUID so executives can filter their leads by req.user.id
     const { data: userRecord } = await supabase
@@ -971,6 +1086,16 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
 
     if (error) throw error;
 
+    // Record status history
+    const previousStatus = currentLead?.status || 'New';
+    await recordStatusChange(
+      leadId,
+      previousStatus,
+      'Assigned',
+      req.user?.name || req.user?.email || 'system',
+      `Assigned to ${assignedTo}`
+    );
+
     res.json({ message: 'Lead assigned', lead: updatedLead });
   } catch (error) {
     console.error('Assign error:', error);
@@ -978,10 +1103,10 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
   }
 });
 
-// PUT /api/leads/:id/assign-bank - Assign bank to lead
+// PUT /api/leads/:id/assign-bank - Assign bank to lead (with branch name support)
 router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res) => {
   try {
-    const { bankName } = req.body;
+    const { bankName, branchName } = req.body;
     const leadId = req.params.id;
 
     if (!bankName) {
@@ -1021,18 +1146,24 @@ router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res)
 
     if (updateError) throw updateError;
 
-    // Also create a lead_banks record for bank-wise tracking
+    // Also create a lead_banks record for bank-wise tracking (with branch name)
     const { error: bankRowError } = await supabase
       .from('lead_banks')
       .insert({
         lead_id: leadId,
         bank_name: bankName,
+        branch_name: branchName || null,
         status: 'Processing'
       });
 
     // Ignore duplicate errors (bank may already have a lead_banks row)
     if (bankRowError && bankRowError.code !== '23505') {
       console.error('Failed to create lead_banks row:', bankRowError);
+    }
+
+    // Record status history
+    if (newStatus !== lead.status) {
+      await recordStatusChange(leadId, lead.status, newStatus, req.user?.name || req.user?.email, `Bank ${bankName} assigned`);
     }
 
     res.json({

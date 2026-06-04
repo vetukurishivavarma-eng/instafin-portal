@@ -7,6 +7,8 @@ interface ShareOptions {
   loanType: string;
   items: { name: string; category: string; required: boolean }[];
   title?: string;
+  bankName?: string;
+  branchName?: string;
 }
 
 /**
@@ -67,6 +69,12 @@ export async function shareOnWhatsApp(options: ShareOptions): Promise<boolean> {
   const lines: string[] = [];
   lines.push(`📋 *${title || `Loan Checklist - ${getLoanTypeLabel(loanType)}`}*`);
   lines.push('');
+  // Include bank name if provided
+  if (options.bankName) {
+    lines.push(`*Bank:* ${options.bankName}${options.branchName ? ` (${options.branchName})` : ''}`);
+    lines.push('');
+  }
+
   lines.push(title ? 'Pending Documents:' : 'Required Documents:');
   lines.push('');
 

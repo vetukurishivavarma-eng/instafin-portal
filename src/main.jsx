@@ -22,6 +22,7 @@ import ExecutivePage from './pages/ExecutivePage'
 import LeadEntryPage from './pages/LeadEntryPage'
 import CustomerListPage from './pages/CustomerListPage'
 import ChecklistsPage from './pages/ChecklistsPage'
+import CreditQueryPage from './pages/CreditQueryPage'
 import EligibilityPage from './pages/EligibilityPage'
 
 import './index.css'
@@ -123,6 +124,11 @@ function AppRoutes() {
             <RevenuePage />
           </ProtectedRoute>
         } />
+        <Route path="/admin/credit-query" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <CreditQueryPage />
+          </ProtectedRoute>
+        } />
         <Route path="/admin/executives" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <ExecutivePage />
@@ -148,7 +154,7 @@ function AppRoutes() {
         } />
         <Route path="/executive/credit-query" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <EligibilityPage />
+            <CreditQueryPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/sanction" element={

@@ -65,11 +65,11 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   }
 });
 
-// POST /api/leads/:leadId/banks — Add a bank to a lead
+// POST /api/leads/:leadId/banks — Add a bank to a lead (with branch name)
 router.post('/', authorize('admin', 'executive'), async (req, res) => {
   try {
     const { leadId } = req.params;
-    const { bankName } = req.body;
+    const { bankName, branchName } = req.body;
 
     if (!bankName) {
       return res.status(400).json({ error: 'Bank name is required' });
@@ -87,12 +87,13 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
       return res.status(400).json({ error: 'Bank already assigned to this lead' });
     }
 
-    // Insert lead_banks record
+    // Insert lead_banks record (with branch name)
     const { data: newBank, error } = await supabase
       .from('lead_banks')
       .insert({
         lead_id: leadId,
         bank_name: bankName,
+        branch_name: branchName || null,
         status: 'Processing'
       })
       .select()
