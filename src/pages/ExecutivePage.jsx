@@ -18,6 +18,7 @@ export default function ExecutivePage() {
   const [bankModal, setBankModal] = useState(null);
   const [selectedBank, setSelectedBank] = useState('');
   const [customBankInput, setCustomBankInput] = useState('');
+  const [branchName, setBranchName] = useState('');
   const [showBankSuggestions, setShowBankSuggestions] = useState(false);
   const bankInputRef = useRef(null);
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
@@ -204,7 +205,7 @@ export default function ExecutivePage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ bankName })
+        body: JSON.stringify({ bankName, branchName: branchName.trim() || null })
       });
 
       if (!res.ok) {
@@ -232,6 +233,7 @@ export default function ExecutivePage() {
       setBankModal(null);
       setSelectedBank('');
       setCustomBankInput('');
+      setBranchName('');
     } catch (err) {
       setError('Failed to assign bank');
       setTimeout(() => setError(''), 5000);
@@ -562,6 +564,23 @@ export default function ExecutivePage() {
                     </div>
                   )}
                 </div>
+
+                {/* Branch Name Input - appears when a bank is selected */}
+                {(selectedBank || (selectedBank === 'Other' && customBankInput.trim())) && (
+                  <div className="mb-6 bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Branch Name <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Andheri Main Branch, MG Road Branch..."
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold text-sm"
+                      value={branchName}
+                      onChange={e => setBranchName(e.target.value)}
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Branch details will appear in lead details and shared checklists.</p>
+                  </div>
+                )}
 
                 {bankModal.assignedBanks && bankModal.assignedBanks.length > 0 && (
                   <div className="mb-6">
