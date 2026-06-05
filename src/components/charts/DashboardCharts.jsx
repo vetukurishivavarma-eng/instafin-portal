@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title } from 'chart.js';
-import { Doughnut, Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js';
+import { Doughnut, Bar, Line } from 'react-chartjs-2';
 import { useAuth } from '../../contexts/AuthContext';
 import API_BASE from '../../config/api';
 
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title);
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler);
 
 // Format a loan_type key to a display label
 const formatLoanType = (key) => {
@@ -15,16 +15,8 @@ const formatLoanType = (key) => {
 
 // Color palette for loan type bars
 const LOAN_TYPE_COLORS = [
-  '#6366F1', // indigo
-  '#F59E0B', // amber
-  '#10B981', // emerald
-  '#EF4444', // red
-  '#8B5CF6', // violet
-  '#EC4899', // pink
-  '#06B6D4', // cyan
-  '#F97316', // orange
-  '#14B8A6', // teal
-  '#84CC16', // lime
+  '#6366F1', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6',
+  '#EC4899', '#06B6D4', '#F97316', '#14B8A6', '#84CC16',
 ];
 
 // Format currency in Indian format
@@ -34,20 +26,31 @@ const formatCurrency = (amount) => {
   return `₹${amount.toLocaleString('en-IN')}`;
 };
 
+// Short month label formatter
+const formatMonth = (monthKey) => {
+  const [y, m] = monthKey.split('-');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[parseInt(m, 10) - 1]} ${y.slice(2)}`;
+};
+
 export default function DashboardCharts() {
   const { accessToken } = useAuth();
   const [statusData, setStatusData] = useState(null);
   const [loanTypeData, setLoanTypeData] = useState(null);
+  const [monthlyTrend, setMonthlyTrend] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!accessToken) return;
+    setLoading(true);
     Promise.all([
       fetch(`${API_BASE}/leads/stats/status-distribution`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json()),
-      fetch(`${API_BASE}/leads/stats/loan-type-distribution`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json())
-    ]).then(([status, loanType]) => {
+      fetch(`${API_BASE}/leads/stats/loan-type-distribution`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json()),
+      fetch(`${API_BASE}/leads/stats/monthly-trend`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json())
+    ]).then(([status, loanType, trend]) => {
       setStatusData(status);
       setLoanTypeData(loanType);
+      setMonthlyTrend(trend);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [accessToken]);
@@ -68,24 +71,8 @@ export default function DashboardCharts() {
   if (loanTypeData) {
     const labels = Object.keys(loanTypeData);
     const counts = labels.map(k => loanTypeData[k].count || 0);
-    const sanctioned = labels.map(k => Math.round((loanTypeData[k].totalSanctioned || 0) / 1000)); // in thousands for scale
+    const sanctioned = labels.map(k => Math.round((loanTypeData[k].totalSanctioned || 0) / 1000));
     const bgColors = labels.map((_, i) => LOAN_TYPE_COLORS[i % LOAN_TYPE_COLORS.length]);
-
-    // Custom tooltip that shows amounts
-    const customTooltip = {
-      callbacks: {
-        label: function(context) {
-          const index = context.dataIndex;
-          const key = labels[index];
-          const d = loanTypeData[key];
-          const lines = [];
-          lines.push(`Leads: ${d.count || 0}`);
-          if (d.totalSanctioned > 0) lines.push(`Sanctioned: ${formatCurrency(d.totalSanctioned)}`);
-          if (d.totalDisbursed > 0) lines.push(`Disbursed: ${formatCurrency(d.totalDisbursed)}`);
-          return lines;
-        }
-      }
-    };
 
     loanTypeChartData = {
       labels: labels.map(formatLoanType),
@@ -110,13 +97,36 @@ export default function DashboardCharts() {
     };
   }
 
+  // Build monthly trend line chart
+  let trendChartData = null;
+  if (monthlyTrend && monthlyTrend.length > 0) {
+    const labels = monthlyTrend.map(d => formatMonth(d.month));
+    const counts = monthlyTrend.map(d => d.count);
+
+    trendChartData = {
+      labels,
+      datasets: [{
+        label: 'Leads Created',
+        data: counts,
+        borderColor: '#6366F1',
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#6366F1',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointHitRadius: 10,
+        borderWidth: 3
+      }]
+    };
+  }
+
   const barOptions = {
     maintainAspectRatio: false,
     responsive: true,
-    interaction: {
-      intersect: false,
-      mode: 'index'
-    },
+    interaction: { intersect: false, mode: 'index' },
     plugins: {
       tooltip: {
         callbacks: {
@@ -125,13 +135,8 @@ export default function DashboardCharts() {
             const key = Object.keys(loanTypeData || {})[index];
             if (!key) return '';
             const d = loanTypeData[key];
-            if (context.dataset.label === 'Leads') {
-              return ` Leads: ${d.count || 0}`;
-            }
-            if (context.dataset.label === 'Sanctioned (₹K)') {
-              const amt = d.totalSanctioned || 0;
-              return ` Sanctioned: ${formatCurrency(amt)}`;
-            }
+            if (context.dataset.label === 'Leads') return ` Leads: ${d.count || 0}`;
+            if (context.dataset.label === 'Sanctioned (₹K)') return ` Sanctioned: ${formatCurrency(d.totalSanctioned || 0)}`;
             return '';
           },
           afterBody: function(context) {
@@ -143,50 +148,76 @@ export default function DashboardCharts() {
           }
         }
       },
-      legend: {
-        display: true,
-        position: 'bottom',
-        labels: {
-          usePointStyle: true,
-          padding: 16,
-          font: { size: 11 }
+      legend: { display: true, position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 11 } } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 }, precision: 0 } }
+    }
+  };
+
+  const lineOptions = {
+    maintainAspectRatio: false,
+    responsive: true,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            return ` Leads: ${context.parsed.y}`;
+          }
         }
-      }
+      },
+      legend: { display: false }
     },
     scales: {
       x: {
         grid: { display: false },
-        ticks: { font: { size: 10 } }
+        ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 }
       },
       y: {
         beginAtZero: true,
         grid: { color: 'rgba(0,0,0,0.05)' },
-        ticks: {
-          font: { size: 10 },
-          precision: 0
-        }
+        ticks: { font: { size: 10 }, precision: 0, stepSize: 1 }
       }
     }
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mt-6 sm:mt-8">
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Lead Status Distribution</h3>
-        {statusChartData && (
-          <div className="h-48 sm:h-64">
-            <Doughnut data={statusChartData} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 10 } } } } }} />
-          </div>
-        )}
+    <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
+      {/* Top row: 2 charts side by side */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
+          <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Lead Status Distribution</h3>
+          {statusChartData ? (
+            <div className="h-48 sm:h-64">
+              <Doughnut data={statusChartData} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 10 } } } } }} />
+            </div>
+          ) : (
+            <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No data</div>
+          )}
+        </div>
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
+          <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Leads by Loan Type</h3>
+          {loanTypeChartData ? (
+            <div className="h-48 sm:h-64">
+              <Bar data={loanTypeChartData} options={barOptions} />
+            </div>
+          ) : (
+            <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No loan type data available</div>
+          )}
+        </div>
       </div>
+
+      {/* Bottom row: Monthly Trend full width */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Leads by Loan Type</h3>
-        {loanTypeChartData ? (
+        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">📈 Monthly Lead Trend</h3>
+        {trendChartData ? (
           <div className="h-48 sm:h-64">
-            <Bar data={loanTypeChartData} options={barOptions} />
+            <Line data={trendChartData} options={lineOptions} />
           </div>
         ) : (
-          <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No loan type data available</div>
+          <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No trend data available</div>
         )}
       </div>
     </div>

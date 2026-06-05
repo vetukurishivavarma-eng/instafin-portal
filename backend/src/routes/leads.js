@@ -1099,6 +1099,52 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/leads/stats/monthly-trend — leads created per month (last 12 months)
+router.get('/stats/monthly-trend', authenticate, async (req, res) => {
+  try {
+    let query = supabase.from('leads').select('created_at');
+
+    if (req.user.role !== 'admin') {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (userData?.name) {
+        query = query.or(`assigned_to.eq.${req.user.id},assigned_to.eq.${userData.name}`);
+      } else {
+        query = query.eq('assigned_to', req.user.id);
+      }
+    }
+
+    const { data: leads, error } = await query;
+
+    if (error) throw error;
+
+    // Group leads by year-month
+    const monthMap = {};
+    (leads || []).forEach(lead => {
+      if (!lead.created_at) return;
+      const d = new Date(lead.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthMap[key] = (monthMap[key] || 0) + 1;
+    });
+
+    // Sort by month ascending and return as array
+    const sortedMonths = Object.keys(monthMap).sort();
+    const trend = sortedMonths.map(month => ({
+      month,
+      count: monthMap[month]
+    }));
+
+    res.json(trend);
+  } catch (error) {
+    console.error('Error fetching monthly trend:', error);
+    res.status(500).json({ error: 'Failed to fetch monthly trend' });
+  }
+});
+
 // Loan type distribution for charts — returns count + aggregated amounts per type
 router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
   try {
