@@ -506,11 +506,23 @@ export default function CreditQueryPage() {
                   <textarea
                     className="w-full border rounded-xl px-3 py-2 text-sm bg-white resize-none"
                     rows={2}
+                    maxLength={500}
                     value={newQuery.remarks}
                     onChange={e => setNewQuery({...newQuery, remarks: e.target.value})}
                     placeholder="Describe the credit query..."
                     required
                   />
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-[11px] font-medium transition-colors ${
+                      newQuery.remarks.length >= 475
+                        ? 'text-red-500'
+                        : newQuery.remarks.length >= 400
+                        ? 'text-amber-500'
+                        : 'text-gray-400'
+                    }`}>
+                      {newQuery.remarks.length}/500
+                    </span>
+                  </div>
                 </div>
               </form>
             )}
