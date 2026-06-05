@@ -97,29 +97,81 @@ export default function DashboardCharts() {
     };
   }
 
-  // Build monthly trend line chart
+  // Build monthly trend line chart with amounts
   let trendChartData = null;
   if (monthlyTrend && monthlyTrend.length > 0) {
     const labels = monthlyTrend.map(d => formatMonth(d.month));
     const counts = monthlyTrend.map(d => d.count);
+    const expected = monthlyTrend.map(d => Math.round((d.totalExpected || 0) / 10000) / 10); // in lakhs (1dp)
+    const sanctioned = monthlyTrend.map(d => Math.round((d.totalSanctioned || 0) / 10000) / 10);
+    const disbursed = monthlyTrend.map(d => Math.round((d.totalDisbursed || 0) / 10000) / 10);
 
     trendChartData = {
       labels,
-      datasets: [{
-        label: 'Leads Created',
-        data: counts,
-        borderColor: '#6366F1',
-        backgroundColor: 'rgba(99, 102, 241, 0.1)',
-        fill: true,
-        tension: 0.4,
-        pointBackgroundColor: '#6366F1',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointHitRadius: 10,
-        borderWidth: 3
-      }]
+      datasets: [
+        {
+          label: 'Leads',
+          data: counts,
+          borderColor: '#6366F1',
+          backgroundColor: 'rgba(99, 102, 241, 0.08)',
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#6366F1',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          borderWidth: 3,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Expected (₹L)',
+          data: expected,
+          borderColor: '#F59E0B',
+          backgroundColor: 'rgba(245, 158, 11, 0.08)',
+          fill: false,
+          tension: 0.4,
+          borderDash: [6, 3],
+          pointBackgroundColor: '#F59E0B',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          borderWidth: 2,
+          yAxisID: 'y1'
+        },
+        {
+          label: 'Sanctioned (₹L)',
+          data: sanctioned,
+          borderColor: '#10B981',
+          backgroundColor: 'rgba(16, 185, 129, 0.08)',
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: '#10B981',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          borderWidth: 2,
+          yAxisID: 'y1'
+        },
+        {
+          label: 'Disbursed (₹L)',
+          data: disbursed,
+          borderColor: '#8B5CF6',
+          backgroundColor: 'rgba(139, 92, 246, 0.08)',
+          fill: false,
+          tension: 0.4,
+          borderDash: [3, 3],
+          pointBackgroundColor: '#8B5CF6',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          borderWidth: 2,
+          yAxisID: 'y1'
+        }
+      ]
     };
   }
 
@@ -164,11 +216,28 @@ export default function DashboardCharts() {
       tooltip: {
         callbacks: {
           label: function(context) {
-            return ` Leads: ${context.parsed.y}`;
+            const val = context.parsed[context.dataset.yAxisID === 'y1' ? 'y1' : 'y'];
+            const label = context.dataset.label || '';
+            if (label.includes('₹L')) return ` ${label}: ₹${val.toFixed(1)}L`;
+            return ` ${label}: ${val}`;
+          },
+          afterBody: function(context) {
+            const index = context[0]?.dataIndex;
+            const d = monthlyTrend?.[index];
+            if (!d) return [];
+            const lines = [];
+            if (d.totalExpected > 0) lines.push(`Expected: ${formatCurrency(d.totalExpected)}`);
+            if (d.totalSanctioned > 0) lines.push(`Sanctioned: ${formatCurrency(d.totalSanctioned)}`);
+            if (d.totalDisbursed > 0) lines.push(`Disbursed: ${formatCurrency(d.totalDisbursed)}`);
+            return lines;
           }
         }
       },
-      legend: { display: false }
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: { usePointStyle: true, padding: 12, font: { size: 10 } }
+      }
     },
     scales: {
       x: {
@@ -176,9 +245,22 @@ export default function DashboardCharts() {
         ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 }
       },
       y: {
+        type: 'linear',
+        display: true,
+        position: 'left',
         beginAtZero: true,
         grid: { color: 'rgba(0,0,0,0.05)' },
-        ticks: { font: { size: 10 }, precision: 0, stepSize: 1 }
+        ticks: { font: { size: 10 }, precision: 0, stepSize: 1 },
+        title: { display: true, text: 'Leads', font: { size: 10 } }
+      },
+      y1: {
+        type: 'linear',
+        display: true,
+        position: 'right',
+        beginAtZero: true,
+        grid: { drawOnChartArea: false },
+        ticks: { font: { size: 10 }, callback: function(value) { return '₹' + value.toFixed(1) + 'L'; } },
+        title: { display: true, text: 'Amount (₹ Lakhs)', font: { size: 10 } }
       }
     }
   };

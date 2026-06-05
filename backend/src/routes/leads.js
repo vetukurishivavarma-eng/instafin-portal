@@ -1099,10 +1099,10 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/leads/stats/monthly-trend — leads created per month (last 12 months)
+// GET /api/leads/stats/monthly-trend — leads created per month with amounts
 router.get('/stats/monthly-trend', authenticate, async (req, res) => {
   try {
-    let query = supabase.from('leads').select('created_at');
+    let query = supabase.from('leads').select('created_at, expected_amount, sanctioned_amount, disbursed_amount');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -1122,20 +1122,26 @@ router.get('/stats/monthly-trend', authenticate, async (req, res) => {
 
     if (error) throw error;
 
-    // Group leads by year-month
+    // Group leads by year-month with aggregated amounts
     const monthMap = {};
     (leads || []).forEach(lead => {
       if (!lead.created_at) return;
       const d = new Date(lead.created_at);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthMap[key] = (monthMap[key] || 0) + 1;
+      if (!monthMap[key]) {
+        monthMap[key] = { count: 0, totalExpected: 0, totalSanctioned: 0, totalDisbursed: 0 };
+      }
+      monthMap[key].count++;
+      monthMap[key].totalExpected += Number(lead.expected_amount) || 0;
+      monthMap[key].totalSanctioned += Number(lead.sanctioned_amount) || 0;
+      monthMap[key].totalDisbursed += Number(lead.disbursed_amount) || 0;
     });
 
     // Sort by month ascending and return as array
     const sortedMonths = Object.keys(monthMap).sort();
     const trend = sortedMonths.map(month => ({
       month,
-      count: monthMap[month]
+      ...monthMap[month]
     }));
 
     res.json(trend);
