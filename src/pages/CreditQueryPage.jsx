@@ -21,6 +21,8 @@ export default function CreditQueryPage() {
   });
   const [resolvingQuery, setResolvingQuery] = useState(null);
   const [resolutionText, setResolutionText] = useState('');
+  const [editingQuery, setEditingQuery] = useState(null);
+  const [editRemarksText, setEditRemarksText] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
@@ -139,36 +141,6 @@ export default function CreditQueryPage() {
     }
   };
 
-  const handleUpdateQueryStatus = async (queryId, newStatus) => {
-    try {
-      const res = await fetch(`${API_BASE}/credit-queries/${queryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          status: newStatus,
-          response_remarks: newStatus === 'completed' || newStatus === 'received'
-            ? 'Response received'
-            : undefined
-        })
-      });
-
-      if (res.ok) {
-        setSuccess('Query status updated!');
-        setCreditQueries(prev => prev.map(q =>
-          q.id === queryId ? { ...q, status: newStatus } : q
-        ));
-      } else {
-        const errData = await res.json();
-        setError(errData.error || 'Failed to update query');
-      }
-    } catch (err) {
-      setError('Failed to update query');
-    }
-  };
-
   const handleDeleteQuery = async (queryId) => {
     if (!window.confirm('Delete this credit query?')) return;
     try {
@@ -228,6 +200,49 @@ export default function CreditQueryPage() {
       setResolvingQuery(queryId);
       setResolutionText('');
     }
+  };
+
+  const handleEditQuery = async (queryId) => {
+    if (!editRemarksText.trim()) {
+      setError('Query text cannot be empty');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/credit-queries/${queryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          remarks: editRemarksText.trim()
+        })
+      });
+
+      if (res.ok) {
+        setSuccess('Credit query updated successfully!');
+        setCreditQueries(prev => prev.map(q =>
+          q.id === queryId ? { ...q, remarks: editRemarksText.trim() } : q
+        ));
+        setEditingQuery(null);
+        setEditRemarksText('');
+      } else {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to update query');
+      }
+    } catch (err) {
+      setError('Failed to update query');
+    }
+  };
+
+  const startEditQuery = (query) => {
+    setEditingQuery(query.id);
+    setEditRemarksText(query.remarks || '');
+  };
+
+  const cancelEditQuery = () => {
+    setEditingQuery(null);
+    setEditRemarksText('');
   };
 
   const getQueryStatusBadge = (status) => {
@@ -555,51 +570,31 @@ export default function CreditQueryPage() {
                       <div className="flex items-center gap-2">
                         {getQueryStatusBadge(query.status)}
                         <div className="flex gap-1">
-                          {query.status === 'pending' && (
+                          {query.status !== 'resolved' && (
                             <>
                               <button
-                                onClick={() => handleUpdateQueryStatus(query.id, 'sent')}
-                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
-                                title="Mark as Sent"
+                                onClick={() => toggleResolveForm(query.id)}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  resolvingQuery === query.id
+                                    ? 'bg-gray-200 text-gray-600'
+                                    : 'text-green-600 hover:bg-green-50'
+                                }`}
+                                title={resolvingQuery === query.id ? 'Cancel' : 'Resolve Query'}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => handleUpdateQueryStatus(query.id, 'completed')}
-                                className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-                                title="Mark as Completed"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               </button>
                             </>
                           )}
-                          {query.status === 'sent' && (
+                          {query.status === 'resolved' && (
                             <button
-                              onClick={() => handleUpdateQueryStatus(query.id, 'received')}
-                              className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-                              title="Mark as Received"
+                              onClick={() => startEditQuery(query)}
+                              className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              title="Edit Query"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </button>
-                          )}
-                          {query.status !== 'resolved' && (
-                            <button
-                              onClick={() => toggleResolveForm(query.id)}
-                              className={`p-1.5 rounded-lg transition-colors ${
-                                resolvingQuery === query.id
-                                  ? 'bg-gray-200 text-gray-600'
-                                  : 'text-green-600 hover:bg-green-50'
-                              }`}
-                              title={resolvingQuery === query.id ? 'Cancel' : 'Resolve Query'}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             </button>
                           )}
@@ -616,8 +611,40 @@ export default function CreditQueryPage() {
                       </div>
                     </div>
 
-                    {query.remarks && (
-                      <p className="text-sm text-gray-600 ml-11 mb-2">{query.remarks}</p>
+                    {/* Query Text / Edit Mode */}
+                    {editingQuery === query.id ? (
+                      <div className="ml-11 mb-3 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                        <label className="block text-xs font-bold text-indigo-800 mb-2">Edit Query</label>
+                        <textarea
+                          value={editRemarksText}
+                          onChange={(e) => setEditRemarksText(e.target.value)}
+                          rows={2}
+                          maxLength={500}
+                          className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none mb-2"
+                        />
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-medium text-gray-400">{editRemarksText.length}/500</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditQuery(query.id)}
+                              disabled={!editRemarksText.trim()}
+                              className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditQuery}
+                              className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-300"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      query.remarks && (
+                        <p className="text-sm text-gray-600 ml-11 mb-2">{query.remarks}</p>
+                      )
                     )}
 
                     {/* Resolution Form */}

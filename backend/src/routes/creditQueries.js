@@ -111,13 +111,14 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
 router.put('/:id', authorize('admin', 'executive'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, response_remarks, response_date } = req.body;
+    const { status, remarks, response_remarks, response_date } = req.body;
 
     const updateData = {
       updated_at: new Date().toISOString()
     };
 
     if (status) updateData.status = status;
+    if (remarks !== undefined) updateData.remarks = remarks;
     if (response_remarks !== undefined) updateData.response_remarks = response_remarks;
     if (response_date) updateData.response_date = response_date;
     if (status === 'completed' || status === 'received') {
