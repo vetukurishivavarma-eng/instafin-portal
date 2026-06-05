@@ -951,16 +951,17 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     if (error) throw error;
 
     const allLeads = leads || [];
-    const inactiveCount = allLeads.filter(l => l.is_active === false).length;
+    const activeLeads = allLeads.filter(l => l.is_active !== false);
+    const inactiveCount = allLeads.length - activeLeads.length;
 
-    // Fetch lead_banks for all returned leads to derive accurate statuses
-    const leadIds = allLeads.map(l => l.id);
+    // Fetch lead_banks for active leads only to derive accurate statuses
+    const activeLeadIds = activeLeads.map(l => l.id);
     let banksByLeadId = {};
-    if (leadIds.length > 0) {
+    if (activeLeadIds.length > 0) {
       const { data: allBanks } = await supabase
         .from('lead_banks')
         .select('lead_id, status')
-        .in('lead_id', leadIds);
+        .in('lead_id', activeLeadIds);
 
       if (allBanks) {
         for (const bank of allBanks) {
@@ -970,10 +971,10 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       }
     }
 
-    // Count leads by derived status (matching the logic in GET /api/leads)
+    // Count only active leads by derived status — inactive leads are separate
     let stats = {
       totalLeads: allLeads.length,
-      activeLeads: allLeads.length - inactiveCount,
+      activeLeads: activeLeads.length,
       inactiveLeads: inactiveCount,
       newLeads: 0,
       assigned: 0,
@@ -985,7 +986,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       closed: 0,
     };
 
-    for (const lead of allLeads) {
+    for (const lead of activeLeads) {
       const banks = banksByLeadId[lead.id] || [];
       let derivedStatus = lead.status;
 
@@ -1014,6 +1015,9 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       } else if (derivedStatus === 'Rejected') {
         stats.rejected++;
       }
+      // Note: any active lead with unmatched derivedStatus falls through —
+      // it still contributes to activeLeads but won't show on any status card.
+      // This is acceptable and keeps totalLeads = activeLeads + inactiveLeads.
     }
 
     res.json(stats);
