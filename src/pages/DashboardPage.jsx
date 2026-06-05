@@ -113,7 +113,7 @@ export default function DashboardPage() {
         <StatCard label="Disbursed" value={stats.disbursed} gradient="from-purple-500 to-indigo-600" filterStatus="Disbursed" />
         <StatCard label="Closed" value={stats.closed || 0} gradient="from-gray-700 to-gray-900" filterStatus="Closed" />
         <StatCard label="Rejected" value={stats.rejected || 0} gradient="from-red-500 to-red-700" filterStatus="Rejected" />
-        <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg cursor-default">
+        <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg cursor-default hover:shadow-xl hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 ease-out">
           <p className="text-white/80 text-xs sm:text-sm font-medium">Revenue Generated</p>
           <h3 className="text-2xl sm:text-5xl font-bold text-white mt-1 sm:mt-2">{stats.revenue}</h3>
         </div>
