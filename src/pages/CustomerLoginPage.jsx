@@ -58,6 +58,18 @@ export default function CustomerLoginPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Escape key to close document viewer
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape' && viewDoc) {
+        if (viewDoc.url) URL.revokeObjectURL(viewDoc.url);
+        setViewDoc(null);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [viewDoc]);
+
   // Fetch leads
   useEffect(() => {
     if (!accessToken) return;
@@ -281,16 +293,60 @@ export default function CustomerLoginPage() {
   };
 
   // View file
-  const handleViewDocument = async (fileId) => {
-    setViewDoc({ url: null, id: fileId, loading: true });
+  const handleViewDocument = async (fileId, docName) => {
+    if (!fileId) return;
+    // Find document info from checklistStatuses
+    let fileName = '';
+    let fileCategory = '';
+    let fileDescription = '';
+    let fileUploadDate = '';
+
+    Object.entries(checklistStatuses).forEach(([docId, files]) => {
+      const matchedFile = (files || []).find(f => f.id === fileId);
+      if (matchedFile) {
+        // Find the checklist item to get the document name
+        const checklistItem = checklistItems.find(item => item.id === docId);
+        fileName = checklistItem?.name || docName || 'Document';
+        fileCategory = checklistItem?.category || '';
+        fileDescription = matchedFile.description || '';
+        fileUploadDate = matchedFile.uploadedAt || '';
+      }
+    });
+
+    setViewDoc({
+      url: null,
+      id: fileId,
+      name: fileName,
+      category: fileCategory,
+      description: fileDescription,
+      uploadDate: fileUploadDate,
+      mimeType: '',
+      fileSize: null,
+      loading: true,
+      zoom: 1
+    });
+
     try {
       const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       if (!res.ok) throw new Error('Failed');
+
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      setViewDoc({ url: blobUrl, id: fileId, loading: false });
+
+      // Get file size from Content-Length header or blob
+      const contentLength = res.headers.get('Content-Length');
+      const fileSize = contentLength ? parseInt(contentLength, 10) : blob.size;
+
+      setViewDoc(prev => ({
+        ...prev,
+        url: blobUrl,
+        mimeType: blob.type || 'application/pdf',
+        fileSize,
+        loading: false,
+        zoom: 1
+      }));
     } catch (err) {
       setError('Failed to load document');
       setViewDoc(null);
@@ -870,7 +926,7 @@ export default function CustomerLoginPage() {
                                         )}
                                       </div>
                                       <button
-                                        onClick={() => handleViewDocument(file.id)}
+                                        onClick={() => handleViewDocument(file.id, item.name)}
                                         className="text-xs text-blue-700 font-semibold bg-blue-100 px-2 py-1 rounded-lg hover:bg-blue-200"
                                       >
                                         View
@@ -909,24 +965,209 @@ export default function CustomerLoginPage() {
 
       {/* View Document Modal */}
       {viewDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}>
-          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center px-6 py-4 border-b">
-              <h3 className="text-lg font-bold text-gray-900">Uploaded Document</h3>
-              <div className="flex items-center gap-3">
-                {viewDoc.url && (
-                  <a href={viewDoc.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                    Open in new tab
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn"
+          onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden animate-slideUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header toolbar */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50/80">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                {/* File type icon */}
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  viewDoc.mimeType?.includes('pdf')
+                    ? 'bg-red-50 text-red-600'
+                    : viewDoc.mimeType?.includes('image')
+                      ? 'bg-purple-50 text-purple-600'
+                      : 'bg-blue-50 text-blue-600'
+                }`}>
+                  {viewDoc.mimeType?.includes('pdf') ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                  ) : viewDoc.mimeType?.includes('image') ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-gray-900 truncate">{viewDoc.name || 'Document'}</h3>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                    {viewDoc.category && (
+                      <span className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] font-medium capitalize">
+                        {viewDoc.category.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                    {viewDoc.fileSize !== null && (
+                      <span>
+                        {viewDoc.fileSize >= 1048576
+                          ? `${(viewDoc.fileSize / 1048576).toFixed(1)} MB`
+                          : viewDoc.fileSize >= 1024
+                            ? `${(viewDoc.fileSize / 1024).toFixed(0)} KB`
+                            : `${viewDoc.fileSize} B`}
+                      </span>
+                    )}
+                    {viewDoc.uploadDate && (
+                      <span>
+                        {new Date(viewDoc.uploadDate).toLocaleDateString('en-IN', {
+                          day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Zoom controls — only for PDF and images */}
+                {viewDoc.url && !viewDoc.loading && (viewDoc.mimeType?.includes('pdf') || viewDoc.mimeType?.includes('image')) && (
+                  <div className="flex items-center gap-0.5 mr-1 bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <button
+                      onClick={() => setViewDoc(prev => ({ ...prev, zoom: Math.max(0.25, (prev.zoom || 1) - 0.25) }))}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-l-lg transition-colors"
+                      title="Zoom out"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </button>
+                    <span className="text-[11px] font-semibold text-gray-600 min-w-[38px] text-center select-none">
+                      {Math.round((viewDoc.zoom || 1) * 100)}%
+                    </span>
+                    <button
+                      onClick={() => setViewDoc(prev => ({ ...prev, zoom: Math.min(4, (prev.zoom || 1) + 0.25) }))}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-r-lg transition-colors"
+                      title="Zoom in"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setViewDoc(prev => ({ ...prev, zoom: 1 }))}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors ml-0.5"
+                      title="Reset zoom"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M1 5l12-2v13M1 9l12-2M1 13l12-2M1 17l12-2" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+
+                {/* Download */}
+                {viewDoc.url && !viewDoc.loading && (
+                  <a
+                    href={viewDoc.url}
+                    download={viewDoc.name || 'document'}
+                    className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Download file"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
                   </a>
                 )}
-                <button onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }} className="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+
+                {/* Fullscreen */}
+                {viewDoc.url && !viewDoc.loading && (
+                  <button
+                    onClick={() => {
+                      const el = document.querySelector('.doc-preview-iframe') || document.querySelector('.doc-preview-image');
+                      if (el && el.requestFullscreen) el.requestFullscreen();
+                    }}
+                    className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title="Fullscreen"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                  </button>
+                )}
+
+                {/* Close */}
+                <button
+                  onClick={() => { if (viewDoc.url) URL.revokeObjectURL(viewDoc.url); setViewDoc(null); }}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors ml-1"
+                  title="Close (Esc)"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-4">
+
+            {/* Description bar */}
+            {viewDoc.description && (
+              <div className="px-5 py-2 bg-amber-50/60 border-b border-amber-100 text-xs text-amber-800 flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{viewDoc.description}</span>
+              </div>
+            )}
+
+            {/* Document preview area */}
+            <div className="flex-1 overflow-auto bg-gray-100/50 flex items-start justify-center p-2 sm:p-4">
               {viewDoc.loading ? (
-                <div className="flex items-center justify-center h-[70vh] text-gray-500">Loading document...</div>
+                <div className="flex flex-col items-center justify-center h-[70vh] text-gray-500">
+                  <div className="relative w-14 h-14 mb-4">
+                    <div className="absolute inset-0 rounded-full border-[3px] border-gray-200"></div>
+                    <div className="absolute inset-0 rounded-full border-[3px] border-blue-500 border-t-transparent animate-spin"></div>
+                  </div>
+                  <p className="font-semibold text-gray-700 text-sm">Loading document...</p>
+                  <p className="text-xs text-gray-400 mt-1">Preparing preview for viewing</p>
+                </div>
+              ) : viewDoc.mimeType?.includes('image') ? (
+                <div
+                  className="flex items-start justify-center w-full"
+                  style={{ transform: `scale(${viewDoc.zoom || 1})`, transformOrigin: 'top center', transition: 'transform 0.2s ease' }}
+                >
+                  <img
+                    src={viewDoc.url}
+                    alt={viewDoc.name || 'Document'}
+                    className="doc-preview-image max-w-full rounded-xl shadow-lg border border-gray-200 bg-white"
+                    style={{ maxHeight: '75vh' }}
+                  />
+                </div>
+              ) : viewDoc.mimeType?.includes('pdf') ? (
+                <div
+                  className="w-full h-[75vh] flex flex-col items-center"
+                  style={{ transform: `scale(${viewDoc.zoom || 1})`, transformOrigin: 'top center', transition: 'transform 0.2s ease' }}
+                >
+                  <iframe
+                    src={`${viewDoc.url}#view=FitH&navpanes=0&toolbar=0`}
+                    title={viewDoc.name || 'Document'}
+                    className="doc-preview-iframe w-full h-full rounded-xl shadow-lg border border-gray-200 bg-white"
+                  />
+                </div>
               ) : (
-                <iframe src={viewDoc.url} title="Document Preview" className="w-full h-[70vh] border rounded-lg" />
+                <div className="flex flex-col items-center justify-center h-[60vh] text-gray-500">
+                  <svg className="w-20 h-20 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  <p className="font-semibold text-gray-700 text-sm mb-1">Preview not available</p>
+                  <p className="text-xs text-gray-400 mb-4">This file type cannot be previewed in the browser.</p>
+                  <a
+                    href={viewDoc.url}
+                    download={viewDoc.name || 'document'}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download File
+                  </a>
+                </div>
               )}
             </div>
           </div>
