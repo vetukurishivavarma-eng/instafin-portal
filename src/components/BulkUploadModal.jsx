@@ -98,22 +98,22 @@ export default function BulkUploadModal({ isOpen, onClose, onComplete }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleClose}>
-      <div className="bg-white rounded-3xl p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4" onClick={handleClose}>
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl mx-2 sm:mx-0" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Bulk Lead Upload</h2>
-            <p className="text-gray-500 text-sm">Upload Excel file to bulk import or update leads</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Bulk Lead Upload</h2>
+            <p className="text-gray-500 text-xs sm:text-sm">Upload Excel file to bulk import or update leads</p>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6">{error}</div>
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6 text-sm">{error}</div>
         )}
 
         {result && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6">
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6 text-sm">
             <h3 className="font-bold">Upload Successful!</h3>
             <p>New leads inserted: {result.inserted}</p>
             <p>Existing leads updated: {result.updated}</p>
@@ -125,25 +125,25 @@ export default function BulkUploadModal({ isOpen, onClose, onComplete }) {
 
         {!preview && !result && (
           <div className="text-center">
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 mb-6">
-              <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-12 mb-6">
+              <svg className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
               <label className="cursor-pointer">
-                <span className="text-blue-600 hover:text-blue-700 font-medium">Click to upload</span>
-                <span className="text-gray-500"> or drag and drop</span>
+                <span className="text-blue-600 hover:text-blue-700 font-medium text-sm">Click to upload</span>
+                <span className="text-gray-500 text-sm"> or drag and drop</span>
                 <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileChange} />
               </label>
-              <p className="text-sm text-gray-500 mt-2">Excel files only (.xlsx, .xls)</p>
+              <p className="text-xs text-gray-500 mt-2">Excel files only (.xlsx, .xls)</p>
             </div>
 
             {file && (
               <div className="mb-6">
-                <p className="text-gray-700 font-medium">Selected: {file.name}</p>
+                <p className="text-gray-700 font-medium text-sm">Selected: {file.name}</p>
                 <button
                   onClick={handlePreview}
                   disabled={loading}
-                  className="mt-4 bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  className="mt-4 bg-blue-600 text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 text-sm"
                 >
                   {loading ? 'Analyzing...' : 'Preview & Analyze'}
                 </button>

@@ -176,32 +176,32 @@ export default function CreditQueryPage() {
   };
 
   return (
-    <div className="py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Credit Query Management</h1>
-        <p className="text-gray-500 mt-1">Manage credit inquiries raised by banks for active leads.</p>
+    <div className="py-6 sm:py-12 px-3 sm:px-6">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Credit Query Management</h1>
+        <p className="text-xs sm:text-base text-gray-500 mt-1">Manage credit inquiries raised by banks for active leads.</p>
       </div>
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6 text-sm">
           {error}
           <button onClick={() => setError('')} className="ml-2 float-right">&times;</button>
         </div>
       )}
       {success && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6">
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6 text-sm">
           {success}
           <button onClick={() => setSuccess('')} className="ml-2 float-right">&times;</button>
         </div>
       )}
 
-      <div className="grid lg:grid-cols-12 gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Left: Leads List */}
-        <div className="lg:col-span-4">
+        <div className="w-full lg:w-1/3">
           <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
             <div className="p-4 border-b bg-gray-50">
-              <h3 className="font-semibold text-gray-800">
-                Active Leads with Banks ({leads.length})
+              <h3 className="font-semibold text-gray-800 text-sm">
+                Active Leads ({leads.length})
               </h3>
             </div>
 
@@ -210,12 +210,12 @@ export default function CreditQueryPage() {
             ) : leads.length === 0 ? (
               <div className="p-6 text-center text-gray-500">No active leads with bank assignments.</div>
             ) : (
-              <div className="divide-y max-h-[600px] overflow-y-auto">
+              <div className="divide-y max-h-[400px] sm:max-h-[600px] overflow-y-auto">
                 {leads.map(lead => (
                   <div
                     key={lead.id}
                     onClick={() => handleSelectLead(lead)}
-                    className={`p-4 cursor-pointer transition-all hover:bg-blue-50 ${
+                    className={`p-3 sm:p-4 cursor-pointer transition-all hover:bg-blue-50 ${
                       selectedLead?.id === lead.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                     }`}
                   >
@@ -239,7 +239,7 @@ export default function CreditQueryPage() {
         </div>
 
         {/* Right: Credit Query Details */}
-        <div className="lg:col-span-8">
+        <div className="w-full lg:w-2/3">
           {selectedLead ? (
             <div className="space-y-6">
               {/* Lead Summary */}

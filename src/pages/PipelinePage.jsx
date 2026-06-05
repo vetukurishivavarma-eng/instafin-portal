@@ -242,24 +242,24 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Lead Management Pipeline</h1>
-        <p className="text-gray-500">Track, assign, and manage all customer loan applications.</p>
+    <div className="py-6 sm:py-12">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Lead Management Pipeline</h1>
+        <p className="text-sm sm:text-base text-gray-500">Track, assign, and manage all customer loan applications.</p>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-        <div className="p-6 border-b flex flex-wrap gap-4 items-center justify-between">
-          <h3 className="text-xl font-bold">All Leads ({filteredLeads.length})</h3>
-          <div className="flex gap-4">
-            <input type="text" placeholder="Search..." className="border rounded-xl px-4 py-2" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            <select className="border rounded-xl px-4 py-2" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden">
+        <div className="p-4 sm:p-6 border-b flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between">
+          <h3 className="text-lg sm:text-xl font-bold">All Leads ({filteredLeads.length})</h3>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
+            <input type="text" placeholder="Search..." className="border rounded-xl px-4 py-2 text-sm w-full sm:w-auto" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <select className="border rounded-xl px-4 py-2 text-sm w-full sm:w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">All Status</option>
               <option value="New">New</option>
               <option value="Assigned">Assigned</option>
               <option value="Processing">Processing</option>
               <option value="Sanctioned">Sanctioned</option>
-              <option value="Partially Disbursed">Partially Disbursed</option>
+              <option value="Partially Disbursed">Part. Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
               <option value="Closed">Closed</option>
@@ -272,19 +272,19 @@ export default function PipelinePage() {
         ) : filteredLeads.length === 0 ? (
           <div className="text-center py-12 text-gray-500">No leads found</div>
         ) : (
-          <div className="p-6">
+          <div className="p-4 sm:p-6 responsive-table">
             <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
               <table className="w-full text-left">
                 <thead className="bg-gray-50/70 border-b">
                   <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    <th className="p-4">Customer</th>
-                    <th className="p-4">Mobile</th>
-                    <th className="p-4">Loan Type</th>
-                    <th className="p-4">Amount</th>
-                    <th className="p-4">Banks</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Entry Date</th>
-                    {isAdmin && <th className="p-4 text-center">Actions</th>}
+                    <th className="p-3 sm:p-4">Customer</th>
+                    <th className="p-3 sm:p-4 mobile-hide">Mobile</th>
+                    <th className="p-3 sm:p-4 mobile-hide">Loan Type</th>
+                    <th className="p-3 sm:p-4">Amount</th>
+                    <th className="p-3 sm:p-4 mobile-hide">Banks</th>
+                    <th className="p-3 sm:p-4">Status</th>
+                    <th className="p-3 sm:p-4 mobile-hide">Entry Date</th>
+                    {isAdmin && <th className="p-3 sm:p-4 text-center">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y text-sm">
@@ -294,9 +294,10 @@ export default function PipelinePage() {
                       onClick={() => handleViewLead(lead)}
                       className={`hover:bg-gray-50/40 transition-colors cursor-pointer ${lead.isActive === false ? 'bg-red-50/40 opacity-75' : ''}`}
                     >
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4" data-label="Customer">
                         <div className="flex flex-col">
-                          <span className="text-gray-900 font-bold">{lead.customerName}</span>
+                          <span className="text-gray-900 font-bold text-sm">{lead.customerName}</span>
+                          <span className="text-xs text-gray-500 sm:hidden">{lead.mobile}</span>
                           {lead.hasCoapplicant && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm">
                               👥 Co-applicant
@@ -304,13 +305,14 @@ export default function PipelinePage() {
                           )}
                         </div>
                       </td>
-                      <td className="p-4 font-medium text-gray-600">{lead.mobile}</td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4 mobile-hide font-medium text-gray-600" data-label="Mobile">{lead.mobile}</td>
+                      <td className="p-3 sm:p-4 mobile-hide" data-label="Loan Type">
                         <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">
                           {lead.loanType?.replace('_', ' ') || 'N/A'}
                         </span>
                       </td>
-                      <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>                            <td className="p-4">
+                      <td className="p-3 sm:p-4 font-bold text-gray-900" data-label="Amount">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>
+                      <td className="p-3 sm:p-4 mobile-hide" data-label="Banks">
                         {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {lead.assignedBanks.map((bank, i) => (
@@ -353,16 +355,16 @@ export default function PipelinePage() {
                           <span className="text-gray-400 text-xs">None</span>
                         )}
                       </td>
-                      <td className="p-4"><StatusBadge status={lead.status} /></td>
-                      <td className="p-4 text-xs text-gray-500">
+                      <td className="p-3 sm:p-4" data-label="Status"><StatusBadge status={lead.status} /></td>
+                      <td className="p-3 sm:p-4 mobile-hide text-xs text-gray-500" data-label="Entry Date">
                         {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
                       {isAdmin && (
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="p-3 sm:p-4 text-center" data-label="Actions">
+                          <div className="flex items-center justify-end gap-1 sm:gap-2">
                             <button
                               onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
-                              className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                              className="px-2 sm:px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
                             >
                               Edit
                             </button>
@@ -384,13 +386,13 @@ export default function PipelinePage() {
                                   setError('Failed to toggle status');
                                 }
                               }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                              className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                                 lead.isActive === false
                                   ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
                                   : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
                               }`}
                             >
-                              {lead.isActive === false ? 'Restore' : 'Mark Inactive'}
+                              {lead.isActive === false ? 'Restore' : 'Inactive'}
                             </button>
                           </div>
                         </td>

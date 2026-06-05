@@ -444,44 +444,44 @@ export default function LeadEntryPage() {
 
 
   return (
-    <div className="py-12 px-6 min-h-screen bg-gradient-mesh">
+    <div className="py-6 sm:py-12 px-3 sm:px-6 min-h-screen bg-gradient-mesh">
       <div className="animate-fade-in-up">
       
       {/* HEADER SECTION */}
-      <div className="mb-10 flex justify-between items-center max-w-6xl mx-auto">
+      <div className="mb-6 sm:mb-10 flex flex-col sm:flex-row gap-3 sm:gap-0 justify-between items-start sm:items-center max-w-6xl mx-auto">
         <div>
-          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Leads Portal</h1>
-          <p className="text-gray-500 font-medium mt-1">Unified lead capture and pipeline tracking system.</p>
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">Leads Portal</h1>
+          <p className="text-xs sm:text-base text-gray-500 font-medium mt-1">Unified lead capture and pipeline tracking system.</p>
         </div>
         
         {effectiveRole === 'admin' && (
           <button
             onClick={() => setShowBulkUpload(true)}
-            className="px-5 py-3 rounded-2xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 hover-lift shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
+            className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 hover-lift shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 text-sm sm:text-base"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
-            Excel Bulk Upload
+            Bulk Upload
           </button>
         )}
       </div>
 
       {error && (
-        <div className="bg-red-100 border border-red-300 text-red-700 px-6 py-4 rounded-3xl mb-8 max-w-6xl mx-auto shadow-sm animate-fade-in-up">
+        <div className="bg-red-100 border border-red-300 text-red-700 px-4 sm:px-6 py-3 sm:py-4 rounded-2xl sm:rounded-3xl mb-6 sm:mb-8 max-w-6xl mx-auto shadow-sm animate-fade-in-up text-sm">
           {error}
         </div>
       )}
       {success && (
-        <div className="bg-green-100 border border-green-300 text-green-700 px-6 py-4 rounded-3xl mb-8 max-w-6xl mx-auto shadow-sm animate-fade-in-up">
+        <div className="bg-green-100 border border-green-300 text-green-700 px-4 sm:px-6 py-3 sm:py-4 rounded-2xl sm:rounded-3xl mb-6 sm:mb-8 max-w-6xl mx-auto shadow-sm animate-fade-in-up text-sm">
           {success}
         </div>
       )}
 
       {/* CENTRAL ACTION DASHBOARD CARDS */}
-      <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+      <div className="grid md:grid-cols-2 gap-4 sm:gap-8 max-w-6xl mx-auto">
         
         {/* CARD 1: ADD NEW LEAD — visible to all roles */}
         <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
@@ -536,22 +536,22 @@ export default function LeadEntryPage() {
       </div>
 
       {/* ACTIVE LEADS PIPELINE GRID */}
-      <div className="max-w-6xl mx-auto mt-14 pt-10 border-t border-gray-250/60">
-        <div className="flex flex-wrap gap-4 items-center justify-between border-b pb-5 mb-8">
+      <div className="max-w-6xl mx-auto mt-10 sm:mt-14 pt-6 sm:pt-10 border-t border-gray-250/60">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between border-b pb-4 sm:pb-5 mb-6 sm:mb-8">
           <div>
-            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Active Leads Pipeline</h2>
-            <p className="text-gray-500 font-medium mt-1">Track and manage individual customer files and loan status cards.</p>
+            <h2 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Active Leads Pipeline</h2>
+            <p className="text-xs sm:text-base text-gray-500 font-medium mt-1">Track and manage individual customer files and loan status cards.</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <input 
               type="text" 
               placeholder="Search leads by name or mobile..." 
-              className="border border-gray-200 rounded-2xl px-5 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm w-72" 
+              className="border border-gray-200 rounded-2xl px-4 sm:px-5 py-2.5 sm:py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm w-full sm:w-72" 
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)} 
             />
             <select 
-              className="border border-gray-200 rounded-2xl px-5 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm font-bold" 
+              className="border border-gray-200 rounded-2xl px-4 sm:px-5 py-2.5 sm:py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm font-bold w-full sm:w-auto" 
               value={statusFilter} 
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -560,7 +560,7 @@ export default function LeadEntryPage() {
               <option value="Assigned">Assigned</option>
               <option value="Processing">Processing</option>
               <option value="Sanctioned">Sanctioned</option>
-              <option value="Partially Disbursed">Partially Disbursed</option>
+              <option value="Partially Disbursed">Part. Disbursed</option>
               <option value="Disbursed">Disbursed</option>
               <option value="Rejected">Rejected</option>
               <option value="Closed">Closed</option>
@@ -576,18 +576,18 @@ export default function LeadEntryPage() {
             No leads found matching current criteria.
           </div>
         ) : (
-          <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+          <div className="responsive-table border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-left">
               <thead className="bg-gray-50/70 border-b">
                 <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  <th className="p-4">Customer</th>
-                  <th className="p-4">Mobile</th>
-                  <th className="p-4">Loan Type</th>
-                  <th className="p-4">Amount</th>
-                  <th className="p-4">Banks</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Entry Date</th>
-                  {(effectiveRole === 'admin' || isImpersonating) && <th className="p-4 text-center">Actions</th>}
+                  <th className="p-3 sm:p-4">Customer</th>
+                  <th className="p-3 sm:p-4 mobile-hide">Mobile</th>
+                  <th className="p-3 sm:p-4 mobile-hide">Loan Type</th>
+                  <th className="p-3 sm:p-4">Amount</th>
+                  <th className="p-3 sm:p-4 mobile-hide">Banks</th>
+                  <th className="p-3 sm:p-4">Status</th>
+                  <th className="p-3 sm:p-4 mobile-hide">Entry Date</th>
+                  {(effectiveRole === 'admin' || isImpersonating) && <th className="p-3 sm:p-4 text-center mobile-hide">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y text-sm">
@@ -597,9 +597,10 @@ export default function LeadEntryPage() {
                     onClick={() => handleViewLead(lead)}
                     className={`hover:bg-gray-50/40 transition-colors cursor-pointer ${lead.isActive === false ? 'bg-red-50/40 opacity-75' : ''}`}
                   >
-                    <td className="p-4">
+                    <td className="p-3 sm:p-4" data-label="Customer">
                       <div className="flex flex-col">
-                        <span className="text-gray-900 font-bold">{lead.customerName}</span>
+                        <span className="text-gray-900 font-bold text-sm">{lead.customerName}</span>
+                        <span className="text-xs text-gray-500 sm:hidden">{lead.mobile}</span>
                         {lead.hasCoapplicant && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm">
                             👥 Co-applicant
@@ -607,14 +608,14 @@ export default function LeadEntryPage() {
                         )}
                       </div>
                     </td>
-                    <td className="p-4 font-medium text-gray-600">{lead.mobile}</td>
-                    <td className="p-4">
+                    <td className="p-3 sm:p-4 mobile-hide font-medium text-gray-600" data-label="Mobile">{lead.mobile}</td>
+                    <td className="p-3 sm:p-4 mobile-hide" data-label="Loan Type">
                       <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">
                         {lead.loanType?.replace('_', ' ') || 'N/A'}
                       </span>
                     </td>
-                    <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>
-                    <td className="p-4">
+                    <td className="p-3 sm:p-4 font-bold text-gray-900" data-label="Amount">₹{parseInt(lead.expectedAmount || 0).toLocaleString('en-IN')}</td>
+                    <td className="p-3 sm:p-4 mobile-hide" data-label="Banks">
                       {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {lead.assignedBanks.map((bank, i) => (
@@ -657,16 +658,16 @@ export default function LeadEntryPage() {
                         <span className="text-gray-400 text-xs">None</span>
                       )}
                     </td>
-                    <td className="p-4"><StatusBadge status={lead.status} /></td>
-                    <td className="p-4 text-xs text-gray-500">
+                    <td className="p-3 sm:p-4" data-label="Status"><StatusBadge status={lead.status} /></td>
+                    <td className="p-3 sm:p-4 mobile-hide text-xs text-gray-500" data-label="Entry Date">
                       {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                     </td>
                     {(effectiveRole === 'admin' || isImpersonating) && (
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="p-3 sm:p-4 text-center mobile-hide" data-label="Actions">
+                        <div className="flex items-center justify-end gap-1 sm:gap-2">
                           <button
                             onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
-                            className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                            className="px-2 sm:px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
                           >
                             Edit
                           </button>
@@ -689,13 +690,13 @@ export default function LeadEntryPage() {
                                 setError('Failed to toggle status');
                               }
                             }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                            className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                               lead.isActive === false
                                 ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
                                 : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
                             }`}
                           >
-                            {lead.isActive === false ? 'Restore' : 'Mark Inactive'}
+                            {lead.isActive === false ? 'Restore' : 'Inactive'}
                           </button>
                         </div>
                       </td>

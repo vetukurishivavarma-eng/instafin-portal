@@ -295,31 +295,31 @@ export default function SanctionPage() {
   const rejectedBanks = banks.filter(b => b.status === 'Rejected');
 
   return (
-    <div className="py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Sanction Management</h1>
-        <p className="text-gray-500">Select a lead to sanction or reject individual banks</p>
+    <div className="py-6 sm:py-12 px-3 sm:px-6">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Sanction Management</h1>
+        <p className="text-sm sm:text-base text-gray-500">Select a lead to sanction or reject individual banks</p>
       </div>
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6">{error}</div>
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl mb-6 text-sm">{error}</div>
       )}
       {success && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6">{success}</div>
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-2xl mb-6 text-sm">{success}</div>
       )}
 
       {/* Lead Selector */}
-      <div className="bg-white rounded-3xl shadow-xl p-6 mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Select Lead</h2>
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl p-4 sm:p-6 mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Select Lead</h2>
         <select
-          className="w-full border rounded-xl px-4 py-3"
+          className="w-full border rounded-xl px-4 py-3 text-sm"
           value={selectedLead?.id || ''}
           onChange={handleLeadSelect}
         >
           <option value="">Choose a lead</option>
           {leads.map(lead => (
             <option key={lead.id} value={lead.id}>
-              {lead.customerName} — {lead.mobile} ({lead.loanType || 'N/A'}) — {lead.assignedBanks?.join(', ')}
+              {lead.customerName} — {lead.mobile}
             </option>
           ))}
         </select>
@@ -332,27 +332,27 @@ export default function SanctionPage() {
       {selectedLead && (
         <div>
           {/* Lead Summary */}
-          <div className="bg-blue-50 rounded-3xl p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-blue-800">{selectedLead.customerName}</h3>
+          <div className="bg-blue-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 mb-4 sm:mb-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-blue-800">{selectedLead.customerName}</h3>
               <StatusBadge status={selectedLead.status} />
             </div>
-            <div className="grid md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm">
               <div>
-                <span className="text-gray-500">Mobile: </span>
-                <span className="font-medium">{selectedLead.mobile}</span>
+                <span className="text-gray-500 text-xs">Mobile: </span>
+                <span className="font-medium text-xs sm:text-sm">{selectedLead.mobile}</span>
               </div>
               <div>
-                <span className="text-gray-500">Loan Type: </span>
-                <span className="font-medium">{selectedLead.loanType || 'N/A'}</span>
+                <span className="text-gray-500 text-xs">Loan Type: </span>
+                <span className="font-medium text-xs sm:text-sm">{selectedLead.loanType || 'N/A'}</span>
               </div>
               <div>
-                <span className="text-gray-500">Expected: </span>
-                <span className="font-medium">₹{Number(selectedLead.expectedAmount || 0).toLocaleString()}</span>
+                <span className="text-gray-500 text-xs">Expected: </span>
+                <span className="font-medium text-xs sm:text-sm">₹{Number(selectedLead.expectedAmount || 0).toLocaleString()}</span>
               </div>
               <div>
-                <span className="text-gray-500">Total Sanctioned: </span>
-                <span className="font-bold text-green-700">₹{totalSanctioned.toLocaleString()}</span>
+                <span className="text-gray-500 text-xs">Sanctioned: </span>
+                <span className="font-bold text-green-700 text-xs sm:text-sm">₹{totalSanctioned.toLocaleString()}</span>
               </div>
             </div>
           </div>

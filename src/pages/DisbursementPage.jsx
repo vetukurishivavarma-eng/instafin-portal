@@ -146,20 +146,20 @@ export default function DisbursementPage() {
   const totalDisbursed = banks.reduce((sum, b) => sum + (Number(b.disbursed_amount) || 0), 0);
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Disbursement</h1>
-        <p className="text-gray-500 mt-1">Process bank-wise disbursements for sanctioned leads</p>
+    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 sm:py-12">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Disbursement</h1>
+        <p className="text-sm sm:text-base text-gray-500 mt-1">Process bank-wise disbursements for sanctioned leads</p>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+        <div className="mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
           {error}
           <button onClick={() => setError('')} className="ml-2 text-red-500 hover:text-red-700">&times;</button>
         </div>
       )}
       {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700">
+        <div className="mb-4 p-3 sm:p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm">
           {success}
           <button onClick={() => setSuccess('')} className="ml-2 text-green-500 hover:text-green-700">&times;</button>
         </div>

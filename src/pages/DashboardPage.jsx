@@ -69,10 +69,10 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500">Welcome back, {user?.name || 'User'}</p>
+    <div className="py-6 sm:py-12">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-sm sm:text-base text-gray-500">Welcome back, {user?.name || 'User'}</p>
       </div>
 
       {error && (
@@ -81,22 +81,22 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard label="Total Active Leads" value={stats.activeLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus={null} />
-        <StatCard label="Inactive Leads" value={stats.inactiveLeads || 0} gradient="from-gray-400 to-gray-600" filterStatus="Inactive" />
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8 stats-grid">
+        <StatCard label="Active Leads" value={stats.activeLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus={null} />
+        <StatCard label="Inactive" value={stats.inactiveLeads || 0} gradient="from-gray-400 to-gray-600" filterStatus="Inactive" />
         <StatCard label="Assigned" value={stats.assigned} gradient="from-orange-400 to-orange-600" filterStatus="Assigned" />
         <StatCard label="Processing" value={stats.processing} gradient="from-yellow-400 to-orange-500" filterStatus="Processing" />
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 stats-grid">
         <StatCard label="Sanctioned" value={stats.sanctioned} gradient="from-green-400 to-emerald-600" filterStatus="Sanctioned" />
-        <StatCard label="Partially Disbursed" value={stats.partiallyDisbursed} gradient="from-teal-400 to-cyan-600" filterStatus="Partially Disbursed" />
+        <StatCard label="Part. Disbursed" value={stats.partiallyDisbursed} gradient="from-teal-400 to-cyan-600" filterStatus="Partially Disbursed" />
         <StatCard label="Disbursed" value={stats.disbursed} gradient="from-purple-500 to-indigo-600" filterStatus="Disbursed" />
         <StatCard label="Closed" value={stats.closed || 0} gradient="from-gray-700 to-gray-900" filterStatus="Closed" />
         <StatCard label="Rejected" value={stats.rejected || 0} gradient="from-red-500 to-red-700" filterStatus="Rejected" />
-        <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-3xl p-6 shadow-lg">
-          <p className="text-white/80 text-sm font-medium">Revenue Generated</p>
-          <h3 className="text-5xl font-bold text-white mt-2">{stats.revenue}</h3>
+        <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
+          <p className="text-white/80 text-xs sm:text-sm font-medium">Revenue Generated</p>
+          <h3 className="text-2xl sm:text-5xl font-bold text-white mt-1 sm:mt-2">{stats.revenue}</h3>
         </div>
       </div>
 

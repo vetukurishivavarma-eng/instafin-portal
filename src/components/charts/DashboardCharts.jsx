@@ -46,14 +46,14 @@ export default function DashboardCharts() {
   } : null;
 
   return (
-    <div className="grid md:grid-cols-2 gap-6 mt-8">
-      <div className="bg-white rounded-3xl p-6 shadow-lg">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Lead Status Distribution</h3>
-        {statusChartData && <div className="h-64"><Doughnut data={statusChartData} options={{ maintainAspectRatio: false }} /></div>}
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mt-6 sm:mt-8">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
+        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Lead Status Distribution</h3>
+        {statusChartData && <div className="h-48 sm:h-64"><Doughnut data={statusChartData} options={{ maintainAspectRatio: false, responsive: true }} /></div>}
       </div>
-      <div className="bg-white rounded-3xl p-6 shadow-lg">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Leads by Loan Type</h3>
-        {loanTypeDataObj && <div className="h-64"><Bar data={loanTypeDataObj} options={{ maintainAspectRatio: false, responsive: true }} /></div>}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
+        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Leads by Loan Type</h3>
+        {loanTypeDataObj && <div className="h-48 sm:h-64"><Bar data={loanTypeDataObj} options={{ maintainAspectRatio: false, responsive: true }} /></div>}
       </div>
     </div>
   );

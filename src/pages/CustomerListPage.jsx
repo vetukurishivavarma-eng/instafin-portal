@@ -52,19 +52,19 @@ export default function CustomerListPage() {
   });
 
   return (
-    <div className="py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">My Customers</h1>
-        <p className="text-gray-500">View and manage customers assigned to you</p>
+    <div className="py-6 sm:py-12 px-3 sm:px-6">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Customers</h1>
+        <p className="text-sm sm:text-base text-gray-500">View and manage customers assigned to you</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-3xl shadow-xl p-4 mb-8">
-        <div className="flex flex-wrap gap-4 items-center">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl p-4 mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center">
           <input
             type="text"
             placeholder="Search by name or mobile..."
-            className="border rounded-xl px-4 py-2 text-sm flex-1 min-w-[200px]"
+            className="border rounded-xl px-4 py-2 text-sm flex-1 min-w-0"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -77,13 +77,13 @@ export default function CustomerListPage() {
             <option value="Assigned">Assigned</option>
             <option value="Processing">Processing</option>
             <option value="Sanctioned">Sanctioned</option>
-            <option value="Partially Disbursed">Partially Disbursed</option>
+            <option value="Partially Disbursed">Part. Disbursed</option>
             <option value="Disbursed">Disbursed</option>
             <option value="Rejected">Rejected</option>
           </select>
           <button
             onClick={() => navigate('/executive/leads')}
-            className="ml-auto bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+            className="sm:ml-auto bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
           >
             + Add New Lead
           </button>

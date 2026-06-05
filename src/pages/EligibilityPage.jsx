@@ -168,13 +168,13 @@ export default function EligibilityPage() {
   };
 
   return (
-    <div className="py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Eligibility Calculator</h1>
-        <p className="text-gray-500">Calculate loan eligibility based on income and deductions</p>
+    <div className="py-6 sm:py-12 px-3 sm:px-6">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Eligibility Calculator</h1>
+        <p className="text-sm sm:text-base text-gray-500">Calculate loan eligibility based on income and deductions</p>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-8">
+      <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
         {/* LEFT: Inputs */}
         <div className="space-y-6">
 
@@ -267,42 +267,42 @@ export default function EligibilityPage() {
                 )}
               </div>
             </div>
-          </div>
-
-          {/* EMI/NMI & Existing EMIs */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <h2 className="text-lg font-bold text-blue-700 mb-4">EMI Details</h2>
+          </div>            {/* EMI/NMI & Existing EMIs */}
+          <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-bold text-blue-700 mb-4">EMI Details</h2>
             <div className="space-y-3">
               <div>
-                <label className="text-sm text-gray-600 mb-1 block">EMI/NMI % (as per NAI)</label>
-                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-4 py-2.5" value={emiNmiPercent} onChange={handleNumInput(setEmiNmiPercent)} placeholder="e.g. 50" />
+                <label className="text-xs sm:text-sm text-gray-600 mb-1 block">EMI/NMI % (as per NAI)</label>
+                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-4 py-2.5 text-sm" value={emiNmiPercent} onChange={handleNumInput(setEmiNmiPercent)} placeholder="e.g. 50" />
               </div>
 
               <div>
-                <label className="text-sm text-gray-600 mb-1 block">Existing Bank EMIs</label>
+                <label className="text-xs sm:text-sm text-gray-600 mb-1 block">Existing Bank EMIs</label>
                 {bankEmis.map((item, i) => (
-                  <div key={i} className="flex gap-2 mb-2">
+                  <div key={i} className="flex flex-col sm:flex-row gap-2 mb-2">
                     <input
                       type="text"
-                      className="flex-1 border rounded-xl px-3 py-2"
+                      className="w-full sm:flex-1 border rounded-xl px-3 py-2 text-sm"
                       placeholder="Bank name"
                       value={item.bank}
                       onChange={(e) => updateBankEmi(i, 'bank', e.target.value)}
                     />
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      className="w-36 border rounded-xl px-3 py-2"
-                      placeholder="EMI amount"
-                      value={item.emi}
-                      onChange={(e) => updateBankEmi(i, 'emi', e.target.value)}
-                    />
-                    {bankEmis.length > 1 && (
-                      <button onClick={() => removeBankEmi(i)} className="text-red-500 hover:text-red-700 px-2">&times;</button>
-                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="flex-1 sm:w-36 border rounded-xl px-3 py-2 text-sm"
+                        placeholder="EMI amount"
+                        value={item.emi}
+                        onChange={(e) => updateBankEmi(i, 'emi', e.target.value)}
+                      />
+                      {bankEmis.length > 1 && (
+                        <button onClick={() => removeBankEmi(i)} className="text-red-500 hover:text-red-700 px-2">&times;</button>
+                      )}
+                    </div>
                   </div>
                 ))}
-                <button onClick={addBankEmi} className="text-sm text-blue-600 hover:underline mt-1">+ Add another bank</button>
+                <button onClick={addBankEmi} className="text-xs sm:text-sm text-blue-600 hover:underline mt-1">+ Add another bank</button>
               </div>
             </div>
           </div>
@@ -385,9 +385,7 @@ export default function EligibilityPage() {
               </div>
 
             </div>
-          </div>
-
-          {/* Action Buttons */}
+          </div>            {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={handleDownloadPDF}
@@ -411,7 +409,7 @@ export default function EligibilityPage() {
           </div>
 
           {/* Input Summary */}
-          <div className="bg-gray-50 rounded-2xl p-6 text-sm text-gray-600">
+          <div className="bg-gray-50 rounded-2xl p-4 sm:p-6 text-xs sm:text-sm text-gray-600">
             <h3 className="font-bold text-gray-800 mb-3">Input Summary</h3>
             <div className="grid grid-cols-2 gap-2">
               <div>PF: {num(pf).toLocaleString()}</div>
