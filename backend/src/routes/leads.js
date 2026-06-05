@@ -64,33 +64,43 @@ async function getAdminContext(req) {
 
 const router = express.Router();
 
-// Helper to parse remarks containing co-applicant data
+// Helper to parse remarks containing co-applicant data (supports both single and array)
 const parseRemarksField = (remarksStr) => {
-  if (!remarksStr) return { coapplicant: null, remarks: "" };
+  if (!remarksStr) return { coapplicants: [], remarks: "" };
   try {
     const parsed = JSON.parse(remarksStr);
-    if (parsed && typeof parsed === 'object' && ('coapplicant' in parsed || 'hasCoapplicant' in parsed)) {
-      const coapplicant = parsed.coapplicant || {
-        hasCoapplicant: parsed.hasCoapplicant || false,
-        name: parsed.coapplicantName || "",
-        incomeSource: parsed.coapplicantIncomeSource || "salaried"
-      };
-      return {
-        coapplicant,
-        remarks: parsed.remarks || ""
-      };
+    if (parsed && typeof parsed === 'object') {
+      // New format: coapplicants array
+      if (parsed.coapplicants && Array.isArray(parsed.coapplicants)) {
+        return {
+          coapplicants: parsed.coapplicants,
+          remarks: parsed.remarks || ""
+        };
+      }
+      // Legacy format: single coapplicant
+      if ('coapplicant' in parsed || 'hasCoapplicant' in parsed) {
+        const oldCo = parsed.coapplicant || {};
+        const coapplicants = [{
+          name: oldCo.name || parsed.coapplicantName || "",
+          incomeSource: oldCo.incomeSource || parsed.coapplicantIncomeSource || "salaried"
+        }];
+        return {
+          coapplicants,
+          remarks: parsed.remarks || ""
+        };
+      }
     }
   } catch (e) {
     // Normal string remarks
   }
-  return { coapplicant: null, remarks: remarksStr };
+  return { coapplicants: [], remarks: remarksStr };
 };
 
 // Helper to serialize remarks containing co-applicant data
-const serializeRemarksField = (coapplicant, remarks) => {
-  if (!coapplicant || !coapplicant.hasCoapplicant) return remarks || "";
+const serializeRemarksField = (coapplicants, remarks) => {
+  if (!coapplicants || !Array.isArray(coapplicants) || coapplicants.length === 0) return remarks || "";
   return JSON.stringify({
-    coapplicant,
+    coapplicants,
     remarks: remarks || ""
   });
 };
@@ -257,7 +267,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         disbursedAmount = agg.totalDisbursed;
       }
 
-      const { coapplicant, remarks: cleanRemarks } = parseRemarksField(lead.remarks);
+      const { coapplicants, remarks: cleanRemarks } = parseRemarksField(lead.remarks);
 
       return {
         id: lead.id,
@@ -279,9 +289,10 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         priority: lead.priority,
         followUp: lead.follow_up,
         remarks: cleanRemarks,
-        hasCoapplicant: coapplicant?.hasCoapplicant || false,
-        coapplicantName: coapplicant?.name || "",
-        coapplicantIncomeSource: coapplicant?.incomeSource || "",
+        coapplicants,
+        hasCoapplicant: coapplicants.length > 0,
+        coapplicantName: coapplicants[0]?.name || "",
+        coapplicantIncomeSource: coapplicants[0]?.incomeSource || "",
         createdAt: lead.created_at,
         isActive: lead.is_active !== false,
         bankDetails: banks.map(b => ({
@@ -366,7 +377,7 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       disbursedAmount = agg.totalDisbursed;
     }
 
-    const { coapplicant, remarks: cleanRemarks } = parseRemarksField(lead.remarks);
+    const { coapplicants, remarks: cleanRemarks } = parseRemarksField(lead.remarks);
 
     res.json({
       id: lead.id,
@@ -388,9 +399,10 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       priority: lead.priority,
       followUp: lead.follow_up,
       remarks: cleanRemarks,
-      hasCoapplicant: coapplicant?.hasCoapplicant || false,
-      coapplicantName: coapplicant?.name || "",
-      coapplicantIncomeSource: coapplicant?.incomeSource || "",
+      coapplicants,
+      hasCoapplicant: coapplicants.length > 0,
+      coapplicantName: coapplicants[0]?.name || "",
+      coapplicantIncomeSource: coapplicants[0]?.incomeSource || "",
       createdAt: lead.created_at,
       entryDate: lead.entry_date,
       isClosed: lead.is_closed === true,
@@ -455,6 +467,7 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       hasCoapplicant,
       coapplicantName,
       coapplicantIncomeSource,
+      coapplicants,
       impersonatedExecutive
     } = req.body;
 
@@ -462,11 +475,15 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       return res.status(400).json({ error: 'Customer name and mobile are required' });
     }
 
-    const coapplicantData = hasCoapplicant ? {
-      hasCoapplicant: true,
-      name: coapplicantName || "",
-      incomeSource: coapplicantIncomeSource || "salaried"
-    } : null;
+    let finalCoapplicants = coapplicants;
+    if (!finalCoapplicants && hasCoapplicant) {
+      finalCoapplicants = [{
+        name: coapplicantName || "",
+        incomeSource: coapplicantIncomeSource || "salaried"
+      }];
+    } else if (!finalCoapplicants) {
+      finalCoapplicants = [];
+    }
 
     // When admin is impersonating an executive, look up the executive's user ID
     let assignedTo = null;
@@ -499,7 +516,7 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       status: assignedTo ? 'Assigned' : 'New',
       assigned_to: assignedTo,
       priority: 'Medium',
-      remarks: serializeRemarksField(coapplicantData, remarks)
+      remarks: serializeRemarksField(finalCoapplicants, remarks)
     };
 
     // Only add referral_code if it's provided (to handle missing column gracefully)
@@ -609,18 +626,22 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       }
     }
 
-    const { coapplicant, remarks: existingCleanRemarks } = parseRemarksField(existingLead.remarks);
+    const { coapplicants: existingCoapplicants, remarks: existingCleanRemarks } = parseRemarksField(existingLead.remarks);
 
-    const hasCoapplicant = req.body.hasCoapplicant !== undefined ? req.body.hasCoapplicant : (coapplicant?.hasCoapplicant || false);
-    const coapplicantName = req.body.coapplicantName !== undefined ? req.body.coapplicantName : (coapplicant?.name || "");
-    const coapplicantIncomeSource = req.body.coapplicantIncomeSource !== undefined ? req.body.coapplicantIncomeSource : (coapplicant?.incomeSource || "salaried");
+    // Handle coapplicants array from request body, or fall back to legacy single coapplicant fields
+    let coapplicants = null;
+    if (req.body.coapplicants !== undefined) {
+      coapplicants = req.body.coapplicants;
+    } else if (req.body.hasCoapplicant !== undefined) {
+      const hasCoapplicant = req.body.hasCoapplicant;
+      const coapplicantName = req.body.coapplicantName !== undefined ? req.body.coapplicantName : (existingCoapplicants[0]?.name || "");
+      const coapplicantIncomeSource = req.body.coapplicantIncomeSource !== undefined ? req.body.coapplicantIncomeSource : (existingCoapplicants[0]?.incomeSource || "salaried");
+      coapplicants = hasCoapplicant ? [{ name: coapplicantName, incomeSource: coapplicantIncomeSource }] : [];
+    } else {
+      coapplicants = existingCoapplicants;
+    }
+
     const remarks = req.body.remarks !== undefined ? req.body.remarks : existingCleanRemarks;
-
-    const coapplicantData = hasCoapplicant ? {
-      hasCoapplicant: true,
-      name: coapplicantName,
-      incomeSource: coapplicantIncomeSource
-    } : null;
 
     const updateData = {};
     const fieldMappings = {
@@ -650,7 +671,7 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       }
     });
 
-    updateData.remarks = serializeRemarksField(coapplicantData, remarks);
+    updateData.remarks = serializeRemarksField(coapplicants, remarks);
 
     const { data: updatedLead, error } = await supabase
       .from('leads')

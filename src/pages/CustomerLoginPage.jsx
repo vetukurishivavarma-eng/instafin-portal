@@ -47,6 +47,14 @@ export default function CustomerLoginPage() {
 
   // Bank forms
   const [downloadingForm, setDownloadingForm] = useState(null);
+  const [editingExpectedAmount, setEditingExpectedAmount] = useState(false);
+  const [editExpectedAmountValue, setEditExpectedAmountValue] = useState('');
+  const [showAssignBank, setShowAssignBank] = useState(false);
+  const [newBankName, setNewBankName] = useState('');
+  const [newBranchName, setNewBranchName] = useState('');
+  const [customBankName, setCustomBankName] = useState('');
+  const [editingCoapplicants, setEditingCoapplicants] = useState(false);
+  const [editCoapplicants, setEditCoapplicants] = useState([]);
 
   // ===== Eligibility Calculator State =====
   const [eligPF, setEligPF] = useState('');
@@ -168,7 +176,18 @@ export default function CustomerLoginPage() {
 
     const items = getChecklistWithFallback(selection);
 
-    if (lead.hasCoapplicant) {
+    // Handle multiple co-applicants
+    const coapps = lead.coapplicants || [];
+    if (coapps.length > 0) {
+      let allItems = [...items];
+      coapps.forEach(coapp => {
+        if (coapp.name) {
+          const coAppItems = getCoapplicantChecklist(items, coapp.name);
+          allItems = [...allItems, ...coAppItems];
+        }
+      });
+      setChecklistItems(allItems);
+    } else if (lead.hasCoapplicant && lead.coapplicantName) {
       const coAppItems = getCoapplicantChecklist(items, lead.coapplicantName);
       setChecklistItems([...items, ...coAppItems]);
     } else {
@@ -437,6 +456,163 @@ export default function CustomerLoginPage() {
 
     setSuccess('Form downloaded successfully!');
     setTimeout(() => setSuccess(''), 3000);
+  };
+
+  // ===== Inline Edit: Expected Amount =====
+  const handleSaveExpectedAmount = async () => {
+    if (!selectedLead) return;
+    const amount = parseFloat(editExpectedAmountValue);
+    if (isNaN(amount) || amount < 0) {
+      setError('Please enter a valid amount');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ expectedAmount: amount })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedLead(prev => ({ ...prev, expectedAmount: data.expectedAmount || amount }));
+        setEditingExpectedAmount(false);
+        setSuccess('Expected amount updated!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to update expected amount');
+      }
+    } catch (err) {
+      setError('Failed to update expected amount');
+    }
+  };
+
+  // ===== Assign Bank =====
+  const handleAssignBank = async () => {
+    if (!selectedLead) return;
+    const bankName = customBankName.trim() || newBankName.trim();
+    if (!bankName) {
+      setError('Please select or enter a bank name');
+      return;
+    }
+    const currentBanks = selectedLead.bankDetails || selectedLead.assignedBanks || [];
+    // Check duplicate
+    const exists = currentBanks.some(b => {
+      const name = typeof b === 'string' ? b : b.bankName;
+      return name.toLowerCase() === bankName.toLowerCase();
+    });
+    if (exists) {
+      setError('This bank is already assigned');
+      return;
+    }
+    const newBanks = [...currentBanks, { bankName, branchName: newBranchName.trim() || undefined }];
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ assignedBanks: newBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedLead(prev => ({ ...prev, bankDetails: newBanks, assignedBanks: data.lead?.assignedBanks || newBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) }));
+        setShowAssignBank(false);
+        setNewBankName('');
+        setNewBranchName('');
+        setCustomBankName('');
+        setSuccess('Bank assigned successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to assign bank');
+      }
+    } catch (err) {
+      setError('Failed to assign bank');
+    }
+  };
+
+  // ===== Remove Bank =====
+  const handleRemoveBank = async (bankToRemove) => {
+    if (!selectedLead) return;
+    const currentBanks = selectedLead.bankDetails || selectedLead.assignedBanks || [];
+    const updatedBanks = currentBanks.filter(b => {
+      const name = typeof b === 'string' ? b : b.bankName;
+      return name !== bankToRemove;
+    });
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ assignedBanks: updatedBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedLead(prev => ({ ...prev, bankDetails: updatedBanks, assignedBanks: updatedBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) }));
+        setSuccess(`${bankToRemove} removed from assigned banks.`);
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to remove bank');
+      }
+    } catch (err) {
+      setError('Failed to remove bank');
+    }
+  };
+
+  // ===== Co-applicants Management =====
+  const handleAddCoapplicant = () => {
+    setEditCoapplicants(prev => [...prev, { name: '', incomeSource: 'salaried' }]);
+  };
+
+  const handleRemoveCoapplicant = (index) => {
+    setEditCoapplicants(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateCoapplicant = (index, field, value) => {
+    setEditCoapplicants(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleSaveCoapplicants = async () => {
+    if (!selectedLead) return;
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ coapplicants: editCoapplicants })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedLead(prev => ({ ...prev, coapplicants: editCoapplicants }));
+        setEditingCoapplicants(false);
+        setSuccess('Co-applicants updated!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to update co-applicants');
+      }
+    } catch (err) {
+      setError('Failed to update co-applicants');
+    }
+  };
+
+  const handleStartEditCoapplicants = () => {
+    setEditCoapplicants(selectedLead.coapplicants || []);
+    setEditingCoapplicants(true);
   };
 
   // ===== Eligibility Helper Functions =====
@@ -893,7 +1069,44 @@ export default function CustomerLoginPage() {
             <div className="grid md:grid-cols-3 gap-4 text-sm">
               <div>
                 <span className="text-gray-500 font-medium">Expected Amount:</span>
-                <p className="font-semibold mt-1">{selectedLead.expectedAmount ? formatCurrency(selectedLead.expectedAmount) : 'N/A'}</p>
+                {editingExpectedAmount ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-xs">₹</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={editExpectedAmountValue}
+                        onChange={(e) => setEditExpectedAmountValue(e.target.value.replace(/[^\d]/g, ''))}
+                        className="w-full pl-7 pr-3 py-1.5 text-sm font-semibold border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                        autoFocus
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveExpectedAmount(); if (e.key === 'Escape') setEditingExpectedAmount(false); }}
+                      />
+                    </div>
+                    <button onClick={handleSaveExpectedAmount} className="p-1.5 text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200" title="Save">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    </button>
+                    <button onClick={() => setEditingExpectedAmount(false)} className="p-1.5 text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200" title="Cancel">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="font-semibold">{selectedLead.expectedAmount ? formatCurrency(selectedLead.expectedAmount) : 'N/A'}</p>
+                    <button
+                      onClick={() => {
+                        setEditExpectedAmountValue(String(selectedLead.expectedAmount || ''));
+                        setEditingExpectedAmount(true);
+                      }}
+                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      title="Edit expected amount"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <span className="text-gray-500 font-medium">Date of Entry:</span>
@@ -906,25 +1119,246 @@ export default function CustomerLoginPage() {
                 </p>
               </div>
               <div>
-                <span className="text-gray-500 font-medium">Assigned Banks:</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 font-medium">Assigned Banks:</span>
+                  <button
+                    onClick={() => setShowAssignBank(true)}
+                    className="text-xs text-blue-700 font-semibold bg-blue-100 px-2.5 py-1 rounded-lg hover:bg-blue-200 transition-all flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Assign
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {(selectedLead.bankDetails || selectedLead.assignedBanks || []).map((bank, i) => {
-                    const bankName = typeof bank === 'string' ? bank : bank.bankName;
-                    const branchName = typeof bank === 'object' ? bank.branchName : null;
-                    return (
-                      <div key={i} className="flex flex-col">
-                        <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-green-100">
-                          {bankName}
-                        </span>
-                        {branchName && (
-                          <span className="text-[10px] text-gray-500 mt-0.5 ml-1">Branch: {branchName}</span>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {(selectedLead.bankDetails || selectedLead.assignedBanks || []).length > 0 ? (
+                    (selectedLead.bankDetails || selectedLead.assignedBanks || []).map((bank, i) => {
+                      const bankName = typeof bank === 'string' ? bank : bank.bankName;
+                      const branchName = typeof bank === 'object' ? bank.branchName : null;
+                      return (
+                        <div key={i} className="flex items-center gap-1 group">
+                          <div className="flex flex-col">
+                            <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-green-100">
+                              {bankName}
+                            </span>
+                            {branchName && (
+                              <span className="text-[10px] text-gray-500 mt-0.5 ml-1">Branch: {branchName}</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Remove ${bankName} from assigned banks?`)) {
+                                handleRemoveBank(bankName);
+                              }
+                            }}
+                            className="p-0.5 text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all rounded-full hover:bg-red-50"
+                            title={`Remove ${bankName}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">No banks assigned yet</p>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* Co-applicants Section */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-500 font-medium text-sm">Co-applicants:</span>
+                <button
+                  onClick={handleStartEditCoapplicants}
+                  className="text-xs text-blue-700 font-semibold bg-blue-100 px-2.5 py-1 rounded-lg hover:bg-blue-200 transition-all flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Manage
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(selectedLead.coapplicants || []).length > 0 ? (
+                  (selectedLead.coapplicants || []).map((coapp, i) => (
+                    <span key={i} className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-indigo-100">
+                      {coapp.name}
+                      {coapp.incomeSource && (
+                        <span className="ml-1.5 text-indigo-400">({coapp.incomeSource})</span>
+                      )}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400 italic">No co-applicants added</p>
+                )}
+              </div>
+            </div>
+
+            {/* Assign Bank Inline Form */}
+            {showAssignBank && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <h4 className="text-sm font-bold text-blue-800 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+                  </svg>
+                  Assign a Bank
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Select Bank</label>
+                    <select
+                      value={newBankName}
+                      onChange={(e) => { setNewBankName(e.target.value); setCustomBankName(''); }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                    >
+                      <option value="">-- Select a bank --</option>
+                      <option value="HDFC">HDFC</option>
+                      <option value="ICICI">ICICI</option>
+                      <option value="SBI">SBI</option>
+                      <option value="Axis">Axis</option>
+                      <option value="Kotak Mahindra">Kotak Mahindra</option>
+                      <option value="Yes Bank">Yes Bank</option>
+                      <option value="PNB">PNB</option>
+                      <option value="Bank of Baroda">Bank of Baroda</option>
+                      <option value="Canara Bank">Canara Bank</option>
+                      <option value="Union Bank">Union Bank</option>
+                      <option value="Indian Bank">Indian Bank</option>
+                      <option value="IDBI">IDBI</option>
+                      <option value="Federal Bank">Federal Bank</option>
+                      <option value="South Indian Bank">South Indian Bank</option>
+                      <option value="DBS">DBS</option>
+                      <option value="RBL">RBL</option>
+                      <option value="AU Small Finance Bank">AU Small Finance Bank</option>
+                      <option value="IndusInd">IndusInd</option>
+                      <option value="Bajaj Finserv">Bajaj Finserv</option>
+                      <option value="Tata Capital">Tata Capital</option>
+                      <option value="LIC Housing Finance">LIC Housing Finance</option>
+                      <option value="Aditya Birla Capital">Aditya Birla Capital</option>
+                      <option value="other">Other (type below)</option>
+                    </select>
+                  </div>
+                  {newBankName === 'other' && (
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Custom Bank Name</label>
+                      <input
+                        type="text"
+                        value={customBankName}
+                        onChange={(e) => setCustomBankName(e.target.value)}
+                        placeholder="Enter bank name..."
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Branch Name (optional)</label>
+                    <input
+                      type="text"
+                      value={newBranchName}
+                      onChange={(e) => setNewBranchName(e.target.value)}
+                      placeholder="e.g. MG Road Branch"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAssignBank}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all"
+                    >
+                      Assign Bank
+                    </button>
+                    <button
+                      onClick={() => { setShowAssignBank(false); setNewBankName(''); setNewBranchName(''); setCustomBankName(''); }}
+                      className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg font-semibold text-sm hover:bg-gray-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Co-applicants Edit Modal */}
+            {editingCoapplicants && (
+              <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <h4 className="text-sm font-bold text-indigo-800 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Manage Co-applicants
+                </h4>
+                <div className="space-y-3">
+                  {editCoapplicants.length === 0 && (
+                    <p className="text-xs text-gray-500 italic">No co-applicants added yet.</p>
+                  )}
+                  {editCoapplicants.map((coapp, index) => (
+                    <div key={index} className="bg-white border border-indigo-100 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-indigo-700">Co-applicant #{index + 1}</span>
+                        <button
+                          onClick={() => handleRemoveCoapplicant(index)}
+                          className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Full Name</label>
+                          <input
+                            type="text"
+                            value={coapp.name}
+                            onChange={(e) => handleUpdateCoapplicant(index, 'name', e.target.value)}
+                            placeholder="Co-applicant name"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Income Source</label>
+                          <select
+                            value={coapp.incomeSource}
+                            onChange={(e) => handleUpdateCoapplicant(index, 'incomeSource', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                          >
+                            <option value="salaried">Salaried</option>
+                            <option value="nonsalaried">Non-Salaried / Business</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleAddCoapplicant}
+                    className="text-xs text-indigo-700 font-semibold bg-indigo-100 px-3 py-1.5 rounded-lg hover:bg-indigo-200 transition-all flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Add Co-applicant
+                  </button>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleSaveCoapplicants}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold text-sm hover:bg-indigo-700 transition-all"
+                    >
+                      Save Co-applicants
+                    </button>
+                    <button
+                      onClick={() => setEditingCoapplicants(false)}
+                      className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg font-semibold text-sm hover:bg-gray-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Auto-filled Application Form from Uploaded Docs */}

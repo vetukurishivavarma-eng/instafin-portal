@@ -290,12 +290,23 @@ export default function ChecklistsPage() {
 
     let items = getChecklistWithFallback(selection);
 
-    if (lead.hasCoapplicant) {
+    // Handle multiple co-applicants
+    const coapps = lead.coapplicants || [];
+    if (coapps.length > 0) {
+      let allItems = [...items];
+      coapps.forEach(coapp => {
+        if (coapp.name) {
+          const coAppItems = getCoapplicantChecklist(items, coapp.name);
+          allItems = [...allItems, ...coAppItems];
+        }
+      });
+      setChecklistItems(allItems);
+    } else if (lead.hasCoapplicant && lead.coapplicantName) {
       const coapplicantItems = getCoapplicantChecklist(items, lead.coapplicantName);
-      items = [...items, ...coapplicantItems];
+      setChecklistItems([...items, ...coapplicantItems]);
+    } else {
+      setChecklistItems(items);
     }
-
-    setChecklistItems(items);
   };
 
   // Helper to parse markdown bold text **bold**
