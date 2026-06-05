@@ -640,7 +640,8 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       assignedTo: 'assigned_to',
       department: 'department',
       priority: 'priority',
-      followUp: 'follow_up'
+      followUp: 'follow_up',
+      referralCode: 'referral_code'
     };
 
     Object.keys(fieldMappings).forEach(apiField => {

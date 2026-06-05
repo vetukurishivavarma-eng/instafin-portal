@@ -1363,7 +1363,7 @@ export default function LeadEntryPage() {
       {/* EDIT LEAD DETAILS MODAL */}
       {editingLead && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md overflow-y-auto flex justify-center items-start z-50 p-4 animate-fade-in" onClick={() => setEditingLead(null)}>
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl border border-gray-150 animate-slide-up my-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full relative shadow-2xl border border-gray-150 animate-slide-up my-auto" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <button onClick={() => setEditingLead(null)} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -1372,50 +1372,168 @@ export default function LeadEntryPage() {
             </button>
 
             <h2 className="text-xl font-extrabold text-gray-900 mb-2">Edit Customer Lead</h2>
-            <p className="text-gray-500 text-sm mb-5 font-semibold">Modify core customer loan details or update status category.</p>
+            <p className="text-gray-500 text-sm mb-5 font-semibold">Modify all customer loan details, co-applicant info, and status.</p>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {/* Admin sees all fields; executive sees only File Status + Bank Assignment */}
               {(effectiveRole === 'admin' && !isImpersonating) && (
                 <>
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer Full Name</label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
-                      value={editForm.customerName || ''}
-                      onChange={e => setEditForm({...editForm, customerName: e.target.value})}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer Full Name</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                        value={editForm.customerName || ''}
+                        onChange={e => setEditForm({...editForm, customerName: e.target.value.replace(/[0-9]/g, '')})}
+                        maxLength={50}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Mobile Number</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                        value={editForm.mobile || ''}
+                        onChange={e => setEditForm({...editForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Mobile Number</label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
-                      value={editForm.mobile || ''}
-                      onChange={e => setEditForm({...editForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Type</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                        value={editForm.loanType || ''}
+                        onChange={e => setEditForm({...editForm, loanType: e.target.value})}
+                      >
+                        <option value="">Select Loan Type</option>
+                        {loanTypes.map(lt => (
+                          <option key={lt.key} value={lt.key}>{lt.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Status Category</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                        value={editForm.loanStatus || ''}
+                        onChange={e => setEditForm({...editForm, loanStatus: e.target.value})}
+                      >
+                        <option value="">Select Loan Status</option>
+                        <option value="new">New Loan</option>
+                        <option value="takeover">Takeover</option>
+                        <option value="construction">Construction</option>
+                        <option value="topup_equity">Top-up/Equity</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Type</label>
-                    <select
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                      value={editForm.loanType || ''}
-                      onChange={e => setEditForm({...editForm, loanType: e.target.value})}
-                    >
-                      {loanTypes.map(lt => (
-                        <option key={lt.key} value={lt.key}>{lt.name}</option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Income Source</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                        value={editForm.incomeSource || ''}
+                        onChange={e => setEditForm({...editForm, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : (editForm.businessType || '')})}
+                      >
+                        <option value="">Select Income Source</option>
+                        <option value="salaried">Salaried</option>
+                        <option value="non_salaried">Non-Salaried</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Resident Type</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                        value={editForm.residentType || ''}
+                        onChange={e => setEditForm({...editForm, residentType: e.target.value})}
+                      >
+                        <option value="">Select Resident Type</option>
+                        <option value="indian_resident">Indian Resident</option>
+                        <option value="nri">NRI</option>
+                        <option value="merchant_navy">Merchant Navy</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expected Amount (INR)</label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
-                      value={editForm.expectedAmount || ''}
-                      onChange={e => setEditForm({...editForm, expectedAmount: e.target.value.replace(/\D/g, '')})}
-                    />
+                  {editForm.incomeSource !== 'salaried' && (
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Business Structure Type</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                        value={editForm.businessType || ''}
+                        onChange={e => setEditForm({...editForm, businessType: e.target.value})}
+                      >
+                        <option value="">Select Business Type</option>
+                        <option value="proprietor">Proprietor</option>
+                        <option value="partnership">Partnership</option>
+                        <option value="pvt_ltd">Pvt Ltd</option>
+                        <option value="llp">LLP</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expected Amount (INR)</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                        value={editForm.expectedAmount || ''}
+                        onChange={e => setEditForm({...editForm, expectedAmount: e.target.value.replace(/\D/g, '')})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Referral Code (Optional)</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold uppercase"
+                        value={editForm.referralCode || ''}
+                        onChange={e => setEditForm({...editForm, referralCode: e.target.value.toUpperCase()})}
+                        placeholder="DSA referral code"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Co-applicant Section */}
+                  <div className="border-t pt-4 mt-2">
+                    <label className="flex items-center gap-3 cursor-pointer select-none group mb-4">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded-lg border-gray-300 text-blue-700 focus:ring-blue-500 cursor-pointer group-hover:scale-105 transition-all"
+                        checked={editForm.hasCoapplicant || false}
+                        onChange={(e) => setEditForm({...editForm, hasCoapplicant: e.target.checked, coapplicantName: e.target.checked ? (editForm.coapplicantName || '') : ''})}
+                      />
+                      <span className="font-bold text-gray-700 text-base group-hover:text-blue-700 transition-colors">
+                        Co-applicant for this loan
+                      </span>
+                    </label>
+
+                    {editForm.hasCoapplicant && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-5 bg-gradient-to-r from-blue-50/60 to-indigo-50/40 rounded-2xl border border-blue-100/50 animate-fade-in-up">
+                        <div>
+                          <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Co-applicant Name</label>
+                          <input
+                            type="text"
+                            className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-semibold"
+                            value={editForm.coapplicantName || ''}
+                            onChange={e => setEditForm({...editForm, coapplicantName: e.target.value.replace(/[0-9]/g, '')})}
+                            placeholder="Co-applicant Full Name"
+                            maxLength={50}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Co-applicant Income Source</label>
+                          <select
+                            className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
+                            value={editForm.coapplicantIncomeSource || 'salaried'}
+                            onChange={e => setEditForm({...editForm, coapplicantIncomeSource: e.target.value})}
+                          >
+                            <option value="salaried">Salaried</option>
+                            <option value="non_salaried">Self employed</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -1585,7 +1703,15 @@ export default function LeadEntryPage() {
                       updateBody.customerName = editForm.customerName;
                       updateBody.mobile = editForm.mobile;
                       updateBody.loanType = editForm.loanType;
+                      updateBody.loanStatus = editForm.loanStatus;
+                      updateBody.incomeSource = editForm.incomeSource;
+                      updateBody.residentType = editForm.residentType;
+                      updateBody.businessType = editForm.businessType;
                       updateBody.expectedAmount = editForm.expectedAmount;
+                      updateBody.referralCode = editForm.referralCode;
+                      updateBody.hasCoapplicant = editForm.hasCoapplicant || false;
+                      updateBody.coapplicantName = editForm.coapplicantName || '';
+                      updateBody.coapplicantIncomeSource = editForm.coapplicantIncomeSource || 'salaried';
                     }
                     const res = await fetch(`${API_BASE}/leads/${editingLead.id}`, {
                       method: 'PUT',
@@ -1597,6 +1723,9 @@ export default function LeadEntryPage() {
                       setEditingLead(null);
                       setSuccess('Lead updated successfully!');
                       loadLeads();
+                    } else {
+                      const errData = await res.json();
+                      setError(errData.error || 'Failed to update lead');
                     }
                   } catch (err) {
                     setError('Failed to update lead');
