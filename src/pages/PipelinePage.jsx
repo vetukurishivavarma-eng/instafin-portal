@@ -315,9 +315,15 @@ export default function PipelinePage() {
                       <td className="p-3 sm:p-4 mobile-hide" data-label="Banks">
                         {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
-                            {lead.assignedBanks.map((bank, i) => (
+                            {lead.assignedBanks.map((bank, i) => {
+                              let bankName, branchName;
+                              const parts = bank.split(' - ');
+                              bankName = parts[0];
+                              branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                              return (
                               <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                                {bank}
+                                {bankName}
+                                {branchName && <span className="text-green-500">({branchName})</span>}
                                 {isAdmin && (
                                   <button
                                     onClick={async (e) => {
@@ -349,7 +355,7 @@ export default function PipelinePage() {
                                   </button>
                                 )}
                               </span>
-                            ))}
+                            );})}
                           </div>
                         ) : (
                           <span className="text-gray-400 text-xs">None</span>
@@ -472,9 +478,15 @@ export default function PipelinePage() {
                 
                 {editForm.assignedBanks && editForm.assignedBanks.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {editForm.assignedBanks.map((bank, i) => (
+                    {editForm.assignedBanks.map((bank, i) => {
+                      let bankName, branchName;
+                      const parts = bank.split(' - ');
+                      bankName = parts[0];
+                      branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                      return (
                       <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
-                        {bank}
+                        {bankName}
+                        {branchName && <span className="text-green-500">({branchName})</span>}
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -502,7 +514,7 @@ export default function PipelinePage() {
                           </svg>
                         </button>
                       </span>
-                    ))}
+                    );})}
                   </div>
                 )}
 

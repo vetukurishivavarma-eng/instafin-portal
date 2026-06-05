@@ -536,17 +536,22 @@ export default function CreditQueryPage() {
                 <span className="text-gray-500 font-medium">Assigned Banks:</span>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {(selectedLead.bankDetails || selectedLead.assignedBanks || []).map((bank, i) => {
-                    const bankName = typeof bank === 'string' ? bank : bank.bankName;
-                    const branchName = typeof bank === 'object' ? bank.branchName : null;
+                    let bankName, branchName;
+                    if (typeof bank === 'object') {
+                      bankName = bank.bankName;
+                      branchName = bank.branchName || null;
+                    } else {
+                      const parts = bank.split(' - ');
+                      bankName = parts[0];
+                      branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                    }
                     return (
-                      <div key={i} className="flex flex-col">
-                        <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-green-100">
-                          {bankName}
-                        </span>
+                      <span key={i} className="bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-green-100">
+                        {bankName}
                         {branchName && (
-                          <span className="text-[10px] text-gray-500 mt-0.5 ml-1">Branch: {branchName}</span>
+                          <span className="ml-1 text-green-500">({branchName})</span>
                         )}
-                      </div>
+                      </span>
                     );
                   })}
                 </div>

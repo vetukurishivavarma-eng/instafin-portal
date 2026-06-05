@@ -618,9 +618,15 @@ export default function LeadEntryPage() {
                     <td className="p-3 sm:p-4 mobile-hide" data-label="Banks">
                       {lead.assignedBanks && lead.assignedBanks.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {lead.assignedBanks.map((bank, i) => (
+                          {lead.assignedBanks.map((bank, i) => {
+                            let bankName, branchName;
+                            const parts = bank.split(' - ');
+                            bankName = parts[0];
+                            branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                            return (
                             <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                              {bank}
+                              {bankName}
+                              {branchName && <span className="text-green-500">({branchName})</span>}
                               {(effectiveRole === 'admin' || isImpersonating) && (
                                 <button
                                   onClick={async (e) => {
@@ -652,7 +658,7 @@ export default function LeadEntryPage() {
                                 </button>
                               )}
                             </span>
-                          ))}
+                          );})}
                         </div>
                       ) : (
                         <span className="text-gray-400 text-xs">None</span>
@@ -1223,15 +1229,15 @@ export default function LeadEntryPage() {
                 </h4>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {viewLead.bankDetails.map((bank, i) => (
-                    <div key={i} className="bg-white border border-blue-200 rounded-xl px-3 py-2 text-sm">
-                      <p className="font-bold text-gray-900">{bank.bankName}</p>
-                      {bank.branchName && <p className="text-xs text-gray-500">Branch: {bank.branchName}</p>}
-                      {bank.status && (
-                        <p className="text-xs">
-                          <StatusBadge status={bank.status} />
-                        </p>
+                    <span key={i} className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-xl px-3 py-2 text-sm">
+                      {bank.bankName}
+                      {bank.branchName && (
+                        <span className="text-blue-500 text-xs font-medium">({bank.branchName})</span>
                       )}
-                    </div>
+                      {bank.status && (
+                        <span className="ml-1"><StatusBadge status={bank.status} /></span>
+                      )}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -1560,12 +1566,21 @@ export default function LeadEntryPage() {
                 {/* Current assigned banks with Remove buttons */}
                 {editForm.assignedBanks && editForm.assignedBanks.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {editForm.assignedBanks.map((bank, i) => (
+                    {editForm.assignedBanks.map((bank, i) => {
+                      let bankName, branchName;
+                      // Try bankDetails first, then parse from string
+                      if (editForm.bankDetails?.[i]?.branchName) {
+                        bankName = editForm.bankDetails[i].bankName || bank;
+                        branchName = editForm.bankDetails[i].branchName;
+                      } else {
+                        const parts = bank.split(' - ');
+                        bankName = parts[0];
+                        branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                      }
+                      return (
                       <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
-                        {bank}
-                        {editForm.bankDetails?.[i]?.branchName && (
-                          <span className="text-[10px] text-green-500 ml-1">({editForm.bankDetails[i].branchName})</span>
-                        )}
+                        {bankName}
+                        {branchName && <span className="text-green-500 ml-1">({branchName})</span>}
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -1597,7 +1612,7 @@ export default function LeadEntryPage() {
                           </svg>
                         </button>
                       </span>
-                    ))}
+                    );})}
                   </div>
                 )}
 
