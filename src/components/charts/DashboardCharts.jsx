@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js';
-import { Doughnut, Bar, Line } from 'react-chartjs-2';
+import { Doughnut, Bar } from 'react-chartjs-2';
 import { useAuth } from '../../contexts/AuthContext';
 import API_BASE from '../../config/api';
 
@@ -21,9 +21,9 @@ const LOAN_TYPE_COLORS = [
 
 // Format currency in Indian format
 const formatCurrency = (amount) => {
-  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)}Cr`;
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
-  return `₹${amount.toLocaleString('en-IN')}`;
+  if (amount >= 10000000) return `\u20B9${(amount / 10000000).toFixed(2)}Cr`;
+  if (amount >= 100000) return `\u20B9${(amount / 100000).toFixed(1)}L`;
+  return `\u20B9${amount.toLocaleString('en-IN')}`;
 };
 
 // Short month label formatter
@@ -86,7 +86,7 @@ export default function DashboardCharts() {
           order: 1
         },
         {
-          label: 'Sanctioned (₹K)',
+          label: 'Sanctioned (\u20B9K)',
           data: sanctioned,
           backgroundColor: bgColors.map(c => c.replace(')', ', 0.15)').replace('rgb', 'rgba')),
           borderRadius: 6,
@@ -97,12 +97,12 @@ export default function DashboardCharts() {
     };
   }
 
-  // Build monthly trend line chart with amounts
+  // Build monthly trend combo chart: bars for leads, lines for amounts
   let trendChartData = null;
   if (monthlyTrend && monthlyTrend.length > 0) {
     const labels = monthlyTrend.map(d => formatMonth(d.month));
     const counts = monthlyTrend.map(d => d.count);
-    const expected = monthlyTrend.map(d => Math.round((d.totalExpected || 0) / 10000) / 10); // in lakhs (1dp)
+    const expected = monthlyTrend.map(d => Math.round((d.totalExpected || 0) / 10000) / 10);
     const sanctioned = monthlyTrend.map(d => Math.round((d.totalSanctioned || 0) / 10000) / 10);
     const disbursed = monthlyTrend.map(d => Math.round((d.totalDisbursed || 0) / 10000) / 10);
 
@@ -110,27 +110,23 @@ export default function DashboardCharts() {
       labels,
       datasets: [
         {
+          type: 'bar',
           label: 'Leads',
           data: counts,
-          borderColor: '#6366F1',
-          backgroundColor: 'rgba(99, 102, 241, 0.08)',
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#6366F1',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 7,
-          borderWidth: 3,
-          yAxisID: 'y'
+          backgroundColor: 'rgba(99, 102, 241, 0.85)',
+          borderRadius: 8,
+          borderSkipped: false,
+          yAxisID: 'y',
+          order: 2
         },
         {
-          label: 'Expected (₹L)',
+          type: 'line',
+          label: 'Expected (\u20B9L)',
           data: expected,
           borderColor: '#F59E0B',
           backgroundColor: 'rgba(245, 158, 11, 0.08)',
-          fill: false,
-          tension: 0.4,
+          fill: true,
+          tension: 0.3,
           borderDash: [6, 3],
           pointBackgroundColor: '#F59E0B',
           pointBorderColor: '#fff',
@@ -138,30 +134,34 @@ export default function DashboardCharts() {
           pointRadius: 3,
           pointHoverRadius: 6,
           borderWidth: 2,
-          yAxisID: 'y1'
+          yAxisID: 'y1',
+          order: 1
         },
         {
-          label: 'Sanctioned (₹L)',
+          type: 'line',
+          label: 'Sanctioned (\u20B9L)',
           data: sanctioned,
           borderColor: '#10B981',
           backgroundColor: 'rgba(16, 185, 129, 0.08)',
-          fill: false,
-          tension: 0.4,
+          fill: true,
+          tension: 0.3,
           pointBackgroundColor: '#10B981',
           pointBorderColor: '#fff',
           pointBorderWidth: 2,
           pointRadius: 3,
           pointHoverRadius: 6,
           borderWidth: 2,
-          yAxisID: 'y1'
+          yAxisID: 'y1',
+          order: 1
         },
         {
-          label: 'Disbursed (₹L)',
+          type: 'line',
+          label: 'Disbursed (\u20B9L)',
           data: disbursed,
           borderColor: '#8B5CF6',
           backgroundColor: 'rgba(139, 92, 246, 0.08)',
-          fill: false,
-          tension: 0.4,
+          fill: true,
+          tension: 0.3,
           borderDash: [3, 3],
           pointBackgroundColor: '#8B5CF6',
           pointBorderColor: '#fff',
@@ -169,7 +169,8 @@ export default function DashboardCharts() {
           pointRadius: 3,
           pointHoverRadius: 6,
           borderWidth: 2,
-          yAxisID: 'y1'
+          yAxisID: 'y1',
+          order: 1
         }
       ]
     };
@@ -188,7 +189,7 @@ export default function DashboardCharts() {
             if (!key) return '';
             const d = loanTypeData[key];
             if (context.dataset.label === 'Leads') return ` Leads: ${d.count || 0}`;
-            if (context.dataset.label === 'Sanctioned (₹K)') return ` Sanctioned: ${formatCurrency(d.totalSanctioned || 0)}`;
+            if (context.dataset.label === 'Sanctioned (\u20B9K)') return ` Sanctioned: ${formatCurrency(d.totalSanctioned || 0)}`;
             return '';
           },
           afterBody: function(context) {
@@ -208,7 +209,7 @@ export default function DashboardCharts() {
     }
   };
 
-  const lineOptions = {
+  const trendOptions = {
     maintainAspectRatio: false,
     responsive: true,
     interaction: { intersect: false, mode: 'index' },
@@ -218,7 +219,7 @@ export default function DashboardCharts() {
           label: function(context) {
             const val = context.parsed[context.dataset.yAxisID === 'y1' ? 'y1' : 'y'];
             const label = context.dataset.label || '';
-            if (label.includes('₹L')) return ` ${label}: ₹${val.toFixed(1)}L`;
+            if (label.includes('\u20B9L')) return ` ${label}: \u20B9${val.toFixed(1)}L`;
             return ` ${label}: ${val}`;
           },
           afterBody: function(context) {
@@ -259,8 +260,8 @@ export default function DashboardCharts() {
         position: 'right',
         beginAtZero: true,
         grid: { drawOnChartArea: false },
-        ticks: { font: { size: 10 }, callback: function(value) { return '₹' + value.toFixed(1) + 'L'; } },
-        title: { display: true, text: 'Amount (₹ Lakhs)', font: { size: 10 } }
+        ticks: { font: { size: 10 }, callback: function(value) { return '\u20B9' + value.toFixed(1) + 'L'; } },
+        title: { display: true, text: 'Amount (\u20B9 Lakhs)', font: { size: 10 } }
       }
     }
   };
@@ -291,12 +292,12 @@ export default function DashboardCharts() {
         </div>
       </div>
 
-      {/* Bottom row: Monthly Trend full width */}
+      {/* Bottom row: Monthly Trend full width - combo bar/line */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">📈 Monthly Lead Trend</h3>
+        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">\uD83D\uDCCA Monthly Leads Overview</h3>
         {trendChartData ? (
           <div className="h-48 sm:h-64">
-            <Line data={trendChartData} options={lineOptions} />
+            <Bar data={trendChartData} options={trendOptions} />
           </div>
         ) : (
           <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No trend data available</div>
