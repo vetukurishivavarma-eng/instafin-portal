@@ -389,7 +389,7 @@ export default function DashboardCharts() {
       {/* Bottom row: Monthly Trend full width - combo bar/line */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base sm:text-lg font-bold text-gray-800">\uD83D\uDCCA Monthly Leads Overview</h3>
+          <h3 className="text-base sm:text-lg font-bold text-gray-800">Monthly Leads Overview</h3>
           {trendChartData && <DownloadBtn onClick={handleDownloadTrend} />}
         </div>
         {trendChartData ? (
