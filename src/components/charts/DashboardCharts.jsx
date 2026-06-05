@@ -21,16 +21,20 @@ const LOAN_TYPE_COLORS = [
 
 // Format currency in Indian format
 const formatCurrency = (amount) => {
-  if (amount >= 10000000) return `\u20B9${(amount / 10000000).toFixed(2)}Cr`;
-  if (amount >= 100000) return `\u20B9${(amount / 100000).toFixed(1)}L`;
-  return `\u20B9${amount.toLocaleString('en-IN')}`;
+  const num = Number(amount) || 0;
+  if (num >= 10000000) return `\u20B9${(num / 10000000).toFixed(2)}Cr`;
+  if (num >= 100000) return `\u20B9${(num / 100000).toFixed(1)}L`;
+  return `\u20B9${num.toLocaleString('en-IN')}`;
 };
 
 // Short month label formatter
 const formatMonth = (monthKey) => {
+  if (!monthKey || !monthKey.includes('-')) return monthKey || '';
   const [y, m] = monthKey.split('-');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[parseInt(m, 10) - 1]} ${y.slice(2)}`;
+  const monthIndex = parseInt(m, 10) - 1;
+  if (monthIndex < 0 || monthIndex > 11 || !y) return monthKey;
+  return `${months[monthIndex]} ${y.slice(2)}`;
 };
 
 // Download chart as PNG
@@ -250,18 +254,20 @@ export default function DashboardCharts() {
         callbacks: {
           label: function(context) {
             const index = context.dataIndex;
-            const key = Object.keys(loanTypeData || {})[index];
+            const keys = Object.keys(loanTypeData || {});
+            const key = keys[index];
             if (!key) return '';
-            const d = loanTypeData[key];
+            const d = loanTypeData[key] || {};
             if (context.dataset.label === 'Leads') return ` Leads: ${d.count || 0}`;
             if (context.dataset.label === 'Sanctioned (\u20B9K)') return ` Sanctioned: ${formatCurrency(d.totalSanctioned || 0)}`;
             return '';
           },
           afterBody: function(context) {
             const index = context[0]?.dataIndex;
-            const key = Object.keys(loanTypeData || {})[index];
+            const keys = Object.keys(loanTypeData || {});
+            const key = keys[index];
             if (!key) return '';
-            const d = loanTypeData[key];
+            const d = loanTypeData[key] || {};
             return d.totalDisbursed > 0 ? [`Disbursed: ${formatCurrency(d.totalDisbursed)}`] : [];
           }
         }
@@ -282,10 +288,13 @@ export default function DashboardCharts() {
       tooltip: {
         callbacks: {
           label: function(context) {
-            const val = context.parsed[context.dataset.yAxisID === 'y1' ? 'y1' : 'y'];
+            const parsed = context.parsed || {};
+            const key = context.dataset.yAxisID === 'y1' ? 'y1' : 'y';
+            const val = parsed[key];
+            if (val === undefined || val === null) return '';
             const label = context.dataset.label || '';
-            if (label.includes('\u20B9L')) return ` ${label}: \u20B9${val.toFixed(1)}L`;
-            return ` ${label}: ${val}`;
+            if (label.includes('\u20B9L')) return ` ${label}: \u20B9${Number(val).toFixed(1)}L`;
+            return ` ${label}: ${Number(val)}`;
           },
           afterBody: function(context) {
             const index = context[0]?.dataIndex;
@@ -325,7 +334,7 @@ export default function DashboardCharts() {
         position: 'right',
         beginAtZero: true,
         grid: { drawOnChartArea: false },
-        ticks: { font: { size: 10 }, callback: function(value) { return '\u20B9' + value.toFixed(1) + 'L'; } },
+        ticks: { font: { size: 10 }, callback: function(value) { const n = Number(value); return Number.isFinite(n) ? '\u20B9' + n.toFixed(1) + 'L' : ''; } },
         title: { display: true, text: 'Amount (\u20B9 Lakhs)', font: { size: 10 } }
       }
     }
