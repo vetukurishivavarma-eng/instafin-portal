@@ -498,29 +498,30 @@ export default function CustomerLoginPage() {
       setError('Please select or enter a bank name');
       return;
     }
-    const currentBanks = selectedLead.bankDetails || selectedLead.assignedBanks || [];
-    // Check duplicate
-    const exists = currentBanks.some(b => {
-      const name = typeof b === 'string' ? b : b.bankName;
-      return name.toLowerCase() === bankName.toLowerCase();
-    });
-    if (exists) {
-      setError('This bank is already assigned');
-      return;
-    }
-    const newBanks = [...currentBanks, { bankName, branchName: newBranchName.trim() || undefined }];
     try {
-      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/assign-bank`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ assignedBanks: newBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) })
+        body: JSON.stringify({ bankName, branchName: newBranchName.trim() || null })
       });
       if (res.ok) {
         const data = await res.json();
-        setSelectedLead(prev => ({ ...prev, bankDetails: newBanks, assignedBanks: data.lead?.assignedBanks || newBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) }));
+        // Update local state from the response's lead object
+        const updatedBanks = data.lead?.assignedBanks || [];
+        const updatedStatus = data.lead?.status;
+        setSelectedLead(prev => ({
+          ...prev,
+          assignedBanks: updatedBanks,
+          status: updatedStatus || prev.status,
+          // Also build bankDetails for consistent UI display
+          bankDetails: updatedBanks.map(b => ({
+            bankName: b.split(' - ')[0],
+            branchName: b.includes(' - ') ? b.split(' - ').slice(1).join(' - ') : null
+          }))
+        }));
         setShowAssignBank(false);
         setNewBankName('');
         setNewBranchName('');
@@ -539,23 +540,28 @@ export default function CustomerLoginPage() {
   // ===== Remove Bank =====
   const handleRemoveBank = async (bankToRemove) => {
     if (!selectedLead) return;
-    const currentBanks = selectedLead.bankDetails || selectedLead.assignedBanks || [];
-    const updatedBanks = currentBanks.filter(b => {
-      const name = typeof b === 'string' ? b : b.bankName;
-      return name !== bankToRemove;
-    });
     try {
-      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/remove-bank`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ assignedBanks: updatedBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) })
+        body: JSON.stringify({ bankName: bankToRemove })
       });
       if (res.ok) {
         const data = await res.json();
-        setSelectedLead(prev => ({ ...prev, bankDetails: updatedBanks, assignedBanks: updatedBanks.map(b => typeof b === 'string' ? b : b.bankName + (b.branchName ? ` - ${b.branchName}` : '')) }));
+        const updatedBanks = data.lead?.assignedBanks || [];
+        const updatedStatus = data.lead?.status;
+        setSelectedLead(prev => ({
+          ...prev,
+          assignedBanks: updatedBanks,
+          status: updatedStatus || prev.status,
+          bankDetails: updatedBanks.map(b => ({
+            bankName: b.split(' - ')[0],
+            branchName: b.includes(' - ') ? b.split(' - ').slice(1).join(' - ') : null
+          }))
+        }));
         setSuccess(`${bankToRemove} removed from assigned banks.`);
         setTimeout(() => setSuccess(''), 3000);
       } else {
