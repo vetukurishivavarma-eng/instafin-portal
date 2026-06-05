@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useAuth } from '../../contexts/AuthContext';
@@ -33,8 +33,28 @@ const formatMonth = (monthKey) => {
   return `${months[parseInt(m, 10) - 1]} ${y.slice(2)}`;
 };
 
+// Download chart as PNG
+function downloadChart(chartRef, filename) {
+  const chart = chartRef.current;
+  if (!chart) return;
+  // Temporarily enable retina-quality export via devicePixelRatio
+  const origRatio = chart.options.devicePixelRatio;
+  chart.options.devicePixelRatio = 2;
+  chart.update();
+  const link = document.createElement('a');
+  link.download = `${filename}.png`;
+  link.href = chart.toBase64Image('image/png', 1);
+  link.click();
+  // Restore original resolution
+  chart.options.devicePixelRatio = origRatio || 1;
+  chart.update();
+}
+
 export default function DashboardCharts() {
   const { accessToken } = useAuth();
+  const statusChartRef = useRef(null);
+  const loanTypeChartRef = useRef(null);
+  const trendChartRef = useRef(null);
   const [statusData, setStatusData] = useState(null);
   const [loanTypeData, setLoanTypeData] = useState(null);
   const [monthlyTrend, setMonthlyTrend] = useState(null);
@@ -54,6 +74,18 @@ export default function DashboardCharts() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [accessToken]);
+
+  const handleDownloadStatus = useCallback(() => {
+    downloadChart(statusChartRef, 'lead-status-distribution');
+  }, []);
+
+  const handleDownloadLoanType = useCallback(() => {
+    downloadChart(loanTypeChartRef, 'leads-by-loan-type');
+  }, []);
+
+  const handleDownloadTrend = useCallback(() => {
+    downloadChart(trendChartRef, 'monthly-leads-trend');
+  }, []);
 
   if (loading) return <div className="text-center py-8">Loading charts...</div>;
 
@@ -266,25 +298,45 @@ export default function DashboardCharts() {
     }
   };
 
+  // Shared download button styles
+  const DownloadBtn = ({ onClick }) => (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-blue-700 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all duration-200"
+      title="Download as PNG"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      Export
+    </button>
+  );
+
   return (
     <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
       {/* Top row: 2 charts side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-          <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Lead Status Distribution</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base sm:text-lg font-bold text-gray-800">Lead Status Distribution</h3>
+            {statusChartData && <DownloadBtn onClick={handleDownloadStatus} />}
+          </div>
           {statusChartData ? (
             <div className="h-48 sm:h-64">
-              <Doughnut data={statusChartData} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 10 } } } } }} />
+              <Doughnut ref={statusChartRef} data={statusChartData} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 10 } } } } }} />
             </div>
           ) : (
             <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No data</div>
           )}
         </div>
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-          <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">Leads by Loan Type</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base sm:text-lg font-bold text-gray-800">Leads by Loan Type</h3>
+            {loanTypeChartData && <DownloadBtn onClick={handleDownloadLoanType} />}
+          </div>
           {loanTypeChartData ? (
             <div className="h-48 sm:h-64">
-              <Bar data={loanTypeChartData} options={barOptions} />
+              <Bar ref={loanTypeChartRef} data={loanTypeChartData} options={barOptions} />
             </div>
           ) : (
             <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No loan type data available</div>
@@ -294,10 +346,13 @@ export default function DashboardCharts() {
 
       {/* Bottom row: Monthly Trend full width - combo bar/line */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-        <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-4">\uD83D\uDCCA Monthly Leads Overview</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base sm:text-lg font-bold text-gray-800">\uD83D\uDCCA Monthly Leads Overview</h3>
+          {trendChartData && <DownloadBtn onClick={handleDownloadTrend} />}
+        </div>
         {trendChartData ? (
           <div className="h-48 sm:h-64">
-            <Bar data={trendChartData} options={trendOptions} />
+            <Bar ref={trendChartRef} data={trendChartData} options={trendOptions} />
           </div>
         ) : (
           <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No trend data available</div>
