@@ -44,6 +44,7 @@ export default function ChecklistsPage() {
   const [eligCoapplicantGross, setEligCoapplicantGross] = useState('');
   const [showEligModal, setShowEligModal] = useState(false);
   const [eligDownloading, setEligDownloading] = useState(false);
+  const [searchSummary, setSearchSummary] = useState('');
 
   // Fetch leads
   useEffect(() => {
@@ -298,19 +299,26 @@ export default function ChecklistsPage() {
   };
 
   // Helper to parse markdown bold text **bold**
-  const parseBoldText = (text) => {
+  const parseBoldText = (text, searchTerm) => {
     if (typeof text !== 'string') return text;
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>;
       }
-      return part;
+      if (!searchTerm) return part;
+      const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const subParts = part.split(new RegExp(`(${escaped})`, 'gi'));
+      return subParts.map((sub, j) =>
+        sub.toLowerCase() === searchTerm.toLowerCase()
+          ? <mark key={`${i}-${j}`} className="bg-yellow-300 text-gray-900 rounded px-0.5">{sub}</mark>
+          : sub
+      );
     });
   };
 
   // Helper to render markdown text beautifully with basic HTML styles
-  const renderSummary = (text) => {
+  const renderSummary = (text, searchTerm = '') => {
     if (!text) return null;
     return text.split('\n').map((line, index) => {
       if (line.startsWith('### ')) {
@@ -326,15 +334,20 @@ export default function ChecklistsPage() {
         const cleanLine = line.replace(/^[-*]\s+/, '');
         return (
           <li key={index} className="ml-6 list-disc text-gray-700 my-1">
-            {parseBoldText(cleanLine)}
+            {parseBoldText(cleanLine, searchTerm)}
           </li>
         );
       }
       if (line.trim() === '') {
         return <div key={index} className="h-2" />;
       }
-      return <p key={index} className="text-gray-700 my-1 leading-relaxed">{parseBoldText(line)}</p>;
+      return <p key={index} className="text-gray-700 my-1 leading-relaxed">{parseBoldText(line, searchTerm)}</p>;
     });
+  };
+
+  const stripJsonBlock = (text) => {
+    if (!text) return text;
+    return text.replace(/```json[\s\S]*?```/g, '').trim();
   };
 
   // Fetch checklist statuses from the new API
@@ -1222,7 +1235,38 @@ export default function ChecklistsPage() {
                         </div>
                       )}
 
-                      {renderSummary(summary)}
+                      {/* Search bar for analysis */}
+                      <div className="relative mb-3">
+                        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search in analysis..."
+                            className="flex-1 text-sm text-gray-700 outline-none bg-transparent"
+                            value={searchSummary}
+                            onChange={(e) => setSearchSummary(e.target.value)}
+                          />
+                          {searchSummary && (
+                            <>
+                              <span className="text-xs text-gray-400">
+                                {(stripJsonBlock(summary || '').match(new RegExp(searchSummary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length} match{((stripJsonBlock(summary || '').match(new RegExp(searchSummary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length) !== 1 ? 'es' : ''}
+                              </span>
+                              <button
+                                onClick={() => setSearchSummary('')}
+                                className="p-0.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {renderSummary(stripJsonBlock(summary), searchSummary)}
 
                       <div className="mt-4 pt-4 border-t border-indigo-100">
                         <button
