@@ -805,11 +805,20 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
     const leadId = req.params.id;
 
     // Get current lead — also fetch assigned_to and assigned_banks for status derivation on restore
-    const { data: lead } = await supabase
+    const { data: lead, error: fetchError } = await supabase
       .from('leads')
       .select('is_active, customer_name, assigned_to')
       .eq('id', leadId)
       .single();
+
+    if (fetchError) {
+      // If the is_active column doesn't exist, log and return helpful error
+      if (fetchError.message && (fetchError.message.includes('is_active') || fetchError.message.includes('column') || fetchError.message.includes('does not exist'))) {
+        console.error('Toggle active error - is_active column may not exist. Run migration 004_add_is_active_column.sql');
+        return res.status(500).json({ error: 'Database setup incomplete: is_active column missing. Please run database migrations.' });
+      }
+      throw fetchError;
+    }
 
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
@@ -821,10 +830,14 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
     let newStatus;
     if (newActive) {
       // Restoring — derive status from assigned banks, or fallback to Assigned/New
-      const { data: banks } = await supabase
+      const { data: banks, error: banksError } = await supabase
         .from('lead_banks')
         .select('status')
         .eq('lead_id', leadId);
+
+      if (banksError) {
+        console.warn('Could not fetch lead_banks for status derivation:', banksError.message);
+      }
 
       if (banks && banks.length > 0) {
         const bankStatuses = banks.map(b => b.status);
@@ -838,14 +851,21 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
       newStatus = 'Inactive';
     }
 
-    const { data: updatedLead, error } = await supabase
+    const { data: updatedLead, error: updateError } = await supabase
       .from('leads')
       .update({ is_active: newActive, status: newStatus })
       .eq('id', leadId)
       .select()
       .single();
 
-    if (error) throw error;
+    if (updateError) {
+      // If the error is about a CHECK constraint on status, inform the user
+      if (updateError.message && (updateError.message.includes('check') || updateError.message.includes('constraint') || updateError.message.includes('violates'))) {
+        console.error('Status constraint violation - status value may not be allowed:', updateError.message);
+        return res.status(500).json({ error: `Lead status '${newStatus}' is not allowed by database constraint. Please run migration 007_add_status_constraint.sql.` });
+      }
+      throw updateError;
+    }
 
     // Record audit log
     const adminCtx = await getAdminContext(req);
@@ -870,14 +890,14 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
     });
   } catch (error) {
     console.error('Toggle active error:', error);
-    res.status(500).json({ error: 'Failed to toggle lead status' });
+    res.status(500).json({ error: error.message || 'Failed to toggle lead status' });
   }
 });
 
-// GET dashboard stats
+// GET dashboard stats — derives statuses from lead_banks for accurate counts
 router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
-    let query = supabase.from('leads').select('status, is_active');
+    let query = supabase.from('leads').select('id, status, is_active, assigned_to, is_closed');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -899,7 +919,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     if (error && error.message &&
         (error.message.includes('is_active') || error.message.includes('column') || error.message.includes('does not exist'))) {
       console.warn('is_active column not found in stats, falling back:', error.message);
-      query = supabase.from('leads').select('status');
+      query = supabase.from('leads').select('id, status, assigned_to, is_closed');
       if (req.user.role !== 'admin') {
         const { data: userData } = await supabase
           .from('users')
@@ -933,19 +953,68 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     const allLeads = leads || [];
     const inactiveCount = allLeads.filter(l => l.is_active === false).length;
 
-    const stats = {
+    // Fetch lead_banks for all returned leads to derive accurate statuses
+    const leadIds = allLeads.map(l => l.id);
+    let banksByLeadId = {};
+    if (leadIds.length > 0) {
+      const { data: allBanks } = await supabase
+        .from('lead_banks')
+        .select('lead_id, status')
+        .in('lead_id', leadIds);
+
+      if (allBanks) {
+        for (const bank of allBanks) {
+          if (!banksByLeadId[bank.lead_id]) banksByLeadId[bank.lead_id] = [];
+          banksByLeadId[bank.lead_id].push(bank);
+        }
+      }
+    }
+
+    // Count leads by derived status (matching the logic in GET /api/leads)
+    let stats = {
       totalLeads: allLeads.length,
       activeLeads: allLeads.length - inactiveCount,
       inactiveLeads: inactiveCount,
-      newLeads: allLeads.filter(l => l.status === 'New').length,
-      assigned: allLeads.filter(l => l.status === 'Assigned').length,
-      processing: allLeads.filter(l => l.status === 'Processing').length,
-      sanctioned: allLeads.filter(l => l.status === 'Sanctioned').length,
-      partiallyDisbursed: allLeads.filter(l => l.status === 'Partially Disbursed').length,
-      disbursed: allLeads.filter(l => l.status === 'Disbursed').length,
-      rejected: allLeads.filter(l => l.status === 'Rejected').length,
-      closed: allLeads.filter(l => l.is_closed === true || l.status === 'Closed').length,
+      newLeads: 0,
+      assigned: 0,
+      processing: 0,
+      sanctioned: 0,
+      partiallyDisbursed: 0,
+      disbursed: 0,
+      rejected: 0,
+      closed: 0,
     };
+
+    for (const lead of allLeads) {
+      const banks = banksByLeadId[lead.id] || [];
+      let derivedStatus = lead.status;
+
+      // Derive status from lead_banks if records exist and lead is assigned
+      if (banks.length > 0 && lead.assigned_to) {
+        const bankStatuses = banks.map(b => b.status);
+        const derived = deriveLeadStatus(bankStatuses);
+        if (derived) derivedStatus = derived;
+      }
+
+      // Closed takes precedence over derived status
+      if (lead.is_closed === true || derivedStatus === 'Closed') {
+        stats.closed++;
+      } else if (derivedStatus === 'New') {
+        stats.newLeads++;
+      } else if (derivedStatus === 'Assigned') {
+        stats.assigned++;
+      } else if (derivedStatus === 'Processing') {
+        stats.processing++;
+      } else if (derivedStatus === 'Sanctioned') {
+        stats.sanctioned++;
+      } else if (derivedStatus === 'Partially Disbursed') {
+        stats.partiallyDisbursed++;
+      } else if (derivedStatus === 'Disbursed') {
+        stats.disbursed++;
+      } else if (derivedStatus === 'Rejected') {
+        stats.rejected++;
+      }
+    }
 
     res.json(stats);
   } catch (error) {
@@ -954,10 +1023,10 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
   }
 });
 
-// Status distribution for charts
+// Status distribution for charts — uses derived statuses from lead_banks
 router.get('/stats/status-distribution', authenticate, async (req, res) => {
   try {
-    let query = supabase.from('leads').select('status');
+    let query = supabase.from('leads').select('id, status, assigned_to');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -977,15 +1046,48 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
 
     if (error) throw error;
 
+    // Fetch lead_banks to derive accurate statuses
+    const leadIds = (leads || []).map(l => l.id);
+    let banksByLeadId = {};
+    if (leadIds.length > 0) {
+      const { data: allBanks } = await supabase
+        .from('lead_banks')
+        .select('lead_id, status')
+        .in('lead_id', leadIds);
+
+      if (allBanks) {
+        for (const bank of allBanks) {
+          if (!banksByLeadId[bank.lead_id]) banksByLeadId[bank.lead_id] = [];
+          banksByLeadId[bank.lead_id].push(bank);
+        }
+      }
+    }
+
+    // Count by derived status
     const distribution = {
-      'New': leads.filter(l => l.status === 'New').length,
-      'Assigned': leads.filter(l => l.status === 'Assigned').length,
-      'Processing': leads.filter(l => l.status === 'Processing').length,
-      'Sanctioned': leads.filter(l => l.status === 'Sanctioned').length,
-      'Partially Disbursed': leads.filter(l => l.status === 'Partially Disbursed').length,
-      'Disbursed': leads.filter(l => l.status === 'Disbursed').length,
-      'Rejected': leads.filter(l => l.status === 'Rejected').length
+      'New': 0,
+      'Assigned': 0,
+      'Processing': 0,
+      'Sanctioned': 0,
+      'Partially Disbursed': 0,
+      'Disbursed': 0,
+      'Rejected': 0
     };
+
+    for (const lead of leads || []) {
+      const banks = banksByLeadId[lead.id] || [];
+      let status = lead.status;
+
+      if (banks.length > 0 && lead.assigned_to) {
+        const bankStatuses = banks.map(b => b.status);
+        const derived = deriveLeadStatus(bankStatuses);
+        if (derived) status = derived;
+      }
+
+      if (distribution[status] !== undefined) {
+        distribution[status]++;
+      }
+    }
 
     res.json(distribution);
   } catch (error) {

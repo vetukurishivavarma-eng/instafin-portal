@@ -23,6 +23,21 @@ export default function SanctionPage() {
     fetchLeads();
   }, [accessToken]);
 
+  // Check if a lead has any unresolved credit queries
+  const hasUnresolvedQueries = async (leadId) => {
+    try {
+      const res = await fetch(`${API_BASE}/credit-queries/lead/${leadId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      const queries = data.data || [];
+      if (queries.length === 0) return false; // No queries = no blocking
+      return queries.some(q => q.status !== 'resolved' && q.status !== 'completed');
+    } catch (err) {
+      return false; // If we can't fetch queries, don't block
+    }
+  };
+
   const fetchLeads = async () => {
     try {
       const res = await fetch(`${API_BASE}/leads`, {
@@ -36,7 +51,21 @@ export default function SanctionPage() {
         ? allLeads.filter(l => l.assignedTo === executiveName)
         : allLeads;
       // Show leads that have at least one processing bank AND at least one assigned bank
-      setLeads(filteredLeads.filter(l => l.status === 'Processing' && l.assignedBanks?.length > 0));
+      const eligibleLeads = filteredLeads.filter(l => l.status === 'Processing' && l.assignedBanks?.length > 0);
+      
+      // Check credit queries for each lead - only show leads where ALL queries are resolved
+      const queryChecks = await Promise.all(
+        eligibleLeads.map(async (lead) => ({
+          lead,
+          blocked: await hasUnresolvedQueries(lead.id)
+        }))
+      );
+      
+      const resolvedLeads = queryChecks
+        .filter(item => !item.blocked)
+        .map(item => item.lead);
+      
+      setLeads(resolvedLeads);
     } catch (err) {
       setError('Failed to load leads');
     }

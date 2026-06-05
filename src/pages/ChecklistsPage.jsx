@@ -64,7 +64,9 @@ export default function ChecklistsPage() {
       const filtered = executiveName
         ? allLeads.filter(l => l.assignedTo === executiveName)
         : allLeads;
-      setLeads(filtered);
+      // Only show active leads
+      const activeLeads = filtered.filter(l => l.isActive !== false);
+      setLeads(activeLeads);
       setLoading(false);
     })
     .catch(err => {

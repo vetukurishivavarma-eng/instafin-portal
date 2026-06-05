@@ -18,6 +18,8 @@ export default function CreditQueryPage() {
     query_type: 'initial',
     remarks: ''
   });
+  const [resolvingQuery, setResolvingQuery] = useState(null); // query id being resolved
+  const [resolutionText, setResolutionText] = useState('');
 
   useEffect(() => {
     if (!accessToken) return;
@@ -160,17 +162,63 @@ export default function CreditQueryPage() {
     }
   };
 
+  const handleResolveQuery = async (queryId) => {
+    if (!resolutionText.trim()) {
+      setError('Please enter a resolution heading/description');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/credit-queries/${queryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          status: 'resolved',
+          response_remarks: resolutionText.trim(),
+          response_date: new Date().toISOString().split('T')[0]
+        })
+      });
+
+      if (res.ok) {
+        setSuccess('Credit query resolved successfully!');
+        setCreditQueries(prev => prev.map(q => 
+          q.id === queryId ? { ...q, status: 'resolved', response_remarks: resolutionText.trim(), response_date: new Date().toISOString().split('T')[0] } : q
+        ));
+        setResolvingQuery(null);
+        setResolutionText('');
+      } else {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to resolve query');
+      }
+    } catch (err) {
+      setError('Failed to resolve query');
+    }
+  };
+
+  const toggleResolveForm = (queryId) => {
+    if (resolvingQuery === queryId) {
+      setResolvingQuery(null);
+      setResolutionText('');
+    } else {
+      setResolvingQuery(queryId);
+      setResolutionText('');
+    }
+  };
+
   const getQueryStatusBadge = (status) => {
     const colors = {
       'pending': 'bg-yellow-100 text-yellow-700 border-yellow-200',
       'sent': 'bg-blue-100 text-blue-700 border-blue-200',
       'received': 'bg-green-100 text-green-700 border-green-200',
       'completed': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      'resolved': 'bg-green-600 text-white border-green-700',
       'rejected': 'bg-red-100 text-red-700 border-red-200'
     };
     return (
       <span className={`${colors[status] || 'bg-gray-100 text-gray-600'} px-2 py-0.5 rounded-full text-xs font-semibold border`}>
-        {status?.charAt(0).toUpperCase() + status?.slice(1) || 'Pending'}
+        {status === 'resolved' ? 'Resolved' : status?.charAt(0).toUpperCase() + status?.slice(1) || 'Pending'}
       </span>
     );
   };
@@ -416,6 +464,21 @@ export default function CreditQueryPage() {
                                   </svg>
                                 </button>
                               )}
+                              {query.status !== 'resolved' && (
+                                <button
+                                  onClick={() => toggleResolveForm(query.id)}
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    resolvingQuery === query.id
+                                      ? 'bg-gray-200 text-gray-600'
+                                      : 'text-green-600 hover:bg-green-50'
+                                  }`}
+                                  title={resolvingQuery === query.id ? 'Cancel' : 'Resolve Query'}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleDeleteQuery(query.id)}
                                 className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
@@ -431,6 +494,53 @@ export default function CreditQueryPage() {
 
                         {query.remarks && (
                           <p className="text-sm text-gray-600 ml-11 mb-2">{query.remarks}</p>
+                        )}
+
+                        {/* Resolution Form */}
+                        {resolvingQuery === query.id && (
+                          <div className="ml-11 mb-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                            <label className="block text-xs font-bold text-green-800 mb-2">
+                              Resolution Details
+                            </label>
+                            <textarea
+                              value={resolutionText}
+                              onChange={(e) => setResolutionText(e.target.value)}
+                              placeholder="Enter resolution heading and description..."
+                              rows={3}
+                              className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-none mb-2"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleResolveQuery(query.id)}
+                                disabled={!resolutionText.trim()}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Resolve Query
+                              </button>
+                              <button
+                                onClick={() => { setResolvingQuery(null); setResolutionText(''); }}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-300"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show resolution text on resolved queries */}
+                        {query.status === 'resolved' && query.response_remarks && (
+                          <div className="ml-11 mb-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span className="text-xs font-bold text-green-800 uppercase tracking-wider">Resolution</span>
+                            </div>
+                            <p className="text-sm text-green-900 whitespace-pre-wrap">{query.response_remarks}</p>
+                          </div>
                         )}
 
                         <div className="flex items-center gap-4 ml-11 text-xs text-gray-500">
