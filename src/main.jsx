@@ -11,7 +11,7 @@ import ContactPage from './pages/ContactPage'
 
 // Admin pages
 import DashboardPage from './pages/DashboardPage'
-import CustomerTrackingPage from './pages/CustomerTrackingPage'
+import CustomerLoginPage from './pages/CustomerLoginPage'
 import DownloadFormsPage from './pages/DownloadFormsPage'
 import SanctionPage from './pages/SanctionPage'
 import DisbursementPage from './pages/DisbursementPage'
@@ -20,7 +20,7 @@ import ExecutivePage from './pages/ExecutivePage'
 
 // Executive pages
 import LeadEntryPage from './pages/LeadEntryPage'
-import CustomerListPage from './pages/CustomerListPage'
+
 import ChecklistsPage from './pages/ChecklistsPage'
 import CreditQueryPage from './pages/CreditQueryPage'
 import EligibilityPage from './pages/EligibilityPage'
@@ -99,9 +99,9 @@ function AppRoutes() {
             <LeadEntryPage />
           </ProtectedRoute>
         } />
-        <Route path="/admin/customer-tracking" element={
+        <Route path="/admin/customer-login" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <CustomerTrackingPage />
+            <CustomerLoginPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/download-forms" element={
@@ -124,6 +124,9 @@ function AppRoutes() {
             <RevenuePage />
           </ProtectedRoute>
         } />
+        {/* Legacy redirect - old customer-tracking path */}
+        <Route path="/admin/customer-tracking" element={<Navigate to="/admin/customer-login" replace />} />
+
         <Route path="/admin/credit-query" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <CreditQueryPage />
@@ -147,9 +150,9 @@ function AppRoutes() {
           </ProtectedRoute>
         } />
 
-        <Route path="/executive/customers" element={
+        <Route path="/executive/customer-login" element={
           <ProtectedRoute allowedRoles={['executive']}>
-            <CustomerListPage />
+            <CustomerLoginPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/checklists" element={
@@ -172,6 +175,9 @@ function AppRoutes() {
             <DisbursementPage />
           </ProtectedRoute>
         } />
+
+        {/* Legacy redirects */}
+        <Route path="/executive/customers" element={<Navigate to="/executive/customer-login" replace />} />
 
         {/* Legacy compatibility - keep old paths working with role-based redirect */}
         <Route path="/eligibility" element={<RoleRedirect />} />
