@@ -1095,10 +1095,10 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
   }
 });
 
-// Loan type distribution for charts
+// Loan type distribution for charts — returns count + aggregated amounts per type
 router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
   try {
-    let query = supabase.from('leads').select('loan_type');
+    let query = supabase.from('leads').select('loan_type, sanctioned_amount, disbursed_amount');
 
     if (req.user.role !== 'admin') {
       const { data: userData } = await supabase
@@ -1118,13 +1118,18 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
 
     if (error) throw error;
 
-    const loanTypes = {};
-    leads.forEach(lead => {
+    const loanTypeMap = {};
+    (leads || []).forEach(lead => {
       const type = lead.loan_type || 'Unknown';
-      loanTypes[type] = (loanTypes[type] || 0) + 1;
+      if (!loanTypeMap[type]) {
+        loanTypeMap[type] = { count: 0, totalSanctioned: 0, totalDisbursed: 0 };
+      }
+      loanTypeMap[type].count++;
+      loanTypeMap[type].totalSanctioned += Number(lead.sanctioned_amount) || 0;
+      loanTypeMap[type].totalDisbursed += Number(lead.disbursed_amount) || 0;
     });
 
-    res.json(loanTypes);
+    res.json(loanTypeMap);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch loan types' });
   }
