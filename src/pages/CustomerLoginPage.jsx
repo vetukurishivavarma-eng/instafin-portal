@@ -1134,18 +1134,25 @@ export default function CustomerLoginPage() {
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {(selectedLead.bankDetails || selectedLead.assignedBanks || []).length > 0 ? (
                     (selectedLead.bankDetails || selectedLead.assignedBanks || []).map((bank, i) => {
-                      const bankName = typeof bank === 'string' ? bank : bank.bankName;
-                      const branchName = typeof bank === 'object' ? bank.branchName : null;
+                      // Parse bank name and branch from either object or string format
+                      let bankName, branchName;
+                      if (typeof bank === 'object') {
+                        bankName = bank.bankName;
+                        branchName = bank.branchName || null;
+                      } else {
+                        // String format: "BankName - BranchName"
+                        const parts = bank.split(' - ');
+                        bankName = parts[0];
+                        branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                      }
                       return (
                         <div key={i} className="flex items-center gap-1 group">
-                          <div className="flex flex-col">
-                            <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-green-100">
-                              {bankName}
-                            </span>
+                          <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-green-100">
+                            {bankName}
                             {branchName && (
-                              <span className="text-[10px] text-gray-500 mt-0.5 ml-1">Branch: {branchName}</span>
+                              <span className="ml-1 text-green-500">({branchName})</span>
                             )}
-                          </div>
+                          </span>
                           <button
                             onClick={() => {
                               if (window.confirm(`Remove ${bankName} from assigned banks?`)) {
@@ -1461,7 +1468,17 @@ export default function CustomerLoginPage() {
             <div className="flex flex-wrap gap-3">
               {(selectedLead.bankDetails || selectedLead.assignedBanks || []).length > 0 ? (
                 (selectedLead.bankDetails || selectedLead.assignedBanks || []).map((bank, i) => {
-                  const bankName = typeof bank === 'string' ? bank : bank.bankName;
+                  // Parse bank name and branch from either object or string format
+                  let bankName, branchName;
+                  if (typeof bank === 'object') {
+                    bankName = bank.bankName;
+                    branchName = bank.branchName || null;
+                  } else {
+                    const parts = bank.split(' - ');
+                    bankName = parts[0];
+                    branchName = parts.length > 1 ? parts.slice(1).join(' - ') : null;
+                  }
+                  const label = branchName ? `${bankName} (${branchName})` : bankName;
                   return (
                     <button
                       key={i}
@@ -1484,7 +1501,7 @@ export default function CustomerLoginPage() {
                             <polyline points="7 10 12 15 17 10" />
                             <line x1="12" y1="15" x2="12" y2="3" />
                           </svg>
-                          {bankName} Form
+                          {label} Form
                         </>
                       )}
                     </button>
