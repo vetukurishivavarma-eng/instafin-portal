@@ -61,12 +61,12 @@ export default function Layout({ children }) {
                   <Link to="/admin/dashboard" className={getLinkClass('/admin/dashboard')}>Dashboard</Link>
                   <Link to="/admin/leads" className={getLinkClass('/admin/leads')}>Leads</Link>
                   <Link to="/admin/customer-login" className={getLinkClass('/admin/customer-login')}>Customer Login</Link>
-                  <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
                   <Link to="/admin/credit-query" className={getLinkClass('/admin/credit-query')}>Credit Query</Link>
                   <Link to="/admin/sanction" className={getLinkClass('/admin/sanction')}>Sanction</Link>
                   <Link to="/admin/disburse" className={getLinkClass('/admin/disburse')}>Disburse</Link>
                   <Link to="/admin/revenue" className={getLinkClass('/admin/revenue')}>Revenue</Link>
                   <Link to="/admin/executives" className={getLinkClass('/admin/executives')}>Executives</Link>
+                  <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
                 </>
               )}
 
@@ -99,12 +99,12 @@ export default function Layout({ children }) {
                   <Link to="/admin/dashboard" className={getMobileLinkClass('/admin/dashboard')} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
                   <Link to="/admin/leads" className={getMobileLinkClass('/admin/leads')} onClick={() => setMobileMenuOpen(false)}>Leads</Link>
                   <Link to="/admin/customer-login" className={getMobileLinkClass('/admin/customer-login')} onClick={() => setMobileMenuOpen(false)}>Customer Login</Link>
-                  <Link to="/admin/download-forms" className={getMobileLinkClass('/admin/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
                   <Link to="/admin/credit-query" className={getMobileLinkClass('/admin/credit-query')} onClick={() => setMobileMenuOpen(false)}>Credit Query</Link>
                   <Link to="/admin/sanction" className={getMobileLinkClass('/admin/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
                   <Link to="/admin/disburse" className={getMobileLinkClass('/admin/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
                   <Link to="/admin/revenue" className={getMobileLinkClass('/admin/revenue')} onClick={() => setMobileMenuOpen(false)}>Revenue</Link>
                   <Link to="/admin/executives" className={getMobileLinkClass('/admin/executives')} onClick={() => setMobileMenuOpen(false)}>Executives</Link>
+                  <Link to="/admin/download-forms" className={getMobileLinkClass('/admin/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
                 </>
               )}
 

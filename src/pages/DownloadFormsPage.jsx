@@ -119,6 +119,16 @@ export default function DownloadFormsPage() {
   const [formsError, setFormsError] = useState('');
   const [downloadingId, setDownloadingId] = useState(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  // ──────────────────────────────────────────────
+  // LOAN TYPES STATE (moved from Executives page)
+  // ──────────────────────────────────────────────
+  const [loanTypes, setLoanTypes] = useState([]);
+  const [loanTypesLoading, setLoanTypesLoading] = useState(false);
+  const [showAddLoanType, setShowAddLoanType] = useState(false);
+  const [loanTypeForm, setLoanTypeForm] = useState({ name: '', key: '', description: '' });
+  const [editingLoanType, setEditingLoanType] = useState(null);
+  const [loanTypeFormErrors, setLoanTypeFormErrors] = useState({});
   const [showAddFormPanel, setShowAddFormPanel] = useState(false);
   const [editingForm, setEditingForm] = useState(null);
   const [formEntry, setFormEntry] = useState({
@@ -234,6 +244,99 @@ export default function DownloadFormsPage() {
   const resetFormEntry = () => {
     setFormEntry({ bank_name: '', loan_type: '', form_name: '', file_type: 'pdf' });
     setFormFile(null);
+  };
+
+  // ──────────────────────────────────────────────
+  // LOAN TYPES API
+  // ──────────────────────────────────────────────
+  const loadLoanTypes = async () => {
+    setLoanTypesLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/loan-types`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setLoanTypes(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load loan types:', err);
+    } finally {
+      setLoanTypesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!accessToken) return;
+    loadLoanTypes();
+  }, [accessToken]);
+
+  const handleSaveLoanType = async (e) => {
+    e.preventDefault();
+    setErrors('');
+    setSuccess('');
+
+    const errors = {};
+    if (!loanTypeForm.name.trim()) errors.name = 'Name is required';
+    if (!loanTypeForm.key.trim()) errors.key = 'Key is required';
+    setLoanTypeFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setLoanTypesLoading(true);
+    try {
+      const url = editingLoanType
+        ? `${API_BASE}/loan-types/${editingLoanType.id}`
+        : `${API_BASE}/loan-types`;
+      const method = editingLoanType ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(loanTypeForm)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to save loan type');
+        return;
+      }
+
+      setSuccess(editingLoanType ? 'Loan type updated!' : 'Loan type created!');
+      setShowAddLoanType(false);
+      setEditingLoanType(null);
+      setLoanTypeForm({ name: '', key: '', description: '' });
+      loadLoanTypes();
+    } catch (err) {
+      setError('Failed to save loan type');
+    } finally {
+      setLoanTypesLoading(false);
+    }
+  };
+
+  const handleDeleteLoanType = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this loan type? This may affect existing leads.')) return;
+
+    setLoanTypesLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/loan-types/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Failed to delete loan type');
+        return;
+      }
+
+      setSuccess('Loan type deleted!');
+      loadLoanTypes();
+    } catch (err) {
+      setError('Failed to delete loan type');
+    } finally {
+      setLoanTypesLoading(false);
+    }
   };
 
   // Bank forms admin handlers
@@ -580,6 +683,16 @@ export default function DownloadFormsPage() {
           }`}
         >
           🏦 Bank Application Forms
+        </button>
+        <button
+          onClick={() => { setActiveTab('loan_types'); setSuccess(''); }}
+          className={`px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center gap-2 ${
+            activeTab === 'loan_types'
+              ? 'bg-blue-700 text-white shadow-md shadow-blue-500/10'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          🏷️ Loan Types ({loanTypes.length})
         </button>
       </div>
 
@@ -1008,6 +1121,217 @@ export default function DownloadFormsPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────── */}
+      {/* TAB 4: LOAN TYPES MANAGEMENT             */}
+      {/* ──────────────────────────────────────── */}
+      {activeTab === 'loan_types' && (
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-3xl shadow-xl p-6 border border-gray-150">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Loan Types Management</h2>
+                <p className="text-sm text-gray-500 mt-1">Manage loan types available in the Add Lead form for executives.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddLoanType(true);
+                  setEditingLoanType(null);
+                  setLoanTypeForm({ name: '', key: '', description: '' });
+                  setLoanTypeFormErrors({});
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg hover:scale-105 active:scale-95"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add Loan Type
+              </button>
+            </div>
+
+            {loanTypesLoading && loanTypes.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">Loading loan types...</p>
+            ) : loanTypes.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-5xl mb-4">🏦</div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">No Loan Types</h3>
+                <p className="text-gray-500">Add your first loan type to get started.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Name</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Key</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Description</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-gray-600">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loanTypes.map(lt => (
+                      <tr key={lt.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4 font-medium text-gray-900">{lt.name}</td>
+                        <td className="py-3 px-4">
+                          <code className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-mono">{lt.key}</code>
+                        </td>
+                        <td className="py-3 px-4 text-gray-500 text-sm max-w-xs truncate">{lt.description || '—'}</td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                            lt.active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${lt.active !== false ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                            {lt.active !== false ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingLoanType(lt);
+                                setLoanTypeForm({ name: lt.name, key: lt.key, description: lt.description || '' });
+                                setShowAddLoanType(true);
+                                setLoanTypeFormErrors({});
+                              }}
+                              className="px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const newActive = lt.active !== false ? false : true;
+                                try {
+                                  const res = await fetch(`${API_BASE}/loan-types/${lt.id}`, {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      Authorization: `Bearer ${accessToken}`
+                                    },
+                                    body: JSON.stringify({ active: newActive })
+                                  });
+                                  if (res.ok) {
+                                    setSuccess(`Loan type ${newActive ? 'activated' : 'deactivated'}!`);
+                                    loadLoanTypes();
+                                  }
+                                } catch (err) {
+                                  setError('Failed to toggle loan type');
+                                }
+                              }}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                                lt.active !== false 
+                                  ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' 
+                                  : 'bg-green-50 text-green-700 hover:bg-green-100'
+                              }`}
+                            >
+                              {lt.active !== false ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteLoanType(lt.id)}
+                              className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Loan Type Add/Edit Modal */}
+          {showAddLoanType && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddLoanType(false)}>
+              <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      {editingLoanType ? 'Edit Loan Type' : 'Add Loan Type'}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {editingLoanType ? 'Update the loan type details.' : 'Create a new loan type for the Add Lead form.'}
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveLoanType} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Loan Type Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Gold Loan"
+                      className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all ${loanTypeFormErrors.name ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
+                      value={loanTypeForm.name}
+                      onChange={e => {
+                        setLoanTypeForm(p => ({ ...p, name: e.target.value }));
+                        setLoanTypeFormErrors(p => ({ ...p, name: '' }));
+                      }}
+                    />
+                    {loanTypeFormErrors.name && <p className="text-red-500 text-xs mt-1 font-semibold">{loanTypeFormErrors.name}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Key (slug) *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., gold_loan"
+                      className={`w-full border rounded-xl px-4 py-3 font-mono focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all ${loanTypeFormErrors.key ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
+                      value={loanTypeForm.key}
+                      onChange={e => {
+                        const value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+                        setLoanTypeForm(p => ({ ...p, key: value }));
+                        setLoanTypeFormErrors(p => ({ ...p, key: '' }));
+                      }}
+                    />
+                    {loanTypeFormErrors.key && <p className="text-red-500 text-xs mt-1 font-semibold">{loanTypeFormErrors.key}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Description (Optional)</label>
+                    <textarea
+                      placeholder="Brief description of this loan type"
+                      rows="3"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-200 focus:outline-none focus:border-blue-500 transition-all resize-none"
+                      value={loanTypeForm.description}
+                      onChange={e => setLoanTypeForm(p => ({ ...p, description: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddLoanType(false);
+                        setEditingLoanType(null);
+                        setLoanTypeForm({ name: '', key: '', description: '' });
+                      }}
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loanTypesLoading}
+                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md"
+                    >
+                      {loanTypesLoading ? 'Saving...' : editingLoanType ? 'Update' : 'Create'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
