@@ -360,7 +360,7 @@ export default function DashboardCharts() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-bold text-gray-800">Lead Status Distribution</h3>
+            <h3 className="text-base sm:text-lg font-bold text-gray-800 border-l-4 border-l-blue-500 pl-3">Lead Status Distribution</h3>
             {statusChartData && <DownloadBtn onClick={handleDownloadStatus} />}
           </div>
           {statusChartData ? (
@@ -373,7 +373,7 @@ export default function DashboardCharts() {
         </div>
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-bold text-gray-800">Leads by Loan Type</h3>
+            <h3 className="text-base sm:text-lg font-bold text-gray-800 border-l-4 border-l-indigo-500 pl-3">Leads by Loan Type</h3>
             {loanTypeChartData && <DownloadBtn onClick={handleDownloadLoanType} />}
           </div>
           {loanTypeChartData ? (
@@ -389,7 +389,7 @@ export default function DashboardCharts() {
       {/* Bottom row: Monthly Trend full width - combo bar/line */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base sm:text-lg font-bold text-gray-800">Monthly Leads Overview</h3>
+          <h3 className="text-base sm:text-lg font-bold text-gray-800 border-l-4 border-l-purple-500 pl-3">Monthly Leads Overview</h3>
           {trendChartData && <DownloadBtn onClick={handleDownloadTrend} />}
         </div>
         {trendChartData ? (
