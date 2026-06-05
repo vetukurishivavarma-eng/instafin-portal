@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 import { getChecklistWithFallback, getCoapplicantChecklist } from '../utils/resolver';
+import { downloadEligibilityPDF } from '../export/pdf';
 
 // Normalize field values for checklist matching
 const normalizeValue = (val) => {
@@ -46,6 +47,22 @@ export default function CustomerLoginPage() {
 
   // Bank forms
   const [downloadingForm, setDownloadingForm] = useState(null);
+
+  // ===== Eligibility Calculator State =====
+  const [eligPF, setEligPF] = useState('');
+  const [eligIncomeTax, setEligIncomeTax] = useState('');
+  const [eligProfessionTax, setEligProfessionTax] = useState('');
+  const [eligGrossSalary, setEligGrossSalary] = useState('');
+  const [eligRentalIncome, setEligRentalIncome] = useState('');
+  const [eligEmiNmiPercent, setEligEmiNmiPercent] = useState('50');
+  const [eligBankEmis, setEligBankEmis] = useState([{ bank: '', emi: '' }]);
+  const [eligPrincipal, setEligPrincipal] = useState('100000');
+  const [eligRate, setEligRate] = useState('8.5');
+  const [eligPeriod, setEligPeriod] = useState('240');
+  const [eligHasCoapplicant, setEligHasCoapplicant] = useState(false);
+  const [eligCoapplicantGross, setEligCoapplicantGross] = useState('');
+  const [showEligModal, setShowEligModal] = useState(false);
+  const [eligDownloading, setEligDownloading] = useState(false);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -419,6 +436,262 @@ export default function CustomerLoginPage() {
 
     setSuccess('Form downloaded successfully!');
     setTimeout(() => setSuccess(''), 3000);
+  };
+
+  // ===== Eligibility Helper Functions =====
+  const eligNum = (v) => parseFloat(v) || 0;
+  const eligFormatNum = (n) => n.toLocaleString('en-IN', { maximumFractionDigits:0 });
+  const eligFormatDec = (n) => n.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const eligHandleNumInput = (setter) => (e) => {
+    const v = e.target.value;
+    if (v === '' || /^\d*\.?\d*$/.test(v)) setter(v);
+  };
+
+  // ===== Computed Eligibility Values =====
+  const eligCoapplicantGrossVal = eligHasCoapplicant ? eligNum(eligCoapplicantGross) : 0;
+  const eligTotalDeductions = eligNum(eligPF) + eligNum(eligIncomeTax) + eligNum(eligProfessionTax);
+  const eligNetSalary = (eligNum(eligGrossSalary) + eligCoapplicantGrossVal) - eligTotalDeductions;
+  const eligNetIncome = eligNetSalary + eligNum(eligRentalIncome);
+  const eligTotalExistingEmis = eligBankEmis.reduce((sum, b) => sum + eligNum(b.emi), 0);
+  const eligEmiAvailable = (eligNetIncome * eligNum(eligEmiNmiPercent) / 100) - eligTotalExistingEmis;
+  const eligMonthlyRate = eligNum(eligRate) / 100 / 12;
+  const eligEmiPerLac = eligMonthlyRate > 0 && eligNum(eligPeriod) > 0
+    ? (100000 * eligMonthlyRate * Math.pow(1 + eligMonthlyRate, eligNum(eligPeriod))) / (Math.pow(1 + eligMonthlyRate, eligNum(eligPeriod)) - 1)
+    : 0;
+  const eligEligibleAmount = eligEmiPerLac > 0 ? (Math.max(0, eligEmiAvailable) / eligEmiPerLac) * 100000 : 0;
+
+  const eligAddBankEmi = () => setEligBankEmis([...eligBankEmis, { bank: '', emi: '' }]);
+  const eligRemoveBankEmi = (i) => setEligBankEmis(eligBankEmis.filter((_, idx) => idx !== i));
+  const eligUpdateBankEmi = (i, field, val) => {
+    const updated = [...eligBankEmis];
+    updated[i][field] = val;
+    setEligBankEmis(updated);
+  };
+
+  const handleCheckEligibility = () => setShowEligModal(true);
+
+  const handleDownloadEligPDF = async () => {
+    setEligDownloading(true);
+    try {
+      await downloadEligibilityPDF({
+        applicantName: selectedLead?.customerName || 'Applicant',
+        loanType: (selectedLead?.loanType || '').replace(/_/g, ' '),
+        mobile: selectedLead?.mobile || '',
+        pf: eligNum(eligPF),
+        incomeTax: eligNum(eligIncomeTax),
+        professionTax: eligNum(eligProfessionTax),
+        totalDeductions: eligTotalDeductions,
+        grossSalary: eligNum(eligGrossSalary),
+        netSalary: eligNetSalary,
+        rentalIncome: eligNum(eligRentalIncome),
+        netIncome: eligNetIncome,
+        emiNmiPercent: eligNum(eligEmiNmiPercent),
+        bankEmis: eligBankEmis.map(b => ({ bank: b.bank, emi: eligNum(b.emi) })),
+        totalExistingEmis: eligTotalExistingEmis,
+        emiAvailable: eligEmiAvailable,
+        principal: eligNum(eligPrincipal),
+        rate: eligNum(eligRate),
+        period: eligNum(eligPeriod),
+        emiPerLac: eligEmiPerLac,
+        eligibleAmount: eligEligibleAmount,
+        hasCoapplicant: eligHasCoapplicant,
+        coapplicantGross: eligCoapplicantGrossVal,
+      });
+    } catch (err) {
+      setError('Failed to download eligibility report');
+    } finally {
+      setEligDownloading(false);
+    }
+  };
+
+  const handleShareEligWhatsApp = () => {
+    const name = selectedLead?.customerName || 'Applicant';
+    const loanType = (selectedLead?.loanType || '').replace(/_/g, ' ') || '';
+    const eligible = eligEligibleAmount > 0 ? eligFormatNum(Math.round(eligEligibleAmount)) : 'Not Eligible';
+    const coAppText = eligHasCoapplicant ? `Co-applicant Gross: ${eligFormatNum(eligCoapplicantGrossVal)}\n` : '';
+    const msg =
+      `*Eligibility Report - ${name}*\n` +
+      `${loanType ? `Loan Type: ${loanType}\n` : ''}\n` +
+      `*Income Details:*\n` +
+      `Gross Salary: ${eligFormatNum(eligNum(eligGrossSalary))}\n` +
+      coAppText +
+      `Total Deductions: ${eligFormatDec(eligTotalDeductions)}\n` +
+      `Net Salary: ${eligFormatDec(eligNetSalary)}\n` +
+      `Rental Income: ${eligFormatNum(eligNum(eligRentalIncome))}\n` +
+      `Net Income: ${eligFormatDec(eligNetIncome)}\n\n` +
+      `*EMI Details:*\n` +
+      `EMI/NMI%: ${eligNum(eligEmiNmiPercent)}%\n` +
+      `Existing EMIs: ${eligFormatDec(eligTotalExistingEmis)}\n` +
+      `EMI Available: ${eligFormatDec(eligEmiAvailable)}\n\n` +
+      `*Loan Parameters:*\n` +
+      `Rate: ${eligNum(eligRate)}% p.a.\n` +
+      `Period: ${eligNum(eligPeriod)} months\n` +
+      `EMI per LAC: ${eligFormatDec(eligEmiPerLac)}\n\n` +
+      `*Eligible Loan Amount: ${eligible}*`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+  };
+
+  // Pre-fill eligibility from AI summary
+  const prefillEligibilityFromSummary = () => {
+    if (!summary) return;
+    try {
+      let parsedExtra = null;
+      const jsonMatch = summary.match(/```json([\s\S]*?)```/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const root = JSON.parse(jsonMatch[1].trim());
+          parsedExtra = root.extracted_details || null;
+        } catch (_) {}
+      }
+
+      if (parsedExtra) {
+        let foundAny = false;
+        if (parsedExtra.gross_income) {
+          const val = parseInt(String(parsedExtra.gross_income).replace(/,/g, ''));
+          if (val > 0) { setEligGrossSalary(String(val)); foundAny = true; }
+        } else if (parsedExtra.monthly_income) {
+          const val = parseInt(String(parsedExtra.monthly_income).replace(/,/g, ''));
+          if (val > 0) { setEligGrossSalary(String(val)); foundAny = true; }
+        }
+        if (parsedExtra.pf) {
+          const val = parseInt(String(parsedExtra.pf).replace(/,/g, ''));
+          if (val > 0) { setEligPF(String(val)); foundAny = true; }
+        }
+        if (parsedExtra.income_tax) {
+          const val = parseInt(String(parsedExtra.income_tax).replace(/,/g, ''));
+          if (val > 0) { setEligIncomeTax(String(val)); foundAny = true; }
+        }
+        if (parsedExtra.profession_tax) {
+          const val = parseInt(String(parsedExtra.profession_tax).replace(/,/g, ''));
+          if (val > 0) { setEligProfessionTax(String(val)); foundAny = true; }
+        }
+        if (parsedExtra.rental_income) {
+          const val = parseInt(String(parsedExtra.rental_income).replace(/,/g, ''));
+          if (val > 0) { setEligRentalIncome(String(val)); foundAny = true; }
+        }
+        if (foundAny) return;
+      }
+
+      // Fallback: regex patterns
+      const text = summary.replace(/\*\*/g, '').replace(/\*/g, '');
+      const incomePatterns = [
+        /(?:gross\s+monthly\s+income|gross\s+salary|gross\s+income|monthly\s+income|salary\s+income|total\s+income)[:\s]*₹?\s*([\d,]+)/i,
+        /(?:gross\s+monthly\s+income|gross\s+salary|gross\s+income|monthly\s+income|salary\s+income|total\s+income)[:\s]*rs?\.?\s*([\d,]+)/i,
+        /(?:earns|income|salary)(?:\s+is|\s*~|\s*approx(?:imately)?)?\s*(?:₹|rs?\.?)?\s*([\d,]+)\s*(?:per\s+month|\/month|\/pm|monthly)/i
+      ];
+      let salaryVal = 0;
+      for (const pattern of incomePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (val > 0) { salaryVal = val; break; }
+        }
+      }
+      if (salaryVal > 0) setEligGrossSalary(String(salaryVal));
+
+      const pfPatterns = [
+        /(?:provident\s+fund|pf|p\.f\.)[:\s]*₹?\s*([\d,]+)/i,
+        /(?:provident\s+fund|pf|p\.f\.)[:\s]*rs?\.?\s*([\d,]+)/i,
+        /(?:pf|provident\s+fund)(?:\s+deduction|\s+contribution)?[\s:]*₹?\s*([\d,]+)/i
+      ];
+      let pfVal = 0;
+      for (const pattern of pfPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (val > 0) { pfVal = val; break; }
+        }
+      }
+      if (pfVal > 0) setEligPF(String(pfVal));
+
+      const taxPatterns = [
+        /(?:income\s+tax|tax\s+deduction|tax\s+deducted|tds)[:\s]*₹?\s*([\d,]+)/i,
+        /(?:income\s+tax|tax\s+deduction|tds)[:\s]*rs?\.?\s*([\d,]+)/i
+      ];
+      let taxVal = 0;
+      for (const pattern of taxPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (val > 0) { taxVal = val; break; }
+        }
+      }
+      if (taxVal > 0) setEligIncomeTax(String(taxVal));
+    } catch (err) {
+      console.error('Failed to parse summary for eligibility:', err);
+    }
+  };
+
+  // Reset & pre-fill eligibility when lead changes
+  useEffect(() => {
+    if (!selectedLead) return;
+    setEligPF('');
+    setEligIncomeTax('');
+    setEligProfessionTax('');
+    setEligGrossSalary('');
+    setEligRentalIncome('');
+    setEligEmiNmiPercent('50');
+    setEligBankEmis([{ bank: '', emi: '' }]);
+    setEligPrincipal('100000');
+    setEligRate('8.5');
+    setEligPeriod('240');
+    setEligCoapplicantGross('');
+    setEligHasCoapplicant(selectedLead.hasCoapplicant || false);
+    const lt = (selectedLead.loanType || '').toLowerCase();
+    if (lt.includes('education')) {
+      setEligRate('10.5');
+      setEligPeriod('120');
+    } else if (lt.includes('lap')) {
+      setEligRate('10');
+      setEligPeriod('180');
+    } else {
+      setEligRate('8.5');
+      setEligPeriod('240');
+    }
+  }, [selectedLead?.id]);
+
+  // Pre-fill from AI summary when it changes
+  useEffect(() => {
+    if (summary) prefillEligibilityFromSummary();
+  }, [summary]);
+
+  // ===== Markdown rendering helpers for AI summary =====
+  const parseBoldText = (text) => {
+    if (typeof text !== 'string') return text;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  const renderSummary = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, index) => {
+      if (line.startsWith('### ')) {
+        return <h4 key={index} className="text-md font-bold text-gray-800 mt-4 mb-2">{line.replace('### ', '')}</h4>;
+      }
+      if (line.startsWith('## ')) {
+        return <h3 key={index} className="text-lg font-bold text-indigo-900 mt-5 mb-3 border-b border-indigo-50 pb-1">{line.replace('## ', '')}</h3>;
+      }
+      if (line.startsWith('# ')) {
+        return <h2 key={index} className="text-xl font-bold text-indigo-950 mt-6 mb-4">{line.replace('# ', '')}</h2>;
+      }
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        const cleanLine = line.replace(/^[-*]\s+/, '');
+        return (
+          <li key={index} className="ml-6 list-disc text-gray-700 my-1">
+            {parseBoldText(cleanLine)}
+          </li>
+        );
+      }
+      if (line.trim() === '') {
+        return <div key={index} className="h-2" />;
+      }
+      return <p key={index} className="text-gray-700 my-1 leading-relaxed">{parseBoldText(line)}</p>;
+    });
   };
 
   // Filter leads
@@ -952,6 +1225,461 @@ export default function CustomerLoginPage() {
               </div>
             )}
           </div>
+
+          {/* Customer Profile Analysis Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 px-5 sm:px-6 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white bg-opacity-10 rounded-xl">
+                  <svg className={`w-5 h-5 text-white ${summaryLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg leading-tight">Full Customer Profile Analysis</h3>
+                  <p className="text-xs text-indigo-200">AI-powered analysis from all uploaded documents</p>
+                </div>
+              </div>
+              {uploadedCount > 0 && !summaryLoading && (
+                <button
+                  onClick={handleGenerateSummary}
+                  className="text-xs font-semibold bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 rounded-lg transition-all"
+                >
+                  {summary ? 'Re-Analyze' : 'Analyze Documents'}
+                </button>
+              )}
+            </div>
+
+            <div className="p-5 sm:p-6">
+              {summaryLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="relative w-16 h-16 mb-4">
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+                  </div>
+                  <p className="font-semibold text-gray-900">Analyzing All Uploaded Files...</p>
+                  <p className="text-xs text-gray-500 mt-1 max-w-[280px]">Gemini is parsing documents, verifying data, and conducting credit risk analysis...</p>
+                </div>
+              ) : summary ? (
+                <div className="max-h-[600px] overflow-y-auto pr-1">
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-4 text-xs text-indigo-800 flex items-start gap-2.5">
+                    <svg className="w-5 h-5 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <strong>AI Inspection Complete.</strong> Analysis based on all uploaded documents has been saved.
+                    </div>
+                  </div>
+
+                  {extractedProfile && (
+                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-4">
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-indigo-100">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        <h4 className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider">AI Verified KYC Profile</h4>
+                      </div>
+                      <div className="space-y-2 text-xs text-gray-700">
+                        <div className="grid grid-cols-3">
+                          <span className="font-medium text-gray-500">Full Name</span>
+                          <span className="col-span-2 font-semibold text-gray-900">{extractedProfile.full_name || 'N/A'}</span>
+                        </div>
+                        <div className="grid grid-cols-3">
+                          <span className="font-medium text-gray-500">DOB / Gender</span>
+                          <span className="col-span-2 font-semibold text-gray-900">
+                            {extractedProfile.dob || 'N/A'} {extractedProfile.gender ? `(${extractedProfile.gender})` : ''}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3">
+                          <span className="font-medium text-gray-500">Aadhaar No</span>
+                          <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile.aadhaar_number || 'N/A'}</span>
+                        </div>
+                        <div className="grid grid-cols-3">
+                          <span className="font-medium text-gray-500">PAN Number</span>
+                          <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile.pan_number || 'N/A'}</span>
+                        </div>
+                        <div className="grid grid-cols-3">
+                          <span className="font-medium text-gray-500">Address</span>
+                          <span className="col-span-2 text-gray-600 leading-normal">{extractedProfile.address || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {renderSummary(summary)}
+                </div>
+              ) : (
+                <div className="text-center py-12 flex flex-col items-center">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-400">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-bold text-gray-900 mb-1">No Profile Summary Generated</h4>
+                  <p className="text-xs text-gray-500 max-w-xs mb-6">
+                    {uploadedCount === 0
+                      ? "Upload documents first in the section above, then click 'Analyze Documents' to generate the profile analysis."
+                      : "All documents uploaded! Click below to have Gemini analyze and summarize this lead's credit profile."}
+                  </p>
+                  <button
+                    onClick={handleGenerateSummary}
+                    disabled={uploadedCount === 0}
+                    className={`w-full max-w-xs py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
+                      uploadedCount === 0
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:shadow-lg'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Analyze Documents & Summarize
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Eligibility Calculator Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-blue-100 rounded-xl">
+                <svg className="w-6 h-6 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M15 14h.01M12 14h.01M15 17h.01M12 17h.01M9 11h.01M12 11h.01M15 11h.01M12 11h.01M9 14h.01M12 14h.01M15 14h.01M12 14h.01M9 17h.01M12 17h.01M15 17h.01M12 17h.01" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Eligibility Calculator</h3>
+                <p className="text-sm text-gray-500">Fields auto-populated from AI profile analysis where available</p>
+              </div>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Left: Input fields */}
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-2xl p-5">
+                  <h4 className="text-sm font-bold text-blue-700 mb-3">Statutory Deductions</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Provident Fund</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligPF} onChange={eligHandleNumInput(setEligPF)} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Income Tax</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligIncomeTax} onChange={eligHandleNumInput(setEligIncomeTax)} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Profession Tax</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligProfessionTax} onChange={eligHandleNumInput(setEligProfessionTax)} placeholder="0" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-2xl p-5">
+                  <h4 className="text-sm font-bold text-blue-700 mb-3">Income</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Gross Salary (Monthly)</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligGrossSalary} onChange={eligHandleNumInput(setEligGrossSalary)} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Proposed Rental Income</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligRentalIncome} onChange={eligHandleNumInput(setEligRentalIncome)} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none group">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                          checked={eligHasCoapplicant}
+                          onChange={(e) => { setEligHasCoapplicant(e.target.checked); if (!e.target.checked) setEligCoapplicantGross(''); }}
+                        />
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700 transition-colors">
+                          Include Co-applicant Income
+                        </span>
+                      </label>
+                      {eligHasCoapplicant && (
+                        <div className="mt-2">
+                          <label className="text-xs text-gray-600 mb-1 block">
+                            Co-applicant Monthly Gross {selectedLead?.coapplicantName ? `(${selectedLead.coapplicantName})` : ''}
+                          </label>
+                          <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligCoapplicantGross} onChange={eligHandleNumInput(setEligCoapplicantGross)} placeholder="0" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-2xl p-5">
+                  <h4 className="text-sm font-bold text-blue-700 mb-3">EMI Details</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">EMI/NMI % (as per NAI)</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligEmiNmiPercent} onChange={eligHandleNumInput(setEligEmiNmiPercent)} placeholder="50" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Existing Bank EMIs</label>
+                      {eligBankEmis.map((item, i) => (
+                        <div key={i} className="flex gap-2 mb-2">
+                          <input type="text" className="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="Bank name" value={item.bank} onChange={(e) => eligUpdateBankEmi(i, 'bank', e.target.value)} />
+                          <input type="text" inputMode="decimal" className="w-32 border rounded-xl px-3 py-2 text-sm" placeholder="EMI" value={item.emi} onChange={(e) => eligUpdateBankEmi(i, 'emi', e.target.value)} />
+                          {eligBankEmis.length > 1 && (
+                            <button onClick={() => eligRemoveBankEmi(i)} className="text-red-500 hover:text-red-700 px-2">&times;</button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={eligAddBankEmi} className="text-xs text-blue-600 hover:underline mt-1">+ Add another</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-2xl p-5">
+                  <h4 className="text-sm font-bold text-blue-700 mb-3">Loan Parameters</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Principal</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligPrincipal} onChange={eligHandleNumInput(setEligPrincipal)} placeholder="100000" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Rate (% p.a.)</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligRate} onChange={eligHandleNumInput(setEligRate)} placeholder="8.5" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Period (months)</label>
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligPeriod} onChange={eligHandleNumInput(setEligPeriod)} placeholder="240" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Calculated Results */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                  <h4 className="text-sm font-bold text-blue-800 mb-4">Calculated Results (live)</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between py-2 border-b border-blue-100">
+                      <span className="text-sm text-gray-600">Total Deductions</span>
+                      <span className="text-sm font-semibold">₹{eligFormatDec(eligTotalDeductions)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-blue-100">
+                      <span className="text-sm text-gray-600">Net Salary</span>
+                      <span className="text-sm font-semibold">₹{eligFormatDec(eligNetSalary)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-blue-100">
+                      <span className="text-sm text-gray-600">Net Income</span>
+                      <span className="text-sm font-bold text-green-700">₹{eligFormatDec(eligNetIncome)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-blue-100">
+                      <span className="text-sm text-gray-600">Existing EMIs</span>
+                      <span className="text-sm font-semibold">₹{eligFormatDec(eligTotalExistingEmis)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-blue-100">
+                      <span className="text-sm text-gray-600">EMI Available</span>
+                      <span className={`text-sm font-bold ${eligEmiAvailable < 0 ? 'text-red-600' : 'text-blue-700'}`}>₹{eligFormatDec(eligEmiAvailable)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-blue-100">
+                      <span className="text-sm text-gray-600">EMI per LAC</span>
+                      <span className="text-sm font-semibold">₹{eligFormatDec(eligEmiPerLac)}</span>
+                    </div>
+                    <div className={`mt-4 p-4 rounded-xl text-white text-center ${eligEligibleAmount > 0 ? 'bg-gradient-to-r from-blue-600 to-blue-700' : 'bg-gradient-to-r from-red-500 to-red-600'}`}>
+                      <p className="text-xs opacity-80 mb-1">Eligible Loan Amount</p>
+                      {eligEligibleAmount > 0 ? (
+                        <p className="text-2xl font-bold">₹{eligFormatNum(Math.round(eligEligibleAmount))}</p>
+                      ) : (
+                        <p className="text-xl font-extrabold tracking-wide">NOT ELIGIBLE</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCheckEligibility}
+                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Check Eligibility
+                  </button>
+                  <button
+                    onClick={handleShareEligWhatsApp}
+                    className="px-4 py-3 bg-green-600 text-white rounded-xl font-semibold text-sm hover:bg-green-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                    </svg>
+                    Share
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Eligibility Results Modal */}
+          {showEligModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onClick={() => setShowEligModal(false)}>
+              <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Eligibility Report</h3>
+                      <p className="text-sm text-gray-500">{selectedLead?.customerName} | {(selectedLead?.loanType || '').replace(/_/g, ' ')}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowEligModal(false)} className="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div className="bg-gray-50 rounded-2xl p-5">
+                    <h4 className="text-sm font-bold text-gray-800 mb-3 border-b pb-2">Income Details</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Gross Salary (Monthly)</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligGrossSalary))}</span>
+                      </div>
+                      {eligHasCoapplicant && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Co-applicant Gross</span>
+                          <span className="font-semibold">₹{eligFormatNum(eligCoapplicantGrossVal)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Proposed Rental Income</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligRentalIncome))}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-5">
+                    <h4 className="text-sm font-bold text-gray-800 mb-3 border-b pb-2">Statutory Deductions</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Provident Fund</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligPF))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Income Tax</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligIncomeTax))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Profession Tax</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligProfessionTax))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm pt-2 border-t font-bold">
+                        <span className="text-gray-800">Total Deductions</span>
+                        <span className="text-gray-900">₹{eligFormatDec(eligTotalDeductions)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-green-50 rounded-2xl p-5 border border-green-200">
+                    <h4 className="text-sm font-bold text-green-800 mb-3 border-b border-green-200 pb-2">Net Income</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Net Salary</span>
+                        <span className="font-semibold">₹{eligFormatDec(eligNetSalary)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">+ Rental Income</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligRentalIncome))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm pt-2 border-t border-green-200 font-bold">
+                        <span className="text-green-800">Net Income</span>
+                        <span className="text-green-700 text-lg">₹{eligFormatDec(eligNetIncome)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-5">
+                    <h4 className="text-sm font-bold text-gray-800 mb-3 border-b pb-2">EMI Details</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">EMI/NMI %</span>
+                        <span className="font-semibold">{eligNum(eligEmiNmiPercent)}%</span>
+                      </div>
+                      {eligBankEmis.filter(b => b.bank || eligNum(b.emi) > 0).map((b, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-gray-600">{b.bank || `Bank ${i + 1}`}</span>
+                          <span className="font-semibold">₹{eligFormatNum(eligNum(b.emi))}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-sm pt-2 border-t font-bold">
+                        <span className="text-gray-800">Total Existing EMIs</span>
+                        <span className="text-gray-900">₹{eligFormatDec(eligTotalExistingEmis)}</span>
+                      </div>
+                      <div className={`flex justify-between text-sm p-2 rounded-lg ${eligEmiAvailable < 0 ? 'bg-red-50' : 'bg-blue-50'}`}>
+                        <span className="text-gray-800 font-medium">EMI Available</span>
+                        <span className={`font-bold ${eligEmiAvailable < 0 ? 'text-red-600' : 'text-blue-700'}`}>₹{eligFormatDec(eligEmiAvailable)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-5">
+                    <h4 className="text-sm font-bold text-gray-800 mb-3 border-b pb-2">Loan Parameters</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Principal</span>
+                        <span className="font-semibold">₹{eligFormatNum(eligNum(eligPrincipal))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Rate</span>
+                        <span className="font-semibold">{eligNum(eligRate)}% p.a.</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Period</span>
+                        <span className="font-semibold">{eligNum(eligPeriod)} months</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">EMI per LAC</span>
+                        <span className="font-semibold">₹{eligFormatDec(eligEmiPerLac)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`p-6 rounded-2xl text-white text-center ${eligEligibleAmount > 0 ? 'bg-gradient-to-r from-blue-600 to-blue-700' : 'bg-gradient-to-r from-red-500 to-red-600'}`}>
+                    <p className="text-sm opacity-80 mb-1">Eligible Loan Amount (as per Income)</p>
+                    {eligEligibleAmount > 0 ? (
+                      <p className="text-3xl font-bold mt-2">₹{eligFormatNum(Math.round(eligEligibleAmount))}</p>
+                    ) : (
+                      <>
+                        <p className="text-4xl font-extrabold mt-2 tracking-wide">NOT ELIGIBLE</p>
+                        <p className="text-sm opacity-80 mt-2">Existing EMIs exceed available EMI capacity</p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={handleDownloadEligPDF}
+                      disabled={eligDownloading}
+                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {eligDownloading ? 'Downloading...' : 'Download Report'}
+                    </button>
+                    <button
+                      onClick={() => { setShowEligModal(false); setTimeout(handleShareEligWhatsApp, 300); }}
+                      className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl font-semibold text-sm hover:bg-green-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                      </svg>
+                      Share to WhatsApp
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center max-w-lg mx-auto">
