@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardCharts from '../components/charts/DashboardCharts';
@@ -23,6 +23,7 @@ export default function DashboardPage() {
     revenue: '₹0L'
   });
   const [error, setError] = useState('');
+  const [navigatingTo, setNavigatingTo] = useState(null);
 
   const fetchStats = async () => {
     if (!accessToken) return;
@@ -59,18 +60,37 @@ export default function DashboardPage() {
     fetchStats();
   }, [accessToken]);
 
-  const StatCard = ({ label, value, gradient, filterStatus }) => (
-    <div
-      onClick={() => navigate(filterStatus ? `${basePath}/leads?status=${filterStatus}` : `${basePath}/leads`)}
-      className={`bg-gradient-to-br ${gradient} rounded-3xl p-6 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200`}
-    >
-      <p className="text-white/80 text-sm font-medium">{label}</p>
-      <h3 className="text-5xl font-bold text-white mt-2">{value}</h3>
-    </div>
-  );
+  const handleNavigate = useCallback((status) => {
+    const path = status ? `${basePath}/leads?status=${status}` : `${basePath}/leads`;
+    setNavigatingTo(status || 'all');
+    // Brief delay to show the press feedback before navigation
+    setTimeout(() => navigate(path), 150);
+  }, [basePath, navigate]);
+
+  const StatCard = ({ label, value, gradient, filterStatus }) => {
+    const isNavigating = navigatingTo === (filterStatus || 'all');
+    return (
+      <div
+        onClick={() => handleNavigate(filterStatus)}
+        className={`bg-gradient-to-br ${gradient} rounded-3xl p-6 shadow-lg cursor-pointer
+          hover:shadow-xl hover:scale-[1.02] active:scale-[0.97]
+          transition-all duration-200 ease-out
+          ${isNavigating ? 'opacity-70 scale-[0.97] pointer-events-none' : ''}`}
+      >
+        <p className="text-white/80 text-sm font-medium">{label}</p>
+        <h3 className="text-5xl font-bold text-white mt-2">{value}</h3>
+        {isNavigating && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            <span className="text-white/70 text-xs font-medium">Loading...</span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className="py-6 sm:py-12">
+    <div className="py-6 sm:py-12 animate-fade-in-up">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm sm:text-base text-gray-500">Welcome back, {user?.name || 'User'}</p>
