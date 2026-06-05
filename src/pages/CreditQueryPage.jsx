@@ -377,8 +377,8 @@ export default function CreditQueryPage() {
   return (
     <div className="py-6 sm:py-12 px-3 sm:px-6">
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Credit Query Management</h1>
-        <p className="text-xs sm:text-base text-gray-500 mt-1">Manage credit inquiries raised by banks for active leads.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Processing</h1>
+        <p className="text-xs sm:text-base text-gray-500 mt-1">Manage credit inquiries raised by banks for active leads in processing stage.</p>
       </div>
 
       {error && (
@@ -567,7 +567,7 @@ export default function CreditQueryPage() {
           {/* Credit Queries Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Credit Queries</h3>
+              <h3 className="text-lg font-bold text-gray-900">Processing Queries</h3>
               <div className="flex items-center gap-2">
                 {/* Share via WhatsApp */}
                 {creditQueries.length > 0 && (
@@ -846,7 +846,7 @@ export default function CreditQueryPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <h3 className="text-xl font-bold text-gray-400 mb-2">Select a Lead</h3>
-          <p className="text-gray-400 text-sm">Use the dropdown above to search and select an active lead with assigned banks to view and manage credit queries.</p>
+          <p className="text-gray-400 text-sm">Use the dropdown above to search and select an active lead with assigned banks to view and manage processing queries.</p>
         </div>
       )}
     </div>
