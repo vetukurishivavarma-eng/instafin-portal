@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler, LineController } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useAuth } from '../../contexts/AuthContext';
 import API_BASE from '../../config/api';
 
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler);
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler, LineController);
 
 // Format a loan_type key to a display label
 const formatLoanType = (key) => {
@@ -51,7 +51,7 @@ function downloadChart(chartRef, filename) {
 }
 
 export default function DashboardCharts() {
-  const { accessToken } = useAuth();
+  const { accessToken, refreshAccessToken } = useAuth();
   const statusChartRef = useRef(null);
   const loanTypeChartRef = useRef(null);
   const trendChartRef = useRef(null);
@@ -60,20 +60,53 @@ export default function DashboardCharts() {
   const [monthlyTrend, setMonthlyTrend] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchChartData = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
-    Promise.all([
-      fetch(`${API_BASE}/leads/stats/status-distribution`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json()),
-      fetch(`${API_BASE}/leads/stats/loan-type-distribution`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json()),
-      fetch(`${API_BASE}/leads/stats/monthly-trend`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json())
-    ]).then(([status, loanType, trend]) => {
+
+    const fetchWithAuth = (url) =>
+      fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => {
+        if (r.status === 401) throw { status: 401 };
+        return r.json();
+      });
+
+    try {
+      const [status, loanType, trend] = await Promise.all([
+        fetchWithAuth(`${API_BASE}/leads/stats/status-distribution`),
+        fetchWithAuth(`${API_BASE}/leads/stats/loan-type-distribution`),
+        fetchWithAuth(`${API_BASE}/leads/stats/monthly-trend`),
+      ]);
       setStatusData(status);
       setLoanTypeData(loanType);
       setMonthlyTrend(trend);
+    } catch (err) {
+      if (err?.status === 401) {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          // Token updated in localStorage by refreshAccessToken, read fresh value
+          const token = localStorage.getItem('instafin_token');
+          if (token) {
+            try {
+              const [status, loanType, trend] = await Promise.all([
+                fetch(`${API_BASE}/leads/stats/status-distribution`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+                fetch(`${API_BASE}/leads/stats/loan-type-distribution`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+                fetch(`${API_BASE}/leads/stats/monthly-trend`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+              ]);
+              setStatusData(status);
+              setLoanTypeData(loanType);
+              setMonthlyTrend(trend);
+            } catch {}
+          }
+        }
+      }
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [accessToken]);
+    }
+  }, [accessToken, refreshAccessToken]);
+
+  useEffect(() => {
+    fetchChartData();
+  }, [fetchChartData]);
 
   const handleDownloadStatus = useCallback(() => {
     downloadChart(statusChartRef, 'lead-status-distribution');

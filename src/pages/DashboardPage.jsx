@@ -39,6 +39,24 @@ export default function DashboardPage() {
           setError('Session expired. Please login again.');
           return;
         }
+        // Retry with the new token
+        const token = localStorage.getItem('instafin_token');
+        if (!token) return;
+        const retry = await fetch(`${API_BASE}/leads/stats/overview`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!retry.ok) {
+          setError('Failed to load dashboard data after refresh.');
+          return;
+        }
+        const retryData = await retry.json();
+        if (retryData.error) {
+          setError(retryData.error);
+          return;
+        }
+        setError('');
+        const rev = ((retryData.totalLeads * 10240) / 100000).toFixed(1);
+        setStats({ ...retryData, revenue: `\u20B9${rev}L` });
         return;
       }
 
