@@ -101,7 +101,7 @@ export default function CreditQueryPage() {
 
   const handleAddQuery = async (e) => {
     e.preventDefault();
-    if (!newQuery.bank_name || !selectedLead) return;
+    if (!newQuery.bank_name || !newQuery.remarks.trim() || !selectedLead) return;
 
     setLoading(true);
     try {
@@ -115,7 +115,7 @@ export default function CreditQueryPage() {
           lead_id: selectedLead.id,
           bank_name: newQuery.bank_name,
           query_type: newQuery.query_type,
-          remarks: newQuery.remarks
+          remarks: newQuery.remarks.trim()
         })
       });
 
@@ -502,13 +502,14 @@ export default function CreditQueryPage() {
                   </div>
                 </div>
                 <div className="mt-3">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks (optional)</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Query *</label>
                   <textarea
                     className="w-full border rounded-xl px-3 py-2 text-sm bg-white resize-none"
                     rows={2}
                     value={newQuery.remarks}
                     onChange={e => setNewQuery({...newQuery, remarks: e.target.value})}
-                    placeholder="Any additional notes..."
+                    placeholder="Describe the credit query..."
+                    required
                   />
                 </div>
               </form>
