@@ -28,7 +28,7 @@ export default function Layout({ children }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between min-h-[4rem] py-3">
             <div className="flex items-center">
-              <Link to={effectiveRole === 'admin' ? '/admin/dashboard' : effectiveRole === 'executive' ? '/executive/leads' : '/'} className="text-2xl font-bold text-blue-700">InstaFin</Link>
+              <Link to={effectiveRole === 'admin' ? '/admin/dashboard' : effectiveRole === 'executive' ? '/executive/dashboard' : '/'} className="text-2xl font-bold text-blue-700">InstaFin</Link>
               {user && (
                 <span className="ml-3 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full uppercase">
                   {user.role}
@@ -73,6 +73,7 @@ export default function Layout({ children }) {
               {/* Executive Navigation */}
               {effectiveRole === 'executive' && (
                 <>
+                  <Link to="/executive/dashboard" className={getLinkClass('/executive/dashboard')}>Dashboard</Link>
                   <Link to="/executive/leads" className={getLinkClass('/executive/leads')}>Leads</Link>
                   <Link to="/executive/customers" className={getLinkClass('/executive/customers')}>Customers</Link>
                   <Link to="/executive/checklists" className={getLinkClass('/executive/checklists')}>Checklist & Upload</Link>
@@ -110,6 +111,7 @@ export default function Layout({ children }) {
               {/* Executive Navigation */}
               {effectiveRole === 'executive' && (
                 <>
+                  <Link to="/executive/dashboard" className={getMobileLinkClass('/executive/dashboard')} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
                   <Link to="/executive/leads" className={getMobileLinkClass('/executive/leads')} onClick={() => setMobileMenuOpen(false)}>Leads</Link>
                   <Link to="/executive/customers" className={getMobileLinkClass('/executive/customers')} onClick={() => setMobileMenuOpen(false)}>Customers</Link>
                   <Link to="/executive/checklists" className={getMobileLinkClass('/executive/checklists')} onClick={() => setMobileMenuOpen(false)}>Checklist & Upload</Link>

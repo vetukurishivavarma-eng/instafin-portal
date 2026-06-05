@@ -41,8 +41,9 @@ export default function CreditQueryPage() {
         ? allLeads.filter(l => l.assignedTo === executiveName)
         : allLeads;
 
-      // Only active leads with at least one bank assigned
+      // Only active leads with at least one bank assigned, and not rejected
       const eligible = filtered.filter(l => {
+        if (l.status === 'Rejected') return false;
         const hasBanks = l.assignedBanks && l.assignedBanks.length > 0;
         return l.isActive !== false && hasBanks;
       });

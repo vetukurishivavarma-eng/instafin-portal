@@ -136,6 +136,11 @@ function AppRoutes() {
         } />
 
         {/* Executive routes */}
+        <Route path="/executive/dashboard" element={
+          <ProtectedRoute allowedRoles={['executive']}>
+            <DashboardPage />
+          </ProtectedRoute>
+        } />
         <Route path="/executive/leads" element={
           <ProtectedRoute allowedRoles={['executive']}>
             <LeadEntryPage />

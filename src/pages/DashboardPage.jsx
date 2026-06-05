@@ -5,8 +5,9 @@ import DashboardCharts from '../components/charts/DashboardCharts';
 import API_BASE from '../config/api';
 
 export default function DashboardPage() {
-  const { user, isAdmin, accessToken, refreshAccessToken } = useAuth();
+  const { user, effectiveRole, accessToken, refreshAccessToken } = useAuth();
   const navigate = useNavigate();
+  const basePath = effectiveRole === 'admin' ? '/admin' : '/executive';
   const [stats, setStats] = useState({
     totalLeads: 0,
     activeLeads: 0,
@@ -60,7 +61,7 @@ export default function DashboardPage() {
 
   const StatCard = ({ label, value, gradient, filterStatus }) => (
     <div
-      onClick={() => navigate(filterStatus ? `/admin/leads?status=${filterStatus}` : '/admin/leads')}
+      onClick={() => navigate(filterStatus ? `${basePath}/leads?status=${filterStatus}` : `${basePath}/leads`)}
       className={`bg-gradient-to-br ${gradient} rounded-3xl p-6 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all duration-200`}
     >
       <p className="text-white/80 text-sm font-medium">{label}</p>

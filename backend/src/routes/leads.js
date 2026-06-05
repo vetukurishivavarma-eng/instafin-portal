@@ -1176,7 +1176,9 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
 
     const loanTypeMap = {};
     (leads || []).forEach(lead => {
-      const type = lead.loan_type || 'Unknown';
+      let type = (lead.loan_type || 'Unknown').trim();
+      // Normalize: replace underscores with spaces, title-case
+      type = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       if (!loanTypeMap[type]) {
         loanTypeMap[type] = { count: 0, totalSanctioned: 0, totalDisbursed: 0 };
       }
