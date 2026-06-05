@@ -943,7 +943,7 @@ export default function ChecklistsPage() {
                               const showForm = showUploadForm === item.id;
 
                               return (
-                                <li key={item.id} className={`px-5 py-4 ${uploadedFiles.length > 0 ? 'bg-green-50' : ''}`}>
+                                <li key={item.id} className={`px-5 py-4 ${uploadedFiles.length > 0 ? 'bg-green-50' : item.required ? 'bg-red-50/60' : ''}`}>
                                   {/* Document header row */}
                                   <div className="flex items-center gap-3 mb-2">
                                     {/* Status icon */}
@@ -978,7 +978,7 @@ export default function ChecklistsPage() {
                                     {/* Required/Optional badge */}
                                     <div className="flex-shrink-0">
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                        item.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'
+                                        item.required ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                                       }`}>
                                         {item.required ? 'Required' : 'Optional'}
                                       </span>

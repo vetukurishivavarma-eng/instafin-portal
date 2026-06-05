@@ -1096,7 +1096,7 @@ export default function CustomerLoginPage() {
                           const showForm = showUploadForm === item.id;
 
                           return (
-                            <li key={item.id} className={`px-4 py-3 ${uploadedFiles.length > 0 ? 'bg-green-50/50' : ''}`}>
+                            <li key={item.id} className={`px-4 py-3 ${uploadedFiles.length > 0 ? 'bg-green-50/50' : item.required ? 'bg-red-50/60' : ''}`}>
                               <div className="flex items-center gap-3">
                                 {/* Status dot */}
                                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
