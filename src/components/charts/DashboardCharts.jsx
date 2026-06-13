@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler, LineController } from 'chart.js';
-import { Doughnut, Bar } from 'react-chartjs-2';
+import { Doughnut } from 'react-chartjs-2';
 import { useAuth } from '../../contexts/AuthContext';
 import API_BASE from '../../config/api';
 
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler, LineController);
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 // Format currency in Indian format
 const formatCurrency = (amount) => {
@@ -12,16 +12,6 @@ const formatCurrency = (amount) => {
   if (num >= 10000000) return `\u20B9${(num / 10000000).toFixed(2)}Cr`;
   if (num >= 100000) return `\u20B9${(num / 100000).toFixed(1)}L`;
   return `\u20B9${num.toLocaleString('en-IN')}`;
-};
-
-// Short month label formatter
-const formatMonth = (monthKey) => {
-  if (!monthKey || !monthKey.includes('-')) return monthKey || '';
-  const [y, m] = monthKey.split('-');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthIndex = parseInt(m, 10) - 1;
-  if (monthIndex < 0 || monthIndex > 11 || !y) return monthKey;
-  return `${months[monthIndex]} ${y.slice(2)}`;
 };
 
 // Download chart as PNG
@@ -66,10 +56,8 @@ function getPeriodKey(dateStr) {
 export default function DashboardCharts() {
   const { accessToken, refreshAccessToken } = useAuth();
   const statusChartRef = useRef(null);
-  const trendChartRef = useRef(null);
   const [allLeads, setAllLeads] = useState([]);
   const [loanTypeData, setLoanTypeData] = useState(null);
-  const [monthlyTrend, setMonthlyTrend] = useState(null);
   const [selectedLoanType, setSelectedLoanType] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -132,16 +120,14 @@ export default function DashboardCharts() {
       });
 
     try {
-      const [leadsData, loanType, trend] = await Promise.all([
+      const [leadsData, loanType] = await Promise.all([
         fetchWithAuth(`${API_BASE}/leads`).then(r => r.data || r || []),
         fetchWithAuth(`${API_BASE}/leads/stats/loan-type-distribution`),
-        fetchWithAuth(`${API_BASE}/leads/stats/monthly-trend`),
       ]);
       // leadsData might be { data: [...] } from the API
       const leads = Array.isArray(leadsData) ? leadsData : (leadsData.data || []);
       setAllLeads(leads);
       setLoanTypeData(loanType);
-      setMonthlyTrend(trend);
     } catch (err) {
       if (err?.status === 401) {
         const refreshed = await refreshAccessToken();
@@ -149,15 +135,13 @@ export default function DashboardCharts() {
           const token = localStorage.getItem('instafin_token');
           if (token) {
             try {
-              const [leadsRes, loanType, trend] = await Promise.all([
+              const [leadsRes, loanType] = await Promise.all([
                 fetch(`${API_BASE}/leads`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_BASE}/leads/stats/loan-type-distribution`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_BASE}/leads/stats/monthly-trend`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
               ]);
               const leads = Array.isArray(leadsRes) ? leadsRes : (leadsRes.data || []);
               setAllLeads(leads);
               setLoanTypeData(loanType);
-              setMonthlyTrend(trend);
             } catch {}
           }
         }
@@ -182,10 +166,6 @@ export default function DashboardCharts() {
     downloadChart(statusChartRef, 'lead-status-distribution');
   }, []);
 
-  const handleDownloadTrend = useCallback(() => {
-    downloadChart(trendChartRef, 'monthly-leads-trend');
-  }, []);
-
   if (loading) return <div className="text-center py-8">Loading charts...</div>;
 
   const statusChartData = Object.keys(filteredStatusMap).length > 0 ? {
@@ -203,145 +183,6 @@ export default function DashboardCharts() {
 
   // Selected loan type details
   const selectedDetail = selectedLoanType && filteredLoanTypeMap[selectedLoanType] ? filteredLoanTypeMap[selectedLoanType] : null;
-
-  // Build monthly trend combo chart: bars for leads, lines for amounts
-  let trendChartData = null;
-  if (monthlyTrend && monthlyTrend.length > 0) {
-    const labels = monthlyTrend.map(d => formatMonth(d.month));
-    const counts = monthlyTrend.map(d => d.count);
-    const expected = monthlyTrend.map(d => Math.round((d.totalExpected || 0) / 10000) / 10);
-    const sanctioned = monthlyTrend.map(d => Math.round((d.totalSanctioned || 0) / 10000) / 10);
-    const disbursed = monthlyTrend.map(d => Math.round((d.totalDisbursed || 0) / 10000) / 10);
-
-    trendChartData = {
-      labels,
-      datasets: [
-        {
-          type: 'bar',
-          label: 'Leads',
-          data: counts,
-          backgroundColor: 'rgba(99, 102, 241, 0.85)',
-          borderRadius: 8,
-          borderSkipped: false,
-          yAxisID: 'y',
-          order: 2
-        },
-        {
-          type: 'line',
-          label: 'Expected (\u20B9L)',
-          data: expected,
-          borderColor: '#F59E0B',
-          backgroundColor: 'rgba(245, 158, 11, 0.08)',
-          fill: true,
-          tension: 0.3,
-          borderDash: [6, 3],
-          pointBackgroundColor: '#F59E0B',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          borderWidth: 2,
-          yAxisID: 'y1',
-          order: 1
-        },
-        {
-          type: 'line',
-          label: 'Sanctioned (\u20B9L)',
-          data: sanctioned,
-          borderColor: '#10B981',
-          backgroundColor: 'rgba(16, 185, 129, 0.08)',
-          fill: true,
-          tension: 0.3,
-          pointBackgroundColor: '#10B981',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          borderWidth: 2,
-          yAxisID: 'y1',
-          order: 1
-        },
-        {
-          type: 'line',
-          label: 'Disbursed (\u20B9L)',
-          data: disbursed,
-          borderColor: '#8B5CF6',
-          backgroundColor: 'rgba(139, 92, 246, 0.08)',
-          fill: true,
-          tension: 0.3,
-          borderDash: [3, 3],
-          pointBackgroundColor: '#8B5CF6',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          borderWidth: 2,
-          yAxisID: 'y1',
-          order: 1
-        }
-      ]
-    };
-  }
-
-  const trendOptions = {
-    maintainAspectRatio: false,
-    responsive: true,
-    interaction: { intersect: false, mode: 'index' },
-    plugins: {
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            const parsed = context.parsed || {};
-            const key = context.dataset.yAxisID === 'y1' ? 'y1' : 'y';
-            const val = parsed[key];
-            if (val === undefined || val === null) return '';
-            const label = context.dataset.label || '';
-            if (label.includes('\u20B9L')) return ` ${label}: \u20B9${Number(val).toFixed(1)}L`;
-            return ` ${label}: ${Number(val)}`;
-          },
-          afterBody: function(context) {
-            const index = context[0]?.dataIndex;
-            const d = monthlyTrend?.[index];
-            if (!d) return [];
-            const lines = [];
-            if (d.totalExpected > 0) lines.push(`Expected: ${formatCurrency(d.totalExpected)}`);
-            if (d.totalSanctioned > 0) lines.push(`Sanctioned: ${formatCurrency(d.totalSanctioned)}`);
-            if (d.totalDisbursed > 0) lines.push(`Disbursed: ${formatCurrency(d.totalDisbursed)}`);
-            return lines;
-          }
-        }
-      },
-      legend: {
-        display: true,
-        position: 'bottom',
-        labels: { usePointStyle: true, padding: 12, font: { size: 10 } }
-      }
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 }
-      },
-      y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        beginAtZero: true,
-        grid: { color: 'rgba(0,0,0,0.05)' },
-        ticks: { font: { size: 10 }, precision: 0, stepSize: 1 },
-        title: { display: true, text: 'Leads', font: { size: 10 } }
-      },
-      y1: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        beginAtZero: true,
-        grid: { drawOnChartArea: false },
-        ticks: { font: { size: 10 }, callback: function(value) { const n = Number(value); return Number.isFinite(n) ? '\u20B9' + n.toFixed(1) + 'L' : ''; } },
-        title: { display: true, text: 'Amount (\u20B9 Lakhs)', font: { size: 10 } }
-      }
-    }
-  };
 
   // Shared download button styles
   const DownloadBtn = ({ onClick }) => (
@@ -550,21 +391,6 @@ export default function DashboardCharts() {
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No loan type data available</div>
           )}
         </div>
-      </div>
-
-      {/* Bottom row: Monthly Trend full width - combo bar/line */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base sm:text-lg font-bold text-gray-800 border-l-4 border-l-purple-500 pl-3">Monthly Leads Overview</h3>
-          {trendChartData && <DownloadBtn onClick={handleDownloadTrend} />}
-        </div>
-        {trendChartData ? (
-          <div className="h-48 sm:h-64">
-            <Bar ref={trendChartRef} data={trendChartData} options={trendOptions} />
-          </div>
-        ) : (
-          <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No trend data available</div>
-        )}
       </div>
     </div>
   );
