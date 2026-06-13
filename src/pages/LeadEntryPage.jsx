@@ -30,16 +30,9 @@ export default function LeadEntryPage() {
     customerName: '',
     mobile: '',
     loanType: '',
-    loanStatus: '',
-    incomeSource: '',
-    residentType: '',
-    businessType: '',
     expectedAmount: '',
     referralCode: '',
-    assignedBanks: [],
-    hasCoapplicant: false,
-    coapplicantName: '',
-    coapplicantIncomeSource: 'salaried'
+    assignedBanks: []
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [assignData, setAssignData] = useState({
@@ -241,32 +234,7 @@ export default function LeadEntryPage() {
     return '';
   };
 
-  const validateLoanStatus = (loanStatus) => {
-    if (!loanStatus) return 'Please select a loan status';
-    return '';
-  };
 
-  const validateIncomeSource = (incomeSource) => {
-    if (!incomeSource) return 'Please select an income source';
-    return '';
-  };
-
-  const validateResidentType = (residentType) => {
-    if (!residentType) return 'Please select a resident type';
-    return '';
-  };
-
-  const validateBusinessType = (businessType, incomeSource) => {
-    if (incomeSource === 'non_salaried' && !businessType) return 'Please select a business type';
-    return '';
-  };
-
-  const validateCoapplicantName = (name, hasCo) => {
-    if (!hasCo) return '';
-    if (!name || !name.trim()) return 'Co-applicant name is required';
-    if (/[0-9]/.test(name)) return 'Name cannot contain numbers';
-    return '';
-  };
 
   const handleNameChange = (e) => {
     const value = e.target.value.replace(/[0-9]/g, '');
@@ -301,11 +269,6 @@ export default function LeadEntryPage() {
       mobile: validateMobile(formData.mobile),
       expectedAmount: validateAmount(formData.expectedAmount),
       loanType: validateLoanType(formData.loanType),
-      loanStatus: validateLoanStatus(formData.loanStatus),
-      incomeSource: validateIncomeSource(formData.incomeSource),
-      residentType: validateResidentType(formData.residentType),
-      businessType: validateBusinessType(formData.businessType, formData.incomeSource),
-      coapplicantName: validateCoapplicantName(formData.coapplicantName, formData.hasCoapplicant)
     };
 
     setFieldErrors(errors);
@@ -343,16 +306,9 @@ export default function LeadEntryPage() {
         customerName: '', 
         mobile: '', 
         loanType: '', 
-        loanStatus: '', 
-        incomeSource: '', 
-        residentType: '', 
-        businessType: '', 
         expectedAmount: '', 
         referralCode: '', 
-        assignedBanks: [],
-        hasCoapplicant: false,
-        coapplicantName: '',
-        coapplicantIncomeSource: 'salaried'
+        assignedBanks: []
       });
       setFieldErrors({});
     } catch (err) {
@@ -872,71 +828,6 @@ export default function LeadEntryPage() {
                   {fieldErrors.loanType && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.loanType}</p>}
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Loan Status Category *</label>
-                  <select
-                    className={`border rounded-2xl px-4 py-3 w-full bg-gray-50/50 transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.loanStatus ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
-                    value={formData.loanStatus}
-                    onChange={(e) => { setFormData(p => ({ ...p, loanStatus: e.target.value })); setFieldErrors(prev => ({ ...prev, loanStatus: '' })); }}
-                  >
-                    <option value="">Select Loan Status</option>
-                    <option value="new">New Loan</option>
-                    <option value="takeover">Takeover</option>
-                    <option value="construction">Construction</option>
-                    <option value="topup_equity">Top-up/Equity</option>
-                  </select>
-                  {fieldErrors.loanStatus && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.loanStatus}</p>}
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-5">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Primary Income Source *</label>
-                  <select
-                    className={`border rounded-2xl px-4 py-3 w-full bg-gray-50/50 transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.incomeSource ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
-                    value={formData.incomeSource}
-                    onChange={(e) => { setFormData(p => ({ ...p, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : p.businessType })); setFieldErrors(prev => ({ ...prev, incomeSource: '' })); }}
-                  >
-                    <option value="">Select Income Source</option>
-                    <option value="salaried">Salaried</option>
-                    <option value="non_salaried">Non-Salaried</option>
-                  </select>
-                  {fieldErrors.incomeSource && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.incomeSource}</p>}
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Resident Type *</label>
-                  <select
-                    className={`border rounded-2xl px-4 py-3 w-full bg-gray-50/50 transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.residentType ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
-                    value={formData.residentType}
-                    onChange={(e) => { setFormData(p => ({ ...p, residentType: e.target.value })); setFieldErrors(prev => ({ ...prev, residentType: '' })); }}
-                  >
-                    <option value="">Select Resident Type</option>
-                    <option value="indian_resident">Indian Resident</option>
-                    <option value="nri">NRI</option>
-                    <option value="merchant_navy">Merchant Navy</option>
-                  </select>
-                  {fieldErrors.residentType && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.residentType}</p>}
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-5">
-                {formData.incomeSource !== 'salaried' && (
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Business Structure Type *</label>
-                    <select
-                      className={`border rounded-2xl px-4 py-3 w-full bg-gray-50/50 transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.businessType ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
-                      value={formData.businessType}
-                      onChange={(e) => { setFormData(p => ({ ...p, businessType: e.target.value })); setFieldErrors(prev => ({ ...prev, businessType: '' })); }}
-                    >
-                      <option value="">Select Business Type</option>
-                      <option value="proprietor">Proprietor</option>
-                      <option value="partnership">Partnership</option>
-                      <option value="pvt_ltd">Pvt Ltd</option>
-                      <option value="llp">LLP</option>
-                    </select>
-                    {fieldErrors.businessType && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.businessType}</p>}
-                  </div>
-                )}
-                <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Expected Amount (INR) *</label>
                   <input
                     type="text"
@@ -959,56 +850,7 @@ export default function LeadEntryPage() {
                 </div>
               </div>
 
-              {/* Coapplicant Toggle Box */}
-              <div className="py-2">
-                <label className="flex items-center gap-3 cursor-pointer select-none group">
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5 rounded-lg border-gray-300 text-blue-700 focus:ring-blue-500 cursor-pointer group-hover:scale-105 transition-all"
-                    checked={formData.hasCoapplicant}
-                    onChange={(e) => setFormData(p => ({ 
-                      ...p, 
-                      hasCoapplicant: e.target.checked,
-                      coapplicantName: e.target.checked ? p.coapplicantName : '',
-                      coapplicantIncomeSource: e.target.checked ? p.coapplicantIncomeSource || 'salaried' : ''
-                    }))}
-                  />
-                  <span className="font-bold text-gray-700 text-base group-hover:text-blue-700 transition-colors">Add a Co-applicant for this loan</span>
-                </label>
-              </div>
 
-              {/* Co-applicant Details Panel */}
-              {formData.hasCoapplicant && (
-                <div className="grid md:grid-cols-2 gap-5 p-5 bg-gradient-to-r from-blue-50/60 to-indigo-50/40 rounded-2xl border border-blue-100/50 mb-4 animate-fade-in-up">
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Co-applicant Name *</label>
-                    <input
-                      type="text"
-                      placeholder="Co-applicant Full Name"
-                      className={`border rounded-2xl px-4 py-3 w-full bg-white transition-all focus:ring-2 focus:ring-blue-200 ${fieldErrors.coapplicantName ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
-                      value={formData.coapplicantName}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[0-9]/g, '');
-                        setFormData(p => ({ ...p, coapplicantName: val }));
-                        setFieldErrors(p => ({ ...p, coapplicantName: '' }));
-                      }}
-                      maxLength={50}
-                    />
-                    {fieldErrors.coapplicantName && <p className="text-red-500 text-xs mt-1 font-semibold">{fieldErrors.coapplicantName}</p>}
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Co-applicant Income Source *</label>
-                    <select
-                      className="border rounded-2xl px-4 py-3 w-full bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                      value={formData.coapplicantIncomeSource}
-                      onChange={(e) => setFormData(p => ({ ...p, coapplicantIncomeSource: e.target.value }))}
-                    >
-                      <option value="salaried">Salaried</option>
-                      <option value="non_salaried">Self employed</option>
-                    </select>
-                  </div>
-                </div>
-              )}
 
               <div className="pt-4 flex gap-4">
                 <button 
@@ -1505,64 +1347,7 @@ export default function LeadEntryPage() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Loan Status Category</label>
-                      <select
-                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                        value={editForm.loanStatus || ''}
-                        onChange={e => setEditForm({...editForm, loanStatus: e.target.value})}
-                      >
-                        <option value="">Select Loan Status</option>
-                        <option value="new">New Loan</option>
-                        <option value="takeover">Takeover</option>
-                        <option value="construction">Construction</option>
-                        <option value="topup_equity">Top-up/Equity</option>
-                      </select>
-                    </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Income Source</label>
-                      <select
-                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                        value={editForm.incomeSource || ''}
-                        onChange={e => setEditForm({...editForm, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : (editForm.businessType || '')})}
-                      >
-                        <option value="">Select Income Source</option>
-                        <option value="salaried">Salaried</option>
-                        <option value="non_salaried">Non-Salaried</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Resident Type</label>
-                      <select
-                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                        value={editForm.residentType || ''}
-                        onChange={e => setEditForm({...editForm, residentType: e.target.value})}
-                      >
-                        <option value="">Select Resident Type</option>
-                        <option value="indian_resident">Indian Resident</option>
-                        <option value="nri">NRI</option>
-                        <option value="merchant_navy">Merchant Navy</option>
-                      </select>
-                    </div>
-                  </div>
-                  {editForm.incomeSource !== 'salaried' && (
-                    <div>
-                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Business Structure Type</label>
-                      <select
-                        className="w-full border border-gray-200 rounded-2xl px-4 py-3 bg-gray-50/50 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all font-bold"
-                        value={editForm.businessType || ''}
-                        onChange={e => setEditForm({...editForm, businessType: e.target.value})}
-                      >
-                        <option value="">Select Business Type</option>
-                        <option value="proprietor">Proprietor</option>
-                        <option value="partnership">Partnership</option>
-                        <option value="pvt_ltd">Pvt Ltd</option>
-                        <option value="llp">LLP</option>
-                      </select>
-                    </div>
-                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Expected Amount (INR)</label>
@@ -1803,10 +1588,6 @@ export default function LeadEntryPage() {
                       updateBody.customerName = editForm.customerName;
                       updateBody.mobile = editForm.mobile;
                       updateBody.loanType = editForm.loanType;
-                      updateBody.loanStatus = editForm.loanStatus;
-                      updateBody.incomeSource = editForm.incomeSource;
-                      updateBody.residentType = editForm.residentType;
-                      updateBody.businessType = editForm.businessType;
                       updateBody.expectedAmount = editForm.expectedAmount;
                       updateBody.referralCode = editForm.referralCode;
                       updateBody.hasCoapplicant = editForm.hasCoapplicant || false;

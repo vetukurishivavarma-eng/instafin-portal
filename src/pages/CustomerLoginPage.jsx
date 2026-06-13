@@ -64,6 +64,10 @@ export default function CustomerLoginPage() {
   const [editingCoapplicants, setEditingCoapplicants] = useState(false);
   const [editCoapplicants, setEditCoapplicants] = useState([]);
 
+  // Loan Profile Editing (Loan Status, Income Source, Resident Type, Business Type)
+  const [editingLoanProfile, setEditingLoanProfile] = useState(false);
+  const [editLoanProfileForm, setEditLoanProfileForm] = useState({ loanStatus: '', incomeSource: '', residentType: '', businessType: '' });
+
   // ===== Eligibility Calculator State =====
   const [eligPF, setEligPF] = useState('');
   const [eligIncomeTax, setEligIncomeTax] = useState('');
@@ -577,6 +581,41 @@ export default function CustomerLoginPage() {
       }
     } catch (err) {
       setError('Failed to update expected amount');
+    }
+  };
+
+  // ===== Inline Edit: Loan Profile (Loan Status, Income Source, Resident Type, Business Type) =====
+  const handleSaveLoanProfile = async () => {
+    if (!selectedLead) return;
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(editLoanProfileForm)
+      });
+      if (res.ok) {
+        const updatedLead = {
+          ...selectedLead,
+          loanStatus: editLoanProfileForm.loanStatus,
+          incomeSource: editLoanProfileForm.incomeSource,
+          residentType: editLoanProfileForm.residentType,
+          businessType: editLoanProfileForm.businessType
+        };
+        setSelectedLead(updatedLead);
+        // Reload checklist based on updated profile
+        loadChecklistForLead(updatedLead);
+        setEditingLoanProfile(false);
+        setSuccess('Loan profile updated!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to update loan profile');
+      }
+    } catch (err) {
+      setError('Failed to update loan profile');
     }
   };
 
@@ -1270,6 +1309,127 @@ export default function CustomerLoginPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Loan Profile Section - Loan Status, Income Source, Resident Type, Business Type */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-gray-500 font-medium text-sm">Loan Profile:</span>
+                {!editingLoanProfile && (
+                  <button
+                    onClick={() => {
+                      setEditLoanProfileForm({
+                        loanStatus: selectedLead.loanStatus || '',
+                        incomeSource: selectedLead.incomeSource || '',
+                        residentType: selectedLead.residentType || '',
+                        businessType: selectedLead.businessType || ''
+                      });
+                      setEditingLoanProfile(true);
+                    }}
+                    className="text-xs text-blue-700 font-semibold bg-blue-100 px-2.5 py-1 rounded-lg hover:bg-blue-200 transition-all flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Edit
+                  </button>
+                )}
+              </div>
+
+              {editingLoanProfile ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Status</label>
+                      <select
+                        value={editLoanProfileForm.loanStatus}
+                        onChange={e => setEditLoanProfileForm(p => ({...p, loanStatus: e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      >
+                        <option value="">Select Loan Status</option>
+                        <option value="new">New Loan</option>
+                        <option value="takeover">Takeover</option>
+                        <option value="construction">Construction</option>
+                        <option value="topup_equity">Top-up/Equity</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Income Source</label>
+                      <select
+                        value={editLoanProfileForm.incomeSource}
+                        onChange={e => setEditLoanProfileForm(p => ({...p, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : p.businessType}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      >
+                        <option value="">Select Income Source</option>
+                        <option value="salaried">Salaried</option>
+                        <option value="non_salaried">Non-Salaried</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Resident Type</label>
+                      <select
+                        value={editLoanProfileForm.residentType}
+                        onChange={e => setEditLoanProfileForm(p => ({...p, residentType: e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      >
+                        <option value="">Select Resident Type</option>
+                        <option value="indian_resident">Indian Resident</option>
+                        <option value="nri">NRI</option>
+                        <option value="merchant_navy">Merchant Navy</option>
+                      </select>
+                    </div>
+                    {editLoanProfileForm.incomeSource !== 'salaried' && (
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Business Type</label>
+                        <select
+                          value={editLoanProfileForm.businessType}
+                          onChange={e => setEditLoanProfileForm(p => ({...p, businessType: e.target.value}))}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                        >
+                          <option value="">Select Business Type</option>
+                          <option value="proprietor">Proprietor</option>
+                          <option value="partnership">Partnership</option>
+                          <option value="pvt_ltd">Pvt Ltd</option>
+                          <option value="llp">LLP</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={handleSaveLoanProfile}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingLoanProfile(false)}
+                      className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg font-semibold text-sm hover:bg-gray-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Loan Status</span>
+                    <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{selectedLead.loanStatus?.replace(/_/g, ' ') || 'Not set'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Income Source</span>
+                    <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{selectedLead.incomeSource?.replace(/_/g, ' ') || 'Not set'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Resident Type</span>
+                    <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{selectedLead.residentType?.replace(/_/g, ' ') || 'Not set'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Business Type</span>
+                    <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{selectedLead.incomeSource === 'non_salaried' ? (selectedLead.businessType?.replace(/_/g, ' ') || 'Not set') : 'N/A'}</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Co-applicants Section */}
