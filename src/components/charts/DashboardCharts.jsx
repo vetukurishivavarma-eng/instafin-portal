@@ -6,19 +6,6 @@ import API_BASE from '../../config/api';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler, LineController);
 
-// Format a loan_type key to a display label
-const formatLoanType = (key) => {
-  return key
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
-};
-
-// Color palette for loan type bars
-const LOAN_TYPE_COLORS = [
-  '#6366F1', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#F97316', '#14B8A6', '#84CC16',
-];
-
 // Format currency in Indian format
 const formatCurrency = (amount) => {
   const num = Number(amount) || 0;
@@ -41,7 +28,6 @@ const formatMonth = (monthKey) => {
 function downloadChart(chartRef, filename) {
   const chart = chartRef.current;
   if (!chart) return;
-  // Temporarily enable retina-quality export via devicePixelRatio
   const origRatio = chart.options.devicePixelRatio;
   chart.options.devicePixelRatio = 2;
   chart.update();
@@ -49,19 +35,30 @@ function downloadChart(chartRef, filename) {
   link.download = `${filename}.png`;
   link.href = chart.toBase64Image('image/png', 1);
   link.click();
-  // Restore original resolution
   chart.options.devicePixelRatio = origRatio || 1;
   chart.update();
 }
 
+// Loan type icon based on name
+const getLoanTypeIcon = (name) => {
+  const lower = name.toLowerCase();
+  if (lower.includes('home')) return '🏠';
+  if (lower.includes('lap') || lower.includes('property')) return '🏢';
+  if (lower.includes('msme') || lower.includes('sme') || lower.includes('business')) return '💼';
+  if (lower.includes('personal')) return '👤';
+  if (lower.includes('mudra')) return '💰';
+  if (lower.includes('education')) return '🎓';
+  return '📋';
+};
+
 export default function DashboardCharts() {
   const { accessToken, refreshAccessToken } = useAuth();
   const statusChartRef = useRef(null);
-  const loanTypeChartRef = useRef(null);
   const trendChartRef = useRef(null);
   const [statusData, setStatusData] = useState(null);
   const [loanTypeData, setLoanTypeData] = useState(null);
   const [monthlyTrend, setMonthlyTrend] = useState(null);
+  const [selectedLoanType, setSelectedLoanType] = useState('');
   const [loading, setLoading] = useState(true);
 
   const fetchChartData = useCallback(async () => {
@@ -87,7 +84,6 @@ export default function DashboardCharts() {
       if (err?.status === 401) {
         const refreshed = await refreshAccessToken();
         if (refreshed) {
-          // Token updated in localStorage by refreshAccessToken, read fresh value
           const token = localStorage.getItem('instafin_token');
           if (token) {
             try {
@@ -116,10 +112,6 @@ export default function DashboardCharts() {
     downloadChart(statusChartRef, 'lead-status-distribution');
   }, []);
 
-  const handleDownloadLoanType = useCallback(() => {
-    downloadChart(loanTypeChartRef, 'leads-by-loan-type');
-  }, []);
-
   const handleDownloadTrend = useCallback(() => {
     downloadChart(trendChartRef, 'monthly-leads-trend');
   }, []);
@@ -135,36 +127,14 @@ export default function DashboardCharts() {
     }]
   } : null;
 
-  // Build loan type chart data from the enhanced response format
-  let loanTypeChartData = null;
-  if (loanTypeData) {
-    const labels = Object.keys(loanTypeData);
-    const counts = labels.map(k => loanTypeData[k].count || 0);
-    const sanctioned = labels.map(k => Math.round((loanTypeData[k].totalSanctioned || 0) / 1000));
-    const bgColors = labels.map((_, i) => LOAN_TYPE_COLORS[i % LOAN_TYPE_COLORS.length]);
+  // Build loan type entries sorted by count descending
+  const loanTypeEntries = loanTypeData
+    ? Object.entries(loanTypeData).sort((a, b) => b[1].count - a[1].count)
+    : [];
+  const totalLeads = loanTypeEntries.reduce((sum, [, d]) => sum + d.count, 0);
 
-    loanTypeChartData = {
-      labels: labels.map(formatLoanType),
-      datasets: [
-        {
-          label: 'Leads',
-          data: counts,
-          backgroundColor: bgColors,
-          borderRadius: 6,
-          borderSkipped: false,
-          order: 1
-        },
-        {
-          label: 'Sanctioned (\u20B9K)',
-          data: sanctioned,
-          backgroundColor: bgColors.map(c => c.replace(')', ', 0.15)').replace('rgb', 'rgba')),
-          borderRadius: 6,
-          borderSkipped: false,
-          order: 2
-        }
-      ]
-    };
-  }
+  // Selected loan type details
+  const selectedDetail = selectedLoanType && loanTypeData ? loanTypeData[selectedLoanType] : null;
 
   // Build monthly trend combo chart: bars for leads, lines for amounts
   let trendChartData = null;
@@ -245,41 +215,6 @@ export default function DashboardCharts() {
     };
   }
 
-  const barOptions = {
-    maintainAspectRatio: false,
-    responsive: true,
-    interaction: { intersect: false, mode: 'index' },
-    plugins: {
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            const index = context.dataIndex;
-            const keys = Object.keys(loanTypeData || {});
-            const key = keys[index];
-            if (!key) return '';
-            const d = loanTypeData[key] || {};
-            if (context.dataset.label === 'Leads') return ` Leads: ${d.count || 0}`;
-            if (context.dataset.label === 'Sanctioned (\u20B9K)') return ` Sanctioned: ${formatCurrency(d.totalSanctioned || 0)}`;
-            return '';
-          },
-          afterBody: function(context) {
-            const index = context[0]?.dataIndex;
-            const keys = Object.keys(loanTypeData || {});
-            const key = keys[index];
-            if (!key) return '';
-            const d = loanTypeData[key] || {};
-            return d.totalDisbursed > 0 ? [`Disbursed: ${formatCurrency(d.totalDisbursed)}`] : [];
-          }
-        }
-      },
-      legend: { display: true, position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 11 } } }
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-      y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 }, precision: 0 } }
-    }
-  };
-
   const trendOptions = {
     maintainAspectRatio: false,
     responsive: true,
@@ -356,7 +291,7 @@ export default function DashboardCharts() {
 
   return (
     <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
-      {/* Top row: 2 charts side by side */}
+      {/* Top row: 2 cards side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
           <div className="flex items-center justify-between mb-4">
@@ -371,17 +306,95 @@ export default function DashboardCharts() {
             <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No data</div>
           )}
         </div>
+
+        {/* Leads by Loan Type — Dropdown + Details */}
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h3 className="text-base sm:text-lg font-bold text-gray-800 border-l-4 border-l-indigo-500 pl-3">Leads by Loan Type</h3>
-            {loanTypeChartData && <DownloadBtn onClick={handleDownloadLoanType} />}
           </div>
-          {loanTypeChartData ? (
-            <div className="h-48 sm:h-64">
-              <Bar ref={loanTypeChartRef} data={loanTypeChartData} options={barOptions} />
+          {loanTypeEntries.length > 0 ? (
+            <div className="space-y-4">
+              {/* Dropdown */}
+              <div className="relative">
+                <select
+                  value={selectedLoanType}
+                  onChange={(e) => setSelectedLoanType(e.target.value)}
+                  className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all cursor-pointer"
+                >
+                  <option value="">— All Loan Types ({totalLeads} leads) —</option>
+                  {loanTypeEntries.map(([name, data]) => (
+                    <option key={name} value={name}>
+                      {getLoanTypeIcon(name)} {name} — {data.count} {data.count === 1 ? 'lead' : 'leads'}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Selected detail panel */}
+              {selectedDetail && (
+                <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-4 space-y-3 animate-fade-in-up">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{getLoanTypeIcon(selectedLoanType)}</span>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">{selectedLoanType}</p>
+                      <p className="text-xs text-gray-500">Loan type breakdown</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-indigo-600">{selectedDetail.count}</p>
+                      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Leads</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 text-center">
+                      <p className="text-sm font-bold text-emerald-600 truncate">{formatCurrency(selectedDetail.totalSanctioned)}</p>
+                      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Sanctioned</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 text-center">
+                      <p className="text-sm font-bold text-purple-600 truncate">{formatCurrency(selectedDetail.totalDisbursed)}</p>
+                      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Disbursed</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Compact summary list */}
+              <div className="space-y-1">
+                {loanTypeEntries.map(([name, data]) => {
+                  const pct = totalLeads > 0 ? ((data.count / totalLeads) * 100).toFixed(1) : 0;
+                  const isSelected = selectedLoanType === name;
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => setSelectedLoanType(isSelected ? '' : name)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-all duration-150 text-left ${
+                        isSelected
+                          ? 'bg-indigo-100 text-indigo-900 shadow-sm'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <span className="text-base">{getLoanTypeIcon(name)}</span>
+                      <span className="flex-1 font-semibold truncate">{name}</span>
+                      <span className="font-bold text-gray-900">{data.count}</span>
+                      <span className="text-gray-400 w-10 text-right">{pct}%</span>
+                      {/* Mini bar */}
+                      <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : (
-            <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400 text-sm">No loan type data available</div>
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No loan type data available</div>
           )}
         </div>
       </div>

@@ -294,7 +294,8 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         coapplicantName: coapplicants[0]?.name || "",
         coapplicantIncomeSource: coapplicants[0]?.incomeSource || "",
         createdAt: lead.created_at,
-        isActive: lead.is_active !== false,
+        // Rejected leads are treated as inactive alongside those with is_active = false
+        isActive: lead.is_active !== false && lead.status !== 'Rejected',
         bankDetails: banks.map(b => ({
           id: b.id,
           bankName: b.bank_name,
@@ -973,7 +974,8 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     if (error) throw error;
 
     const allLeads = leads || [];
-    const activeLeads = allLeads.filter(l => l.is_active !== false);
+    // A lead is considered inactive if is_active is false OR status is 'Rejected'
+    const activeLeads = allLeads.filter(l => l.is_active !== false && l.status !== 'Rejected');
     const inactiveCount = allLeads.length - activeLeads.length;
 
     // Fetch lead_banks for active leads only to derive accurate statuses
@@ -1036,6 +1038,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
         stats.disbursed++;
       } else if (derivedStatus === 'Rejected') {
         stats.rejected++;
+        // Rejected leads are counted both as rejected AND as inactive
       }
       // Note: any active lead with unmatched derivedStatus falls through —
       // it still contributes to activeLeads but won't show on any status card.
@@ -1173,7 +1176,46 @@ router.get('/stats/monthly-trend', authenticate, async (req, res) => {
   }
 });
 
-// Loan type distribution for charts — returns count + aggregated amounts per type
+// Semantic loan type normalization — groups known variants (e.g. MSME Loan vs Msme Loan vs msmse)
+const LOAN_TYPE_CANONICAL = {
+  'msme loan': 'MSME Loan',
+  'msme': 'MSME Loan',
+  'msmse': 'MSME Loan',
+  'sme loan': 'MSME Loan',
+  'sme': 'MSME Loan',
+  'home loan': 'Home Loan',
+  'home': 'Home Loan',
+  'house loan': 'Home Loan',
+  'business loan': 'Business Loan',
+  'business': 'Business Loan',
+  'personal loan': 'Personal Loan',
+  'personal': 'Personal Loan',
+  'lap': 'LAP',
+  'loan against property': 'LAP',
+  'mudra loan': 'Mudra Loan',
+  'mudra': 'Mudra Loan',
+  'education loan': 'Education Loan',
+  'education': 'Education Loan',
+};
+
+function normalizeLoanType(raw) {
+  // Step 1: basic cleanup — lowercase, underscores → spaces, collapse whitespace
+  let cleaned = (raw || 'Unknown')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  // Step 2: semantic canonical mapping
+  if (LOAN_TYPE_CANONICAL[cleaned]) {
+    return LOAN_TYPE_CANONICAL[cleaned];
+  }
+
+  // Step 3: fallback — title-case for display
+  return cleaned.replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Loan type distribution for dashboard — returns count + aggregated amounts per canonical type
 router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
   try {
     let query = supabase.from('leads').select('loan_type, sanctioned_amount, disbursed_amount');
@@ -1198,10 +1240,7 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
 
     const loanTypeMap = {};
     (leads || []).forEach(lead => {
-      let type = (lead.loan_type || 'Unknown').trim();
-      // Normalize: lowercase first, replace underscores with spaces, then title-case
-      // This merges variants like 'HOME LOAN', 'home loan', 'Home_Loan' into 'Home Loan'
-      type = type.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const type = normalizeLoanType(lead.loan_type);
       if (!loanTypeMap[type]) {
         loanTypeMap[type] = { count: 0, totalSanctioned: 0, totalDisbursed: 0 };
       }
@@ -1378,10 +1417,10 @@ router.put('/:id/remove-bank', authorize('admin', 'executive'), async (req, res)
       return res.status(400).json({ error: 'Bank name is required' });
     }
 
-    // Fetch current lead to get existing assigned_banks
+    // Fetch current lead to get existing assigned_banks and assigned_to
     const { data: lead, error: fetchError } = await supabase
       .from('leads')
-      .select('assigned_banks, status')
+      .select('assigned_banks, status, assigned_to')
       .eq('id', leadId)
       .single();
 
@@ -1396,10 +1435,11 @@ router.put('/:id/remove-bank', authorize('admin', 'executive'), async (req, res)
     }
     const updatedBanks = existingBanks.filter(b => b !== bankName);
 
-    // Recalculate status: if no banks left, go back to 'Assigned' if previously processing
+    // Recalculate status based on remaining banks and assignment
     let newStatus = lead.status;
-    if (updatedBanks.length === 0 && (lead.status === 'Processing' || lead.status === 'Sanctioned' || lead.status === 'Partially Disbursed')) {
-      newStatus = 'Assigned';
+    if (updatedBanks.length === 0) {
+      // No banks left — go back to pre-bank status: Assigned if assigned to someone, else New
+      newStatus = lead.assigned_to ? 'Assigned' : 'New';
     }
 
     const { data: updatedLead, error: updateError } = await supabase

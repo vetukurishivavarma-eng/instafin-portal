@@ -2,6 +2,7 @@
  * Bulk Document Matcher
  * Matches uploaded filenames to checklist document items based on keywords.
  * Supports scoring, fallback matching, and returns unmatched files for manual assignment.
+ * Supports custom keyword overrides stored in localStorage for admin customization.
  */
 
 import { ChecklistItem } from '../data/types';
@@ -9,9 +10,141 @@ import { ChecklistItem } from '../data/types';
 // Score threshold for a confident match
 const CONFIDENCE_THRESHOLD = 0.6;
 
+// localStorage key for custom keyword overrides
+const CUSTOM_KW_KEY = 'instafin_bulk_kw_overrides';
+
 export interface MatchResult {
   matched: Array<{ file: File; documentId: string; documentName: string }>;
   unmatched: Array<{ file: File; reason: string }>;
+}
+
+// ===== Custom keyword override management =====
+
+/**
+ * Read custom keyword overrides from localStorage.
+ * Format: { [docId]: { keywords: string[]; enabled: boolean } }
+ */
+export function getCustomKeywordOverrides(): Record<string, { keywords: string[]; enabled: boolean }> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(CUSTOM_KW_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save custom keyword overrides to localStorage.
+ */
+export function saveCustomKeywordOverrides(overrides: Record<string, { keywords: string[]; enabled: boolean }>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_KW_KEY, JSON.stringify(overrides));
+  } catch (e) {
+    console.error('Failed to save custom keyword overrides:', e);
+  }
+}
+
+/**
+ * Add a custom keyword for a document type.
+ */
+export function addCustomKeyword(docId: string, keyword: string): void {
+  const overrides = getCustomKeywordOverrides();
+  if (!overrides[docId]) {
+    overrides[docId] = { keywords: [], enabled: true };
+  }
+  const kw = keyword.trim().toLowerCase();
+  if (kw && !overrides[docId].keywords.includes(kw)) {
+    overrides[docId].keywords.push(kw);
+    saveCustomKeywordOverrides(overrides);
+  }
+}
+
+/**
+ * Remove a custom keyword from a document type.
+ */
+export function removeCustomKeyword(docId: string, keyword: string): void {
+  const overrides = getCustomKeywordOverrides();
+  if (!overrides[docId]) return;
+  overrides[docId].keywords = overrides[docId].keywords.filter(k => k !== keyword);
+  if (overrides[docId].keywords.length === 0) {
+    delete overrides[docId];
+  }
+  saveCustomKeywordOverrides(overrides);
+}
+
+/**
+ * Toggle whether custom keywords are enabled for a document type.
+ */
+export function toggleCustomKeywords(docId: string, enabled: boolean): void {
+  const overrides = getCustomKeywordOverrides();
+  if (!overrides[docId]) {
+    if (enabled) {
+      overrides[docId] = { keywords: [], enabled: true };
+    }
+  } else {
+    overrides[docId].enabled = enabled;
+  }
+  saveCustomKeywordOverrides(overrides);
+}
+
+/**
+ * Get the effective (merged built-in + custom overrides) keyword map for a single document ID.
+ */
+export function getEffectiveKeywordGroups(docId: string): string[][] {
+  const builtin = KEYWORD_MAP[docId] || [];
+  const custom = getCustomKeywordOverrides();
+  const override = custom[docId];
+  if (override && override.enabled && override.keywords.length > 0) {
+    // Return built-in groups PLUS each custom keyword as its own group
+    return [...builtin, ...override.keywords.map(kw => [kw])];
+  }
+  return builtin;
+}
+
+/**
+ * Get the full effective keyword map (all docIds merged with overrides).
+ */
+export function getFullEffectiveKeywordMap(): Record<string, string[][]> {
+  const allDocIds = new Set([...Object.keys(KEYWORD_MAP)]);
+  const custom = getCustomKeywordOverrides();
+  Object.keys(custom).forEach(id => allDocIds.add(id));
+  
+  const result: Record<string, string[][]> = {};
+  for (const docId of allDocIds) {
+    const groups = getEffectiveKeywordGroups(docId);
+    if (groups.length > 0) {
+      result[docId] = groups;
+    }
+  }
+  return result;
+}
+
+/**
+ * Get the built-in keyword map (read-only copy for display).
+ */
+export function getBuiltinKeywordMap(): Record<string, string[][]> {
+  return { ...KEYWORD_MAP };
+}
+
+/**
+ * Reset all custom keyword overrides for a single document type.
+ */
+export function resetCustomKeywordsForDoc(docId: string): void {
+  const overrides = getCustomKeywordOverrides();
+  delete overrides[docId];
+  saveCustomKeywordOverrides(overrides);
+}
+
+/**
+ * Reset ALL custom keyword overrides.
+ */
+export function resetAllCustomKeywords(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(CUSTOM_KW_KEY);
+  } catch {}
 }
 
 /**
@@ -451,13 +584,13 @@ const KEYWORD_MAP: Record<string, string[][]> = {
 };
 
 /**
- * Build a flat keyword-to-documentId map for faster matching.
- * Returns: { keyword: [docId, scoreWeight] }
+ * Build a flat keyword-to-documentId map for faster matching using the effective keyword map.
  */
 function buildKeywordIndex(): Map<string, Array<{ docId: string; groupIndex: number }>> {
   const index = new Map<string, Array<{ docId: string; groupIndex: number }>>();
+  const effectiveMap = getFullEffectiveKeywordMap();
   
-  for (const [docId, groups] of Object.entries(KEYWORD_MAP)) {
+  for (const [docId, groups] of Object.entries(effectiveMap)) {
     groups.forEach((keywords, groupIndex) => {
       keywords.forEach(keyword => {
         if (!index.has(keyword)) {
@@ -471,23 +604,20 @@ function buildKeywordIndex(): Map<string, Array<{ docId: string; groupIndex: num
   return index;
 }
 
-const keywordIndex = buildKeywordIndex();
-
 /**
- * Get all unique keywords for faster rejection.
+ * Get all unique keywords from the effective map for faster rejection.
  */
 function getAllKeywords(): Set<string> {
   const keywords = new Set<string>();
-  for (const groups of Object.values(KEYWORD_MAP)) {
+  const effectiveMap = getFullEffectiveKeywordMap();
+  for (const groups of Object.values(effectiveMap)) {
     groups.forEach(group => group.forEach(kw => keywords.add(kw)));
   }
   return keywords;
 }
 
-const allKeywords = getAllKeywords();
-
 /**
- * Try to match a single filename against the keyword map.
+ * Try to match a single filename against the effective keyword map.
  * Returns the matched document ID and name, or null.
  */
 function matchFile(
@@ -501,8 +631,9 @@ function matchFile(
   if (!normalized) return null;
 
   // Quick check: does the filename contain any known keywords?
+  const allKws = getAllKeywords();
   let hasAnyKeyword = false;
-  for (const kw of allKeywords) {
+  for (const kw of allKws) {
     if (normalized.includes(kw)) {
       hasAnyKeyword = true;
       break;
@@ -514,6 +645,9 @@ function matchFile(
   const itemMap = new Map<string, ChecklistItem>();
   checklistItems.forEach(item => itemMap.set(item.id, item));
 
+  // Use effective keyword map (built-in + custom overrides)
+  const effectiveMap = getFullEffectiveKeywordMap();
+  
   // Score each potential match
   const scores: Array<{
     docId: string;
@@ -521,7 +655,7 @@ function matchFile(
     matchedKeywords: string[];
   }> = [];
 
-  for (const [docId, groups] of Object.entries(KEYWORD_MAP)) {
+  for (const [docId, groups] of Object.entries(effectiveMap)) {
     // Skip if this docId isn't in the checklist
     if (!itemMap.has(docId)) continue;
 

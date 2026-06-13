@@ -59,6 +59,9 @@ export default function LeadEntryPage() {
   const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
+  const now = new Date();
+  const [monthFilter, setMonthFilter] = useState(String(now.getMonth() + 1).padStart(2, '0'));
+  const [yearFilter, setYearFilter] = useState(String(now.getFullYear()));
 
   useEffect(() => {
     const statusParam = searchParams.get('status');
@@ -433,12 +436,51 @@ export default function LeadEntryPage() {
   const unassignedLeads = displayLeads.filter(l => !l.assignedTo);
   const assignedLeads = displayLeads.filter(l => l.assignedTo);
 
+  // Get available years from leads data for the year dropdown
+  // Also compute lead counts per (year, month) for count badges
+  const availableYears = new Set();
+  const leadCountByPeriod = {}; // key: "YYYY-MM" -> count
+  displayLeads.forEach(lead => {
+    const dateStr = lead.entryDate || lead.createdAt;
+    if (dateStr) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const year = String(d.getFullYear());
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        availableYears.add(year);
+        const key = `${year}-${month}`;
+        leadCountByPeriod[key] = (leadCountByPeriod[key] || 0) + 1;
+      }
+    }
+  });
+  const currentPeriodKey = `${yearFilter}-${monthFilter}`;
+  const currentPeriodCount = leadCountByPeriod[currentPeriodKey] || 0;
+
+  // Month names for display
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
   const filteredLeads = displayLeads.filter(lead => {
     const matchesSearch = !searchTerm ||
       lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.mobile?.includes(searchTerm);
     const matchesStatus = !statusFilter || lead.status === statusFilter || (statusFilter === 'Inactive' && lead.isActive === false);
-    return matchesSearch && matchesStatus;
+
+    // Month/Year filter
+    let matchesMonth = true;
+    const dateStr = lead.entryDate || lead.createdAt;
+    if (dateStr) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const leadMonth = String(d.getMonth() + 1).padStart(2, '0');
+        const leadYear = String(d.getFullYear());
+        matchesMonth = leadMonth === monthFilter && leadYear === yearFilter;
+      }
+    } else {
+      // If no date, don't show unless "All" is somehow selected (but we always have defaults)
+      matchesMonth = false;
+    }
+
+    return matchesSearch && matchesStatus && matchesMonth;
   });
 
 
@@ -535,11 +577,11 @@ export default function LeadEntryPage() {
 
       </div>
 
-      {/* ACTIVE LEADS PIPELINE GRID */}
+      {/* LEADS PIPELINE GRID */}
       <div className="max-w-6xl mx-auto mt-10 sm:mt-14 pt-6 sm:pt-10 border-t border-gray-250/60">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between border-b pb-4 sm:pb-5 mb-6 sm:mb-8">
           <div>
-            <h2 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Active Leads Pipeline</h2>
+            <h2 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Leads Pipeline</h2>
             <p className="text-xs sm:text-base text-gray-500 font-medium mt-1">Track and manage individual customer files and loan status cards.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
@@ -550,6 +592,49 @@ export default function LeadEntryPage() {
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)} 
             />
+            {/* Month filter */}
+            <div className="relative">
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="border border-gray-200 rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm font-bold w-full sm:w-auto appearance-none pr-8"
+              >
+                {MONTH_NAMES.map((name, i) => {
+                  const m = String(i + 1).padStart(2, '0');
+                  const key = `${yearFilter}-${m}`;
+                  const cnt = leadCountByPeriod[key] || 0;
+                  return (
+                    <option key={m} value={m}>
+                      {name} {cnt > 0 ? `(${cnt})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              {/* Selected count badge */}
+              {currentPeriodCount > 0 && (
+                <div className="absolute -top-2 -right-2 sm:-top-2.5 sm:-right-2.5 bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-sm border-2 border-white pointer-events-none">
+                  {currentPeriodCount}
+                </div>
+              )}
+            </div>
+            {/* Year filter */}
+            <select
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              className="border border-gray-200 rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm font-bold w-full sm:w-auto"
+            >
+              {[...availableYears].sort().map(year => {
+                // Count leads for this year across all months
+                const yearTotal = Object.entries(leadCountByPeriod)
+                  .filter(([k]) => k.startsWith(year))
+                  .reduce((sum, [, c]) => sum + c, 0);
+                return (
+                  <option key={year} value={year}>
+                    {year} ({yearTotal})
+                  </option>
+                );
+              })}
+            </select>
             <select 
               className="border border-gray-200 rounded-2xl px-4 sm:px-5 py-2.5 sm:py-3 text-sm bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none transition-all shadow-sm font-bold w-full sm:w-auto" 
               value={statusFilter} 
@@ -570,7 +655,7 @@ export default function LeadEntryPage() {
         </div>
 
         {loading && leads.length === 0 ? (
-          <div className="text-center py-16 font-bold text-gray-400 text-lg animate-pulse">Loading leads pipeline...</div>
+          <div className="text-center py-16 font-bold text-gray-400 text-lg animate-pulse">Loading leads...</div>
         ) : filteredLeads.length === 0 ? (
           <div className="bg-white rounded-3xl border border-gray-150 p-16 text-center text-gray-400 font-bold shadow-sm text-lg">
             No leads found matching current criteria.

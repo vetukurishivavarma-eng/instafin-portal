@@ -45,6 +45,7 @@ export default function CustomerLoginPage() {
   const [bulkFiles, setBulkFiles] = useState([]);
   const [bulkPreview, setBulkPreview] = useState(null); // { matched: [], unmatched: [] }
   const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(null); // { current: 0, total: 0, currentFileName: '' }
   const [showBulkArea, setShowBulkArea] = useState(false);
 
   // AI Summary / Auto-fill
@@ -414,12 +415,16 @@ export default function CustomerLoginPage() {
 
   const handleUploadAllMatched = async () => {
     if (!bulkPreview || !bulkPreview.matched.length || !selectedLead) return;
+    const total = bulkPreview.matched.length;
     setBulkUploading(true);
+    setBulkProgress({ current: 0, total, currentFileName: '' });
     setError('');
     setSuccess('');
     let successCount = 0;
     let failCount = 0;
-    for (const { file, documentId, documentName } of bulkPreview.matched) {
+    for (let i = 0; i < total; i++) {
+      const { file, documentId, documentName } = bulkPreview.matched[i];
+      setBulkProgress({ current: i + 1, total, currentFileName: file.name });
       try {
         const formData = new FormData();
         formData.append('leadId', selectedLead.id);
@@ -446,6 +451,7 @@ export default function CustomerLoginPage() {
     
     fetchChecklistStatuses(selectedLead.id);
     setBulkUploading(false);
+    setBulkProgress(null);
     setBulkFiles([]);
     setBulkPreview(null);
     setShowBulkArea(false);
@@ -1737,27 +1743,35 @@ export default function CustomerLoginPage() {
                                 </div>
                               ))}
                             </div>
-                            <button
-                              onClick={handleUploadAllMatched}
-                              disabled={bulkUploading}
-                              className={`mt-2 w-full py-2 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
-                                bulkUploading
-                                  ? 'bg-gray-300 text-gray-500 cursor-wait'
-                                  : 'bg-green-600 text-white hover:bg-green-700'
-                              }`}
-                            >
-                              {bulkUploading ? (
-                                <>
-                                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                  </svg>
-                                  Uploading {bulkPreview.matched.length} file(s)...
-                                </>
-                              ) : (
-                                <>Upload All {bulkPreview.matched.length} Matched Files</>
-                              )}
-                            </button>
+                            {bulkProgress ? (
+                              <div className="mt-2 space-y-1.5">
+                                {/* Progress Bar */}
+                                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-300 ease-out"
+                                    style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-gray-600">
+                                  <span className="truncate flex-1">
+                                    <svg className="inline-block w-3 h-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    {bulkProgress.currentFileName}
+                                  </span>
+                                  <span className="font-semibold ml-2">{bulkProgress.current}/{bulkProgress.total}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={handleUploadAllMatched}
+                                disabled={bulkUploading}
+                                className="mt-2 w-full py-2 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                              >
+                                Upload All {bulkPreview.matched.length} Matched Files
+                              </button>
+                            )}
                           </div>
                         )}
 

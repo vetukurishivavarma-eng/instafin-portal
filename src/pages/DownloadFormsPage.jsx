@@ -10,6 +10,15 @@ import {
 import { downloadPDF } from '../export/pdf';
 import { useAuth } from '../contexts/AuthContext';
 import { ALL_BANKS } from '../data/banks';
+import { 
+  getBuiltinKeywordMap, 
+  getCustomKeywordOverrides,
+  addCustomKeyword, 
+  removeCustomKeyword, 
+  resetCustomKeywordsForDoc,
+  resetAllCustomKeywords
+} from '../utils/bulkDocMatcher';
+import KeywordConfigPanel from '../components/KeywordConfigPanel';
 import API_BASE from '../config/api';
 
 const loanTypeLabels = {
@@ -694,6 +703,18 @@ export default function DownloadFormsPage() {
         >
           🏷️ Loan Types ({loanTypes.length})
         </button>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => { setActiveTab('bulk_keywords'); setSuccess(''); }}
+            className={`px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center gap-2 ${
+              activeTab === 'bulk_keywords'
+                ? 'bg-violet-700 text-white shadow-md shadow-violet-500/10'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            🔑 Bulk Upload Keywords
+          </button>
+        )}
       </div>
 
       {/* ──────────────────────────────────────── */}
@@ -1333,6 +1354,13 @@ export default function DownloadFormsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ──────────────────────────────────────── */}
+      {/* TAB 5: BULK UPLOAD KEYWORDS CONFIG       */}
+      {/* ──────────────────────────────────────── */}
+      {activeTab === 'bulk_keywords' && (
+        <KeywordConfigPanel user={user} success={success} setSuccess={setSuccess} setError={setError} />
       )}
 
       {/* ──────────────────────────────────────── */}
