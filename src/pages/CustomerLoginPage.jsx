@@ -126,14 +126,14 @@ export default function CustomerLoginPage() {
       const data = await res.json();
       const allLeads = data.data || [];
 
-      // Filter by assigned executive (for exec) or admin view
+      // Only show assigned leads in Customer Login
       const executiveName = isImpersonating ? impersonating?.name : null;
-      let filtered = executiveName
-        ? allLeads.filter(l => l.assignedTo === executiveName)
-        : allLeads;
+      let filtered = allLeads.filter(l => l.assignedTo);
 
-      // If logged in as executive (not admin), filter by assigned
-      if (user?.role === 'executive' && !isImpersonating) {
+      // If impersonating or logged in as executive, further filter by that executive
+      if (executiveName) {
+        filtered = filtered.filter(l => l.assignedTo === executiveName);
+      } else if (user?.role === 'executive') {
         filtered = filtered.filter(l => l.assignedTo === user.name);
       }
 
@@ -1190,7 +1190,7 @@ export default function CustomerLoginPage() {
 
       {/* Lead Dropdown */}
       <div ref={dropdownRef} className="relative mb-8 max-w-2xl mx-auto">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
+        <label htmlFor="lead_search" className="block text-sm font-semibold text-gray-700 mb-2">
           Select Lead
           {leads.length > 0 && (
             <span className="text-gray-400 font-normal ml-2">({leads.length} available)</span>
@@ -1252,6 +1252,7 @@ export default function CustomerLoginPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
+                  id="lead_search"
                   type="text"
                   placeholder="Search by name, mobile, or loan type..."
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1328,6 +1329,7 @@ export default function CustomerLoginPage() {
                     <div className="relative flex-1">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-xs">₹</span>
                       <input
+                        id="expected_amount"
                         type="text"
                         inputMode="numeric"
                         value={editExpectedAmountValue}
@@ -1460,8 +1462,8 @@ export default function CustomerLoginPage() {
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
-                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Type</label>
-                      <select
+                      <label htmlFor="loan_type" className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Type</label>
+                      <select id="loan_type"
                         value={editLoanProfileForm.loanType}
                         onChange={e => setEditLoanProfileForm(p => ({...p, loanType: e.target.value}))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -1477,8 +1479,8 @@ export default function CustomerLoginPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Status</label>
-                      <select
+                      <label htmlFor="loan_status" className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Status</label>
+                      <select id="loan_status"
                         value={editLoanProfileForm.loanStatus}
                         onChange={e => setEditLoanProfileForm(p => ({...p, loanStatus: e.target.value}))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -1491,8 +1493,8 @@ export default function CustomerLoginPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Income Source</label>
-                      <select
+                      <label htmlFor="income_source" className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Income Source</label>
+                      <select id="income_source"
                         value={editLoanProfileForm.incomeSource}
                         onChange={e => setEditLoanProfileForm(p => ({...p, incomeSource: e.target.value, businessType: e.target.value === 'salaried' ? '' : p.businessType}))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -1503,8 +1505,8 @@ export default function CustomerLoginPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Resident Type</label>
-                      <select
+                      <label htmlFor="resident_type" className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Resident Type</label>
+                      <select id="resident_type"
                         value={editLoanProfileForm.residentType}
                         onChange={e => setEditLoanProfileForm(p => ({...p, residentType: e.target.value}))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -1517,8 +1519,8 @@ export default function CustomerLoginPage() {
                     </div>
                     {editLoanProfileForm.incomeSource !== 'salaried' && (
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Business Type</label>
-                        <select
+                        <label htmlFor="business_type" className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Business Type</label>
+                        <select id="business_type"
                           value={editLoanProfileForm.businessType}
                           onChange={e => setEditLoanProfileForm(p => ({...p, businessType: e.target.value}))}
                           className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -1614,8 +1616,8 @@ export default function CustomerLoginPage() {
                 </h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Select Bank</label>
-                    <select
+                    <label htmlFor="select_bank" className="text-xs font-semibold text-gray-600 mb-1 block">Select Bank</label>
+                    <select id="select_bank"
                       value={newBankName}
                       onChange={(e) => { setNewBankName(e.target.value); setCustomBankName(''); }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -1648,8 +1650,8 @@ export default function CustomerLoginPage() {
                   </div>
                   {newBankName === 'other' && (
                     <div>
-                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Custom Bank Name</label>
-                      <input
+                      <label htmlFor="custom_bank_name" className="text-xs font-semibold text-gray-600 mb-1 block">Custom Bank Name</label>
+                      <input id="custom_bank_name"
                         type="text"
                         value={customBankName}
                         onChange={(e) => setCustomBankName(e.target.value)}
@@ -1659,8 +1661,8 @@ export default function CustomerLoginPage() {
                     </div>
                   )}
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Branch Name (optional)</label>
-                    <input
+                    <label htmlFor="branch_name" className="text-xs font-semibold text-gray-600 mb-1 block">Branch Name (optional)</label>
+                    <input id="branch_name"
                       type="text"
                       value={newBranchName}
                       onChange={(e) => setNewBranchName(e.target.value)}
@@ -1714,8 +1716,8 @@ export default function CustomerLoginPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Full Name</label>
-                          <input
+                          <label htmlFor={`coapp_name_${index}`} className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Full Name</label>
+                          <input id={`coapp_name_${index}`}
                             type="text"
                             value={coapp.name}
                             onChange={(e) => handleUpdateCoapplicant(index, 'name', e.target.value)}
@@ -1724,8 +1726,8 @@ export default function CustomerLoginPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Income Source</label>
-                          <select
+                          <label htmlFor={`coapp_income_source_${index}`} className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Income Source</label>
+                          <select id={`coapp_income_source_${index}`}
                             value={coapp.incomeSource}
                             onChange={(e) => handleUpdateCoapplicant(index, 'incomeSource', e.target.value)}
                             className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
@@ -2543,15 +2545,15 @@ export default function CustomerLoginPage() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Provident Fund</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligPF} onChange={eligHandleNumInput(setEligPF)} placeholder="0" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_pf" value={eligPF} onChange={eligHandleNumInput(setEligPF)} placeholder="0" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Income Tax</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligIncomeTax} onChange={eligHandleNumInput(setEligIncomeTax)} placeholder="0" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_income_tax" value={eligIncomeTax} onChange={eligHandleNumInput(setEligIncomeTax)} placeholder="0" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Profession Tax</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligProfessionTax} onChange={eligHandleNumInput(setEligProfessionTax)} placeholder="0" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_profession_tax" value={eligProfessionTax} onChange={eligHandleNumInput(setEligProfessionTax)} placeholder="0" />
                     </div>
                   </div>
                 </div>
@@ -2561,11 +2563,11 @@ export default function CustomerLoginPage() {
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Gross Salary (Monthly)</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligGrossSalary} onChange={eligHandleNumInput(setEligGrossSalary)} placeholder="0" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_gross_salary" value={eligGrossSalary} onChange={eligHandleNumInput(setEligGrossSalary)} placeholder="0" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Proposed Rental Income</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligRentalIncome} onChange={eligHandleNumInput(setEligRentalIncome)} placeholder="0" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_rental_income" value={eligRentalIncome} onChange={eligHandleNumInput(setEligRentalIncome)} placeholder="0" />
                     </div>
                     <div>
                       <label className="flex items-center gap-2 cursor-pointer select-none group">
@@ -2584,7 +2586,7 @@ export default function CustomerLoginPage() {
                           <label className="text-xs text-gray-600 mb-1 block">
                             Co-applicant Monthly Gross {selectedLead?.coapplicantName ? `(${selectedLead.coapplicantName})` : ''}
                           </label>
-                          <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligCoapplicantGross} onChange={eligHandleNumInput(setEligCoapplicantGross)} placeholder="0" />
+                          <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_coapp_gross" value={eligCoapplicantGross} onChange={eligHandleNumInput(setEligCoapplicantGross)} placeholder="0" />
                         </div>
                       )}
                     </div>
@@ -2596,7 +2598,7 @@ export default function CustomerLoginPage() {
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">EMI/NMI % (as per NAI)</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligEmiNmiPercent} onChange={eligHandleNumInput(setEligEmiNmiPercent)} placeholder="50" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_emi_nmi" value={eligEmiNmiPercent} onChange={eligHandleNumInput(setEligEmiNmiPercent)} placeholder="50" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Existing Bank EMIs</label>
@@ -2619,15 +2621,15 @@ export default function CustomerLoginPage() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Principal</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligPrincipal} onChange={eligHandleNumInput(setEligPrincipal)} placeholder="100000" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_principal" value={eligPrincipal} onChange={eligHandleNumInput(setEligPrincipal)} placeholder="100000" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Rate (% p.a.)</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligRate} onChange={eligHandleNumInput(setEligRate)} placeholder="8.5" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_rate" value={eligRate} onChange={eligHandleNumInput(setEligRate)} placeholder="8.5" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-600 mb-1 block">Period (months)</label>
-                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" value={eligPeriod} onChange={eligHandleNumInput(setEligPeriod)} placeholder="240" />
+                      <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2 text-sm" id="elig_period" value={eligPeriod} onChange={eligHandleNumInput(setEligPeriod)} placeholder="240" />
                     </div>
                   </div>
                 </div>

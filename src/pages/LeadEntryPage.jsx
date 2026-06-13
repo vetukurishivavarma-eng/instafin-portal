@@ -628,7 +628,7 @@ export default function LeadEntryPage() {
                   <th className="p-3 sm:p-4 mobile-hide">Banks</th>
                   <th className="p-3 sm:p-4">Status</th>
                   <th className="p-3 sm:p-4 mobile-hide">Entry Date</th>
-                  {(effectiveRole === 'admin' || isImpersonating) && <th className="p-3 sm:p-4 text-center mobile-hide">Actions</th>}
+                  {(effectiveRole === 'admin' || isImpersonating || effectiveRole === 'executive') && <th className="p-3 sm:p-4 text-center mobile-hide">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y text-sm">
@@ -746,6 +746,35 @@ export default function LeadEntryPage() {
                             {lead.isActive === false ? 'Restore' : 'Inactive'}
                           </button>
                         </div>
+                      </td>
+                    )}
+                    {effectiveRole === 'executive' && !isImpersonating && (
+                      <td className="p-3 sm:p-4 text-center mobile-hide" data-label="Actions">
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const reason = window.prompt('Please provide a reason for delete request:');
+                            if (reason === null) return; // cancelled
+                            try {
+                              const res = await fetch(`${API_BASE}/leads/${lead.id}/request-delete`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ reason: reason || 'Not specified' })
+                              });
+                              if (res.ok) {
+                                setSuccess('Delete request submitted to admin for approval');
+                              } else {
+                                const err = await res.json();
+                                setError(err.error || 'Failed to submit delete request');
+                              }
+                            } catch (err) {
+                              setError('Failed to submit delete request');
+                            }
+                          }}
+                          className="px-2 sm:px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                        >
+                          Request Delete
+                        </button>
                       </td>
                     )}
                   </tr>
