@@ -12,6 +12,10 @@ function getPeriodKey(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function pickDate(lead) {
+  return lead.entryDate || lead.createdAt;
+}
+
 // Compute single lead's revenue (1% of disbursed or sanctioned amount)
 function calcLeadRevenue(lead) {
   const amount = parseFloat(lead.disbursedAmount || lead.sanctionedAmount || lead.expectedAmount) || 0;
@@ -54,7 +58,7 @@ export default function RevenuePage() {
     const monthMap = {};
 
     allLeads.forEach(l => {
-      const key = getPeriodKey(l.createdAt || l.entryDate);
+      const key = getPeriodKey(pickDate(l));
       if (!key) return;
 
       if (!monthMap[key]) {

@@ -70,7 +70,7 @@ export default function DashboardCharts() {
   // Available years/months from data
   const periods = new Map(); // "YYYY-MM" → { year, month, label, count }
   allLeads.forEach(l => {
-    const key = getPeriodKey(l.createdAt || l.entryDate);
+    const key = getPeriodKey(l.entryDate || l.createdAt);
     if (key) {
       if (!periods.has(key)) {
         const [y, m] = key.split('-');
@@ -82,7 +82,7 @@ export default function DashboardCharts() {
 
   // Filter leads by year + month + active/inactive
   const filteredLeads = allLeads.filter(l => {
-    const key = getPeriodKey(l.createdAt || l.entryDate);
+    const key = getPeriodKey(l.entryDate || l.createdAt);
     if (!key) return false;
     if (key !== `${filterYear}-${filterMonth}`) return false;
     if (filterActive === 'active') return l.isActive !== false;
