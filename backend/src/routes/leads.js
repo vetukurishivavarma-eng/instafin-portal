@@ -1454,6 +1454,11 @@ router.put('/:id/remove-bank', authorize('admin', 'executive'), async (req, res)
 
     if (updateError) throw updateError;
 
+    // Record status change in history if status changed
+    if (newStatus !== lead.status) {
+      await recordStatusChange(leadId, lead.status, newStatus, req.user?.name || req.user?.email || 'system', `Bank ${bankName} removed`);
+    }
+
     // Also delete the lead_banks record for tracking
     const { error: bankRowError } = await supabase
       .from('lead_banks')

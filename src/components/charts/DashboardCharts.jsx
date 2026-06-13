@@ -51,15 +51,75 @@ const getLoanTypeIcon = (name) => {
   return '📋';
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const STATUS_COLORS = ['#FBBF24', '#3B82F6', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#EF4444'];
+
+// Helper: extract YYYY-MM from a date string
+function getPeriodKey(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function DashboardCharts() {
   const { accessToken, refreshAccessToken } = useAuth();
   const statusChartRef = useRef(null);
   const trendChartRef = useRef(null);
-  const [statusData, setStatusData] = useState(null);
+  const [allLeads, setAllLeads] = useState([]);
   const [loanTypeData, setLoanTypeData] = useState(null);
   const [monthlyTrend, setMonthlyTrend] = useState(null);
   const [selectedLoanType, setSelectedLoanType] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Filters
+  const now = new Date();
+  const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
+  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
+  const [filterActive, setFilterActive] = useState('active'); // 'active' | 'inactive' | 'all'
+
+  // Available years/months from data
+  const periods = new Map(); // "YYYY-MM" → { year, month, label, count }
+  allLeads.forEach(l => {
+    const key = getPeriodKey(l.createdAt || l.entryDate);
+    if (key) {
+      if (!periods.has(key)) {
+        const [y, m] = key.split('-');
+        periods.set(key, { year: y, month: m, label: `${MONTH_NAMES[parseInt(m) - 1]} ${y}`, count: 0 });
+      }
+      periods.get(key).count++;
+    }
+  });
+
+  // Filter leads by year + month + active/inactive
+  const filteredLeads = allLeads.filter(l => {
+    const key = getPeriodKey(l.createdAt || l.entryDate);
+    if (!key) return false;
+    if (key !== `${filterYear}-${filterMonth}`) return false;
+    if (filterActive === 'active') return l.isActive !== false;
+    if (filterActive === 'inactive') return l.isActive === false;
+    return true; // 'all'
+  });
+
+  // Compute loan type distribution from filtered leads
+  const filteredLoanTypeMap = {};
+  filteredLeads.forEach(l => {
+    const type = (l.loanType || 'Unknown').trim();
+    if (!filteredLoanTypeMap[type]) {
+      filteredLoanTypeMap[type] = { count: 0, totalSanctioned: 0, totalDisbursed: 0 };
+    }
+    filteredLoanTypeMap[type].count++;
+    filteredLoanTypeMap[type].totalSanctioned += Number(l.sanctionedAmount) || 0;
+    filteredLoanTypeMap[type].totalDisbursed += Number(l.disbursedAmount) || 0;
+  });
+
+  // Compute status distribution from filtered leads
+  const filteredStatusMap = {};
+  filteredLeads.forEach(l => {
+    const s = l.status || 'Unknown';
+    filteredStatusMap[s] = (filteredStatusMap[s] || 0) + 1;
+  });
 
   const fetchChartData = useCallback(async () => {
     if (!accessToken) return;
@@ -72,12 +132,14 @@ export default function DashboardCharts() {
       });
 
     try {
-      const [status, loanType, trend] = await Promise.all([
-        fetchWithAuth(`${API_BASE}/leads/stats/status-distribution`),
+      const [leadsData, loanType, trend] = await Promise.all([
+        fetchWithAuth(`${API_BASE}/leads`).then(r => r.data || r || []),
         fetchWithAuth(`${API_BASE}/leads/stats/loan-type-distribution`),
         fetchWithAuth(`${API_BASE}/leads/stats/monthly-trend`),
       ]);
-      setStatusData(status);
+      // leadsData might be { data: [...] } from the API
+      const leads = Array.isArray(leadsData) ? leadsData : (leadsData.data || []);
+      setAllLeads(leads);
       setLoanTypeData(loanType);
       setMonthlyTrend(trend);
     } catch (err) {
@@ -87,12 +149,13 @@ export default function DashboardCharts() {
           const token = localStorage.getItem('instafin_token');
           if (token) {
             try {
-              const [status, loanType, trend] = await Promise.all([
-                fetch(`${API_BASE}/leads/stats/status-distribution`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+              const [leadsRes, loanType, trend] = await Promise.all([
+                fetch(`${API_BASE}/leads`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_BASE}/leads/stats/loan-type-distribution`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_BASE}/leads/stats/monthly-trend`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
               ]);
-              setStatusData(status);
+              const leads = Array.isArray(leadsRes) ? leadsRes : (leadsRes.data || []);
+              setAllLeads(leads);
               setLoanTypeData(loanType);
               setMonthlyTrend(trend);
             } catch {}
@@ -108,6 +171,13 @@ export default function DashboardCharts() {
     fetchChartData();
   }, [fetchChartData]);
 
+  // Available years (sorted desc) and months for dropdowns
+  const availableYears = [...new Set([...periods.keys()].map(k => k.split('-')[0]))].sort().reverse();
+  const availableMonthsForYear = [...periods.keys()]
+    .filter(k => k.startsWith(filterYear))
+    .map(k => k.split('-')[1])
+    .sort();
+
   const handleDownloadStatus = useCallback(() => {
     downloadChart(statusChartRef, 'lead-status-distribution');
   }, []);
@@ -118,23 +188,21 @@ export default function DashboardCharts() {
 
   if (loading) return <div className="text-center py-8">Loading charts...</div>;
 
-  const statusChartData = statusData ? {
-    labels: Object.keys(statusData),
+  const statusChartData = Object.keys(filteredStatusMap).length > 0 ? {
+    labels: Object.keys(filteredStatusMap),
     datasets: [{
-      data: Object.values(statusData),
+      data: Object.values(filteredStatusMap),
       backgroundColor: ['#FBBF24', '#3B82F6', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#EF4444'],
       borderWidth: 0
     }]
   } : null;
 
   // Build loan type entries sorted by count descending
-  const loanTypeEntries = loanTypeData
-    ? Object.entries(loanTypeData).sort((a, b) => b[1].count - a[1].count)
-    : [];
+  const loanTypeEntries = Object.entries(filteredLoanTypeMap).sort((a, b) => b[1].count - a[1].count);
   const totalLeads = loanTypeEntries.reduce((sum, [, d]) => sum + d.count, 0);
 
   // Selected loan type details
-  const selectedDetail = selectedLoanType && loanTypeData ? loanTypeData[selectedLoanType] : null;
+  const selectedDetail = selectedLoanType && filteredLoanTypeMap[selectedLoanType] ? filteredLoanTypeMap[selectedLoanType] : null;
 
   // Build monthly trend combo chart: bars for leads, lines for amounts
   let trendChartData = null;
@@ -291,6 +359,91 @@ export default function DashboardCharts() {
 
   return (
     <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
+      {/* ===== Filter Bar: Month/Year + Active/Inactive ===== */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
+        <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+          {/* Year selector */}
+          <div className="flex-1 min-w-[100px]">
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Year</label>
+            <select
+              value={filterYear}
+              onChange={e => {
+                const newYear = e.target.value;
+                setFilterYear(newYear);
+                // Default to first available month in the new year
+                const monthsForYear = [...periods.keys()]
+                  .filter(k => k.startsWith(newYear))
+                  .map(k => k.split('-')[1])
+                  .sort();
+                if (monthsForYear.length > 0) {
+                  setFilterMonth(monthsForYear[0]);
+                } else {
+                  setFilterMonth('');
+                }
+              }}
+              className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all cursor-pointer"
+            >
+              {availableYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          {/* Month selector */}
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Month</label>
+            <select
+              value={filterMonth}
+              onChange={e => setFilterMonth(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all cursor-pointer"
+            >
+              {availableMonthsForYear.length > 0 ? (
+                availableMonthsForYear.map(m => {
+                  const key = `${filterYear}-${m}`;
+                  const period = periods.get(key);
+                  return (
+                    <option key={m} value={m}>
+                      {MONTH_NAMES[parseInt(m) - 1]} {period ? `(${period.count})` : ''}
+                    </option>
+                  );
+                })
+              ) : (
+                <option value="">No data</option>
+              )}
+            </select>
+          </div>
+          {/* Active/Inactive filter */}
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Leads</label>
+            <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
+              {[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'all', label: 'All' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setFilterActive(value)}
+                  className={`flex-1 text-center text-xs font-semibold px-2 py-2 rounded-lg transition-all duration-150 ${
+                    filterActive === value
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Lead count badge */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 rounded-xl">
+            <span className="text-lg">{totalLeads}</span>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-indigo-600">
+              {totalLeads === 1 ? 'Lead' : 'Leads'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Top row: 2 cards side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
