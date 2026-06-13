@@ -66,7 +66,7 @@ export default function CustomerLoginPage() {
 
   // Loan Profile Editing (Loan Status, Income Source, Resident Type, Business Type)
   const [editingLoanProfile, setEditingLoanProfile] = useState(false);
-  const [editLoanProfileForm, setEditLoanProfileForm] = useState({ loanStatus: '', incomeSource: '', residentType: '', businessType: '' });
+  const [editLoanProfileForm, setEditLoanProfileForm] = useState({ loanType: '', loanStatus: '', incomeSource: '', residentType: '', businessType: '' });
 
   // ===== Eligibility Calculator State =====
   const [eligPF, setEligPF] = useState('');
@@ -599,6 +599,7 @@ export default function CustomerLoginPage() {
       if (res.ok) {
         const updatedLead = {
           ...selectedLead,
+          loanType: editLoanProfileForm.loanType,
           loanStatus: editLoanProfileForm.loanStatus,
           incomeSource: editLoanProfileForm.incomeSource,
           residentType: editLoanProfileForm.residentType,
@@ -1319,6 +1320,7 @@ export default function CustomerLoginPage() {
                   <button
                     onClick={() => {
                       setEditLoanProfileForm({
+                        loanType: selectedLead.loanType || '',
                         loanStatus: selectedLead.loanStatus || '',
                         incomeSource: selectedLead.incomeSource || '',
                         residentType: selectedLead.residentType || '',
@@ -1339,6 +1341,23 @@ export default function CustomerLoginPage() {
               {editingLoanProfile ? (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Type</label>
+                      <select
+                        value={editLoanProfileForm.loanType}
+                        onChange={e => setEditLoanProfileForm(p => ({...p, loanType: e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      >
+                        <option value="">Select Loan Type</option>
+                        <option value="home_loan">Home Loan</option>
+                        <option value="lap">LAP (Loan Against Property)</option>
+                        <option value="mudra">Mudra Loan</option>
+                        <option value="msme">MSME Loan</option>
+                        <option value="business_loan">Business Loan</option>
+                        <option value="personal_loan">Personal Loan</option>
+                        <option value="education_loan">Education Loan</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Loan Status</label>
                       <select
@@ -1411,7 +1430,11 @@ export default function CustomerLoginPage() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Loan Type</span>
+                    <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{selectedLead.loanType?.replace(/_/g, ' ') || 'Not set'}</p>
+                  </div>
                   <div>
                     <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Loan Status</span>
                     <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{selectedLead.loanStatus?.replace(/_/g, ' ') || 'Not set'}</p>
