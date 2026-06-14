@@ -53,7 +53,7 @@ function getPeriodKey(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function DashboardCharts() {
+export default function DashboardCharts({ filterYear: externalYear, filterMonth: externalMonth, filterActive: externalActive }) {
   const { accessToken, refreshAccessToken } = useAuth();
   const statusChartRef = useRef(null);
   const [allLeads, setAllLeads] = useState([]);
@@ -61,11 +61,18 @@ export default function DashboardCharts() {
   const [selectedLoanType, setSelectedLoanType] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // Use external filters from DashboardPage if provided, otherwise fall back to internal state
   const now = new Date();
-  const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
-  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
-  const [filterActive, setFilterActive] = useState('active'); // 'active' | 'inactive' | 'all'
+  const [internalYear, setInternalYear] = useState(String(now.getFullYear()));
+  const [internalMonth, setInternalMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
+  const [internalActive, setInternalActive] = useState('active');
+
+  const filterYear = externalYear || internalYear;
+  const filterMonth = externalMonth || internalMonth;
+  const filterActive = externalActive || internalActive;
+  const setFilterYear = externalYear ? () => {} : setInternalYear;
+  const setFilterMonth = externalMonth ? () => {} : setInternalMonth;
+  const setFilterActive = externalActive ? () => {} : setInternalActive;
 
   // Available years/months from data
   const periods = new Map(); // "YYYY-MM" → { year, month, label, count }

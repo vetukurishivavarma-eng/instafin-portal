@@ -975,9 +975,13 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
 
     const allLeads = leads || [];
     // A lead is considered inactive only if is_active is false (Rejected is its own status)
-    const rejectedCount = allLeads.filter(l => l.status === 'Rejected' && l.is_active !== false).length;
-    const activeLeads = allLeads.filter(l => l.is_active !== false && l.status !== 'Rejected');
-    const inactiveCount = allLeads.filter(l => l.is_active === false).length;
+    // Compute mutually exclusive categories: total = active + inactive + rejected + closed
+    const closedCount = allLeads.filter(l => l.is_closed === true || l.status === 'Closed').length;
+    const remainingAfterClosed = allLeads.filter(l => l.is_closed !== true && l.status !== 'Closed');
+    const rejectedCount = remainingAfterClosed.filter(l => l.status === 'Rejected' && l.is_active !== false).length;
+    const remainingAfterRejected = remainingAfterClosed.filter(l => l.status !== 'Rejected');
+    const inactiveCount = remainingAfterRejected.filter(l => l.is_active === false).length;
+    const activeLeads = remainingAfterRejected.filter(l => l.is_active !== false);
 
     // Fetch lead_banks for active leads only to derive accurate statuses
     const activeLeadIds = activeLeads.map(l => l.id);
@@ -1002,6 +1006,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       activeLeads: activeLeads.length,
       inactiveLeads: inactiveCount,
       rejectedLeads: rejectedCount,
+      closed: closedCount,
       newLeads: 0,
       assigned: 0,
       processing: 0,
@@ -1009,7 +1014,6 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       partiallyDisbursed: 0,
       disbursed: 0,
       rejected: 0,
-      closed: 0,
     };
 
     for (const lead of activeLeads) {
