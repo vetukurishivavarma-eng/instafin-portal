@@ -71,6 +71,9 @@ export default function LeadEntryPage() {
   const [statusHistory, setStatusHistory] = useState([]);
   const [showStatusHistory, setShowStatusHistory] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingLead, setDeletingLead] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -163,6 +166,41 @@ export default function LeadEntryPage() {
       }
     } catch (err) {
       setError('Failed to close lead');
+    }
+  };
+
+  const handleDeleteLead = async (leadId, reason) => {
+    setDeletingLead(true);
+    try {
+      const reqRes = await fetch(`${API_BASE}/leads/${leadId}/request-delete`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || 'Requested by admin' })
+      });
+      if (!reqRes.ok) {
+        const errData = await reqRes.json();
+        setError(errData.error || 'Failed to submit delete request');
+        setDeletingLead(false);
+        return;
+      }
+      const reqData = await reqRes.json();
+      const approveRes = await fetch(`${API_BASE}/delete-requests/${reqData.data.id}/self-approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (approveRes.ok) {
+        setDeleteConfirm(null);
+        setDeleteReason('');
+        setSuccess('Lead deleted successfully!');
+        loadLeads();
+      } else {
+        const errData = await approveRes.json();
+        setError(errData.error || 'Failed to self-approve deletion');
+      }
+    } catch (err) {
+      setError('Failed to delete lead');
+    } finally {
+      setDeletingLead(false);
     }
   };
 
@@ -763,33 +801,42 @@ export default function LeadEntryPage() {
                             Edit
                           </button>
                           {(effectiveRole === 'admin' || isImpersonating) && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
-                                    method: 'PUT',
-                                    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-                                  });
-                                  if (res.ok) {
-                                    setSuccess(`Lead ${lead.isActive === false ? 'restored' : 'marked inactive'} successfully`);
-                                    loadLeads();
-                                  } else {
-                                    const err = await res.json();
-                                    setError(err.error || 'Failed to toggle status');
+                            <>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
+                                      method: 'PUT',
+                                      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+                                    });
+                                    if (res.ok) {
+                                      setSuccess(`Lead ${lead.isActive === false ? 'restored' : 'marked inactive'} successfully`);
+                                      loadLeads();
+                                    } else {
+                                      const err = await res.json();
+                                      setError(err.error || 'Failed to toggle status');
+                                    }
+                                  } catch (err) {
+                                    setError('Failed to toggle status');
                                   }
-                                } catch (err) {
-                                  setError('Failed to toggle status');
-                                }
-                              }}
-                              className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                lead.isActive === false
-                                  ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
-                                  : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
-                              }`}
-                            >
-                              {lead.isActive === false ? 'Restore' : 'Inactive'}
-                            </button>
+                                }}
+                                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                  lead.isActive === false
+                                    ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                                    : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+                                }`}
+                              >
+                                {lead.isActive === false ? 'Restore' : 'Inactive'}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteConfirm(lead); setDeleteReason(''); }}
+                                className="px-2 sm:px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                                title="Delete Lead"
+                              >
+                                Delete
+                              </button>
+                            </>
                           )}
                           {(effectiveRole === 'executive' && !isImpersonating) && (
                             <button
@@ -1362,6 +1409,66 @@ export default function LeadEntryPage() {
             >
               Close Profile
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE LEAD CONFIRMATION MODAL */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={() => { if (!deletingLead) setDeleteConfirm(null); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Delete Lead</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete <strong>{deleteConfirm.customerName}</strong>?
+              All related documents and records will be permanently removed.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for deletion</label>
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Enter reason for deletion..."
+                rows={2}
+                className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+                disabled={deletingLead}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteConfirm(null); setDeleteReason(''); }}
+                disabled={deletingLead}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteLead(deleteConfirm.id, deleteReason)}
+                disabled={deletingLead}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deletingLead ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  'Yes, Delete Lead'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
