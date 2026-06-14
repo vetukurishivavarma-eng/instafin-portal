@@ -452,12 +452,46 @@ export default function DisbursementPage() {
                                           <span className="text-[10px] text-gray-400 italic truncate max-w-[80px]">· {d.notes}</span>
                                         )}
                                       </div>
-                                      <button
-                                        onClick={() => setEditingDisbursement({ bankId: bank.id, id: d.id, amount: d.amount, notes: d.notes || '' })}
-                                        className="px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 rounded hover:bg-blue-100 flex-shrink-0"
-                                      >
-                                        Edit
-                                      </button>
+                                      <div className="flex gap-1 flex-shrink-0">
+                                        <button
+                                          onClick={() => setEditingDisbursement({ bankId: bank.id, id: d.id, amount: d.amount, notes: d.notes || '' })}
+                                          className="px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={async () => {
+                                            if (!window.confirm(`Delete disbursement of ₹${Number(d.amount).toLocaleString()}? This will recalculate totals.`)) return;
+                                            setLoading(true);
+                                            try {
+                                              const token = accessToken || localStorage.getItem('instafin_token');
+                                              const res = await fetch(
+                                                `${API_BASE}/leads/${selectedLead.id}/banks/${bank.id}/disbursements/${d.id}`,
+                                                {
+                                                  method: 'DELETE',
+                                                  headers: { Authorization: `Bearer ${token}` }
+                                                }
+                                              );
+                                              if (!res.ok) {
+                                                const errData = await res.json();
+                                                setError(errData.error || 'Failed to delete disbursement');
+                                                setLoading(false);
+                                                return;
+                                              }
+                                              setSuccess('Disbursement deleted successfully');
+                                              setTimeout(() => setSuccess(''), 4000);
+                                              fetchBanks(selectedLead.id);
+                                            } catch (err) {
+                                              setError('Failed to delete disbursement');
+                                            } finally {
+                                              setLoading(false);
+                                            }
+                                          }}
+                                          className="px-1.5 py-0.5 text-[10px] font-semibold text-red-600 bg-red-50 rounded hover:bg-red-100"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
                                     </div>
                                   )
                                 ))}

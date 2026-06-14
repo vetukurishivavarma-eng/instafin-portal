@@ -444,4 +444,73 @@ router.put('/:bankId/disbursements/:disbursementId', authorize('admin', 'executi
   }
 });
 
+// DELETE /api/leads/:leadId/banks/:bankId/disbursements/:disbursementId — Delete a disbursement record
+router.delete('/:bankId/disbursements/:disbursementId', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { leadId, bankId, disbursementId } = req.params;
+
+    // Fetch the disbursement record
+    const { data: existingDisbursement, error: fetchError } = await supabase
+      .from('disbursements')
+      .select('*')
+      .eq('id', disbursementId)
+      .eq('bank_id', bankId)
+      .eq('lead_id', leadId)
+      .single();
+
+    if (fetchError || !existingDisbursement) {
+      return res.status(404).json({ error: 'Disbursement record not found' });
+    }
+
+    // Delete the disbursement record
+    const { error: deleteError } = await supabase
+      .from('disbursements')
+      .delete()
+      .eq('id', disbursementId);
+
+    if (deleteError) throw deleteError;
+
+    // Recalculate bank's total disbursed amount from remaining records
+    const { data: remainingDisbursements } = await supabase
+      .from('disbursements')
+      .select('amount')
+      .eq('bank_id', bankId);
+
+    const totalDisbursed = (remainingDisbursements || []).reduce((sum, d) => sum + Number(d.amount), 0);
+
+    // Fetch the bank record to get sanctioned amount
+    const { data: bank } = await supabase
+      .from('lead_banks')
+      .select('sanctioned_amount')
+      .eq('id', bankId)
+      .single();
+
+    const sanctioned = Number(bank?.sanctioned_amount) || 0;
+    const newStatus = totalDisbursed >= sanctioned ? 'Disbursed' : (totalDisbursed > 0 ? 'Partially Disbursed' : 'Sanctioned');
+
+    // Update the bank record with recalculated total and status
+    await supabase
+      .from('lead_banks')
+      .update({
+        disbursed_amount: totalDisbursed,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', bankId);
+
+    // Update lead-level derived status
+    const derived = await updateLeadDerivedStatus(leadId);
+
+    res.json({
+      message: 'Disbursement deleted',
+      bankStatus: newStatus,
+      totalDisbursed,
+      leadStatus: derived.derivedStatus
+    });
+  } catch (error) {
+    console.error('Delete disbursement error:', error);
+    res.status(500).json({ error: 'Failed to delete disbursement' });
+  }
+});
+
 export default router;
