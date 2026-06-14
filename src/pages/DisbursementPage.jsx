@@ -9,6 +9,8 @@ export default function DisbursementPage() {
   const [selectedLead, setSelectedLead] = useState(null);
   const [banks, setBanks] = useState([]);
   const [bankAmounts, setBankAmounts] = useState({}); // { [bankId]: amountString }
+  const [disbursements, setDisbursements] = useState({}); // { [bankId]: [{id, amount, disbursed_at, ...}] }
+  const [editingDisbursement, setEditingDisbursement] = useState(null); // { bankId, id, amount, notes }
   const [loading, setLoading] = useState(false);
   const [fetchingLeads, setFetchingLeads] = useState(true);
   const [error, setError] = useState('');
@@ -52,6 +54,19 @@ export default function DisbursementPage() {
     }
   };
 
+  const fetchDisbursementsForBank = async (leadId, bankId) => {
+    try {
+      const token = accessToken || localStorage.getItem('instafin_token');
+      const res = await fetch(`${API_BASE}/leads/${leadId}/banks/${bankId}/disbursements`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setDisbursements(prev => ({ ...prev, [bankId]: data.disbursements || [] }));
+    } catch (err) {
+      console.error('Failed to load disbursements:', err);
+    }
+  };
+
   const fetchBanks = async (leadId) => {
     try {
       const token = accessToken || localStorage.getItem('instafin_token');
@@ -59,8 +74,11 @@ export default function DisbursementPage() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      setBanks(data.banks || []);
+      const banksData = data.banks || [];
+      setBanks(banksData);
       setBankAmounts({});
+      // Fetch disbursement history for each bank
+      banksData.forEach(bank => fetchDisbursementsForBank(leadId, bank.id));
     } catch (err) {
       setError('Failed to load bank details');
     }
@@ -117,6 +135,8 @@ export default function DisbursementPage() {
       setBankAmounts({});
       fetchBanks(selectedLead.id);
       fetchSanctionedLeads();
+      // Also refresh disbursements immediately for the bank that was just disbursed
+      fetchDisbursementsForBank(selectedLead.id, bankId);
     } catch (err) {
       setError('Failed to process disbursement');
     } finally {
@@ -335,6 +355,122 @@ export default function DisbursementPage() {
                               Disburse
                             </button>
                           </div>
+
+                          {/* Disbursement History */}
+                          {(disbursements[bank.id]?.length > 0 || bank.status === 'Partially Disbursed' || bank.status === 'Disbursed') && (
+                            <div className="mt-3 pt-3 border-t border-gray-100">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Disbursement History</p>
+                              <div className="space-y-1.5">
+                                {(disbursements[bank.id] || []).map(d => (
+                                  editingDisbursement?.id === d.id && editingDisbursement?.bankId === bank.id ? (
+                                    <div key={d.id} className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                                      <div className="flex gap-2 items-center mb-1.5">
+                                        <span className="text-xs text-gray-500">₹</span>
+                                        <input
+                                          type="number"
+                                          value={editingDisbursement.amount}
+                                          onChange={(e) => setEditingDisbursement(prev => ({ ...prev, amount: e.target.value }))}
+                                          className="w-28 px-2 py-1 border rounded text-xs"
+                                          min="1"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={editingDisbursement.notes || ''}
+                                          onChange={(e) => setEditingDisbursement(prev => ({ ...prev, notes: e.target.value }))}
+                                          placeholder="Notes (optional)"
+                                          className="flex-1 px-2 py-1 border rounded text-xs"
+                                        />
+                                      </div>
+                                      <div className="flex gap-1.5 justify-end">
+                                        <button
+                                          onClick={async () => {
+                                            const newAmount = Number(editingDisbursement.amount);
+                                            if (!newAmount || newAmount <= 0) {
+                                              setError('Enter a valid amount');
+                                              return;
+                                            }
+                                            setLoading(true);
+                                            try {
+                                              const token = accessToken || localStorage.getItem('instafin_token');
+                                              const res = await fetch(
+                                                `${API_BASE}/leads/${selectedLead.id}/banks/${bank.id}/disbursements/${d.id}`,
+                                                {
+                                                  method: 'PUT',
+                                                  headers: {
+                                                    'Content-Type': 'application/json',
+                                                    Authorization: `Bearer ${token}`
+                                                  },
+                                                  body: JSON.stringify({
+                                                    amount: newAmount,
+                                                    notes: editingDisbursement.notes
+                                                  })
+                                                }
+                                              );
+                                              const data = await res.json();
+                                              if (!res.ok) {
+                                                setError(data.error || 'Failed to update');
+                                                setLoading(false);
+                                                return;
+                                              }
+                                              setEditingDisbursement(null);
+                                              setSuccess('Disbursement updated successfully');
+                                              setTimeout(() => setSuccess(''), 4000);
+                                              fetchBanks(selectedLead.id);
+                                            } catch (err) {
+                                              setError('Failed to update disbursement');
+                                            } finally {
+                                              setLoading(false);
+                                            }
+                                          }}
+                                          disabled={loading}
+                                          className="px-2 py-1 text-xs font-semibold bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          onClick={() => setEditingDisbursement(null)}
+                                          className="px-2 py-1 text-xs font-semibold bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div key={d.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-2.5 py-1.5">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <svg className="w-3 h-3 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span className="font-bold text-gray-800 text-xs">₹{Number(d.amount).toLocaleString()}</span>
+                                        <span className="text-[10px] text-gray-400">
+                                          {d.disbursed_at ? new Date(d.disbursed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+                                        </span>
+                                        {d.disbursedByName && (
+                                          <span className="text-[10px] text-gray-400">by {d.disbursedByName}</span>
+                                        )}
+                                        {d.notes && (
+                                          <span className="text-[10px] text-gray-400 italic truncate max-w-[80px]">· {d.notes}</span>
+                                        )}
+                                      </div>
+                                      <button
+                                        onClick={() => setEditingDisbursement({ bankId: bank.id, id: d.id, amount: d.amount, notes: d.notes || '' })}
+                                        className="px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 rounded hover:bg-blue-100 flex-shrink-0"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  )
+                                ))}
+                                {/* Show total disbursed for this bank if there's history */}
+                                {disbursements[bank.id]?.length > 1 && (
+                                  <div className="flex justify-between items-center pt-1.5 border-t border-gray-200 mt-1.5 px-2.5">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Total Disbursed</span>
+                                    <span className="text-xs font-bold text-gray-800">₹{disbursements[bank.id].reduce((s, d) => s + Number(d.amount), 0).toLocaleString()}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

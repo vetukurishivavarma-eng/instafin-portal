@@ -238,11 +238,11 @@ router.put('/:bankId/reject', authorize('admin', 'executive'), async (req, res) 
   }
 });
 
-// PUT /api/leads/:leadId/banks/:bankId/disburse — Disburse from a specific bank
+// PUT /api/leads/:leadId/banks/:bankId/disburse — Disburse from a specific bank (records individual transaction)
 router.put('/:bankId/disburse', authorize('admin', 'executive'), async (req, res) => {
   try {
     const { leadId, bankId } = req.params;
-    const { amount } = req.body;
+    const { amount, notes } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Valid disbursement amount is required' });
@@ -277,6 +277,7 @@ router.put('/:bankId/disburse', authorize('admin', 'executive'), async (req, res
     const newTotalDisbursed = currentDisbursed + amount;
     const newStatus = newTotalDisbursed >= sanctioned ? 'Disbursed' : 'Partially Disbursed';
 
+    // Update the bank record
     const { data: updatedBank, error: updateError } = await supabase
       .from('lead_banks')
       .update({
@@ -290,17 +291,156 @@ router.put('/:bankId/disburse', authorize('admin', 'executive'), async (req, res
 
     if (updateError) throw updateError;
 
+    // Record the individual disbursement transaction
+    const { data: disbursementRecord, error: disbursementError } = await supabase
+      .from('disbursements')
+      .insert({
+        lead_id: leadId,
+        bank_id: bankId,
+        amount,
+        disbursed_by: req.user.id,
+        notes: notes || null
+      })
+      .select()
+      .single();
+
+    if (disbursementError) {
+      console.error('Failed to record disbursement transaction:', disbursementError);
+      // Non-fatal — the bank was still disbursed
+    }
+
     // Update lead-level derived status
     const derived = await updateLeadDerivedStatus(leadId);
 
     res.json({
       message: 'Bank disbursed',
       bank: updatedBank,
-      leadStatus: derived.derivedStatus
+      leadStatus: derived.derivedStatus,
+      disbursement: disbursementRecord || null
     });
   } catch (error) {
     console.error('Disburse bank error:', error);
     res.status(500).json({ error: 'Failed to disburse from bank' });
+  }
+});
+
+// GET /api/leads/:leadId/banks/:bankId/disbursements — Fetch disbursement history for a bank
+router.get('/:bankId/disbursements', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { leadId, bankId } = req.params;
+
+    const { data: disbursements, error } = await supabase
+      .from('disbursements')
+      .select('*')
+      .eq('bank_id', bankId)
+      .eq('lead_id', leadId)
+      .order('disbursed_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch disburser names
+    const userIds = [...new Set(disbursements.filter(d => d.disbursed_by).map(d => d.disbursed_by))];
+    let userNameMap = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', userIds);
+      if (users) {
+        users.forEach(u => userNameMap[u.id] = u.name);
+      }
+    }
+
+    const enriched = disbursements.map(d => ({
+      ...d,
+      disbursedByName: userNameMap[d.disbursed_by] || 'Unknown'
+    }));
+
+    res.json({ disbursements: enriched });
+  } catch (error) {
+    console.error('Fetch disbursements error:', error);
+    res.status(500).json({ error: 'Failed to fetch disbursements' });
+  }
+});
+
+// PUT /api/leads/:leadId/banks/:bankId/disbursements/:disbursementId — Edit a disbursement record
+router.put('/:bankId/disbursements/:disbursementId', authorize('admin', 'executive'), async (req, res) => {
+  try {
+    const { leadId, bankId, disbursementId } = req.params;
+    const { amount, notes } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    // Fetch the disbursement record
+    const { data: existingDisbursement, error: fetchError } = await supabase
+      .from('disbursements')
+      .select('*')
+      .eq('id', disbursementId)
+      .eq('bank_id', bankId)
+      .eq('lead_id', leadId)
+      .single();
+
+    if (fetchError || !existingDisbursement) {
+      return res.status(404).json({ error: 'Disbursement record not found' });
+    }
+
+    // Update the disbursement record
+    const { data: updatedDisbursement, error: updateError } = await supabase
+      .from('disbursements')
+      .update({
+        amount,
+        notes: notes !== undefined ? notes : existingDisbursement.notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', disbursementId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Recalculate bank's total disbursed amount from all disbursement records
+    const { data: allDisbursements } = await supabase
+      .from('disbursements')
+      .select('amount')
+      .eq('bank_id', bankId);
+
+    const totalDisbursed = (allDisbursements || []).reduce((sum, d) => sum + Number(d.amount), 0);
+
+    // Fetch the bank record to get sanctioned amount
+    const { data: bank } = await supabase
+      .from('lead_banks')
+      .select('sanctioned_amount')
+      .eq('id', bankId)
+      .single();
+
+    const sanctioned = Number(bank?.sanctioned_amount) || 0;
+    const newStatus = totalDisbursed >= sanctioned ? 'Disbursed' : 'Partially Disbursed';
+
+    // Update the bank record with recalculated total and status
+    await supabase
+      .from('lead_banks')
+      .update({
+        disbursed_amount: totalDisbursed,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', bankId);
+
+    // Update lead-level derived status
+    const derived = await updateLeadDerivedStatus(leadId);
+
+    res.json({
+      message: 'Disbursement updated',
+      disbursement: updatedDisbursement,
+      bankStatus: newStatus,
+      totalDisbursed,
+      leadStatus: derived.derivedStatus
+    });
+  } catch (error) {
+    console.error('Edit disbursement error:', error);
+    res.status(500).json({ error: 'Failed to update disbursement' });
   }
 });
 
