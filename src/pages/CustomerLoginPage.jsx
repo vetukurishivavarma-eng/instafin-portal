@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
-import { getChecklistWithFallback, getCoapplicantChecklist } from '../utils/resolver';
+import { getChecklistWithFallback, getCoapplicantChecklist, clearChecklistCache } from '../utils/resolver';
 import { downloadEligibilityPDF, downloadPDF } from '../export/pdf';
 import { shareOnWhatsApp } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
@@ -157,6 +157,9 @@ export default function CustomerLoginPage() {
     setSummary(null);
     setExtractedProfile(null);
 
+    // Clear memoization cache to ensure fresh checklist data
+    clearChecklistCache();
+    
     // Load checklist for this lead
     loadChecklistForLead(lead);
     
