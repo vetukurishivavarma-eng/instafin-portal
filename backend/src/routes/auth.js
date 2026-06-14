@@ -472,6 +472,133 @@ router.post('/reject-request/:id', authenticate, authorize('admin'), async (req,
   }
 });
 
+// ============================================================
+// FORGOT PASSWORD FLOW
+// ============================================================
+
+// POST /api/auth/forgot-password — Executive requests a password reset
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Check if user exists in users table
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('email', email)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ error: 'No account found with this email' });
+    }
+
+    // Check if there's already a pending forgot-password request
+    const { data: existingRequest } = await supabase
+      .from('access_requests')
+      .select('id, status')
+      .eq('email', email)
+      .eq('request_type', 'forgot_password')
+      .single();
+
+    if (existingRequest && existingRequest.status === 'pending') {
+      return res.status(400).json({ error: 'You already have a pending forgot password request. Please wait for admin approval.' });
+    }
+
+    // Insert the forgot-password request
+    const { error: insertError } = await supabase
+      .from('access_requests')
+      .insert({
+        name: user.name,
+        email: user.email,
+        status: 'pending',
+        request_type: 'forgot_password'
+      });
+
+    if (insertError) {
+      console.error('[AUTH] Forgot password request insert error:', insertError);
+      return res.status(500).json({ error: 'Failed to submit forgot password request' });
+    }
+
+    console.log(`[AUTH] 🔑 Forgot password request submitted for ${user.email}`);
+    res.status(201).json({ message: 'Forgot password request submitted successfully. Please contact the admin for new password.' });
+  } catch (error) {
+    console.error('[AUTH] Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to submit forgot password request' });
+  }
+});
+
+// PUT /api/auth/approve-forgot-password/:id (admin only) — Approve and set new password
+router.put('/approve-forgot-password/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'New password must be at least 4 characters' });
+    }
+
+    console.log(`[AUTH] 🔑 Admin approving forgot-password request ID=${id}`);
+
+    // Fetch the request
+    const { data: request, error: fetchError } = await supabase
+      .from('access_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !request) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: `Request is already ${request.status}` });
+    }
+
+    if (request.request_type !== 'forgot_password') {
+      return res.status(400).json({ error: 'This is not a forgot-password request' });
+    }
+
+    // Hash the new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update the user's password in the users table
+    const { error: updateUserError } = await supabase
+      .from('users')
+      .update({ password: passwordHash })
+      .eq('email', request.email);
+
+    if (updateUserError) {
+      console.error('[AUTH] ❌ Failed to update user password:', updateUserError);
+      return res.status(500).json({ error: 'Failed to update password' });
+    }
+
+    // Mark the request as approved
+    await supabase
+      .from('access_requests')
+      .update({
+        status: 'approved',
+        updated_at: new Date().toISOString(),
+        reviewed_by: req.user.id,
+        new_password: newPassword
+      })
+      .eq('id', id);
+
+    console.log(`[AUTH] ✅ Password reset approved for ${request.email} by admin ID=${req.user.id}`);
+
+    res.json({
+      message: `Password has been reset for ${request.name}. New password: ${newPassword}`,
+      newPassword
+    });
+  } catch (error) {
+    console.error('[AUTH] ❌ Approve forgot-password error:', error);
+    res.status(500).json({ error: 'Failed to approve forgot password request' });
+  }
+});
+
 // POST /api/auth/revoke-access/:id (admin only) — Delete/revoke approved executive access
 router.post('/revoke-access/:id', authenticate, authorize('admin'), async (req, res) => {
   try {

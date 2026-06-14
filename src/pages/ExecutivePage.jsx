@@ -32,6 +32,11 @@ export default function ExecutivePage() {
   const [showRevokeModal, setShowRevokeModal] = useState(null);
   const [emailTesting, setEmailTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('yeshwantraavi4@gmail.com');
+  
+  // Forgot Password state
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   // Lead History state
   const [showHistoryFor, setShowHistoryFor] = useState(null);
@@ -636,7 +641,14 @@ export default function ExecutivePage() {
                   <div key={request.id} className="border border-gray-200 rounded-2xl p-5 hover:shadow-md transition-shadow">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="flex-1">
-                        <h3 className="text-lg font-bold text-gray-900">{request.name}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-lg font-bold text-gray-900">{request.name}</h3>
+                          {request.request_type === 'forgot_password' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
+                              🔑 Forgot Password
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-wrap gap-4 mt-1 text-sm text-gray-600">
                           <span>📧 {request.email}</span>
                           {request.mobile && <span>📞 {request.mobile}</span>}
@@ -646,15 +658,32 @@ export default function ExecutivePage() {
                             day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
                           })}
                         </p>
+                        {request.request_type === 'forgot_password' && (
+                          <p className="text-xs text-orange-600 font-medium mt-1">
+                            Comment: Forgot password
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-3">
-                        <button
-                          onClick={() => handleApprove(request.id)}
-                          disabled={processingId === request.id}
-                          className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold text-sm hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-md"
-                        >
-                          {processingId === request.id ? 'Approving...' : '✅ Approve'}
-                        </button>
+                        {request.request_type === 'forgot_password' ? (
+                          <button
+                            onClick={() => {
+                              setShowForgotPasswordModal(request);
+                              setNewPassword('');
+                            }}
+                            className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-semibold text-sm hover:from-orange-600 hover:to-orange-700 transition-all shadow-md"
+                          >
+                            🔑 Approve & Set Password
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleApprove(request.id)}
+                            disabled={processingId === request.id}
+                            className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold text-sm hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-md"
+                          >
+                            {processingId === request.id ? 'Approving...' : '✅ Approve'}
+                          </button>
+                        )}
                         <button
                           onClick={() => setShowRejectModal(request)}
                           className="px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-semibold text-sm hover:from-red-600 hover:to-red-700 transition-all shadow-md"
@@ -783,6 +812,110 @@ export default function ExecutivePage() {
               </button>
               <button
                 onClick={() => setShowRevokeModal(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Forgot Password Modal - Set New Password */}
+      {showForgotPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowForgotPasswordModal(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Approve Forgot Password</h3>
+                <p className="text-sm text-gray-500">Set a new password for {showForgotPasswordModal.name}</p>
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-orange-800 font-medium">
+                This executive has requested a password reset. Please enter a new password below. The password will be updated in the database and the executive can use it to log in.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email: <span className="font-semibold">{showForgotPasswordModal.email}</span>
+              </label>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+              <input
+                type="text"
+                placeholder="Enter new password (min 4 characters)"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-orange-500 outline-none font-mono"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                The executive will use this password to log in. Share it securely.
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={async () => {
+                  if (!newPassword || newPassword.length < 4) {
+                    setError('Password must be at least 4 characters');
+                    return;
+                  }
+                  setForgotPasswordLoading(true);
+                  setError('');
+                  setSuccess('');
+                  try {
+                    const res = await fetch(`${API_BASE}/auth/approve-forgot-password/${showForgotPasswordModal.id}`, {
+                      method: 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`
+                      },
+                      body: JSON.stringify({ newPassword })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      setError(data.error || 'Failed to approve request');
+                    } else {
+                      setSuccess(data.message);
+                      setShowForgotPasswordModal(null);
+                      setNewPassword('');
+                      fetchPendingRequests();
+                    }
+                  } catch (err) {
+                    setError('Failed to approve request');
+                  } finally {
+                    setForgotPasswordLoading(false);
+                  }
+                }}
+                disabled={forgotPasswordLoading}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 shadow-md flex items-center justify-center gap-2"
+              >
+                {forgotPasswordLoading ? (
+                  'Setting Password...'
+                ) : (
+                  <>
+                    🔑 Approve & Set Password
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowForgotPasswordModal(null)}
                 className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
               >
                 Cancel
