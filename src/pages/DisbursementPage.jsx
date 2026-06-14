@@ -42,9 +42,10 @@ export default function DisbursementPage() {
       const filteredByExecutive = executiveName
         ? allLeads.filter(l => l.assignedTo === executiveName)
         : allLeads;
-      // Show leads with at least one sanctioned or partially-disbursed bank
+      // Show leads that have been sanctioned, partially disbursed, or fully disbursed
+      // so users can access history for editing/deleting past disbursements
       const eligible = filteredByExecutive.filter(
-        l => l.status === 'Sanctioned' || l.status === 'Partially Disbursed'
+        l => l.status === 'Sanctioned' || l.status === 'Partially Disbursed' || l.status === 'Disbursed'
       );
       setLeads(eligible);
     } catch (err) {
@@ -156,8 +157,8 @@ export default function DisbursementPage() {
     return `₹${Number(val).toLocaleString()}`;
   };
 
-  // Filter banks that can receive disbursement
-  const disbursementBanks = banks.filter(b => ['Sanctioned', 'Partially Disbursed'].includes(b.status));
+  // Filter banks that can receive disbursement — include Disbursed so history is editable
+  const disbursementBanks = banks.filter(b => ['Sanctioned', 'Partially Disbursed', 'Disbursed'].includes(b.status));
 
   // Aggregate stats
   const totalSanctioned = banks
@@ -299,9 +300,10 @@ export default function DisbursementPage() {
                       const disbursed = Number(bank.disbursed_amount) || 0;
                       const remaining = sanctioned - disbursed;
                       const progress = sanctioned ? (disbursed / sanctioned) * 100 : 0;
+                      const isFullyDisbursed = bank.status === 'Disbursed';
 
                       return (
-                        <div key={bank.id} className="border rounded-xl p-4">
+                        <div key={bank.id} className={`border rounded-xl p-4 ${isFullyDisbursed ? 'opacity-75 border-gray-200' : ''}`}>
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-bold text-gray-900">{bank.bank_name}</span>
                             <StatusBadge status={bank.status} />
@@ -321,40 +323,45 @@ export default function DisbursementPage() {
                           <div className="mb-3">
                             <div className="w-full bg-gray-200 rounded-full h-1.5">
                               <div
-                                className="bg-green-500 h-1.5 rounded-full transition-all"
+                                className={`h-1.5 rounded-full transition-all ${isFullyDisbursed ? 'bg-purple-500' : 'bg-green-500'}`}
                                 style={{ width: `${progress}%` }}
                               />
                             </div>
-                            <p className="text-xs text-gray-500 mt-1">Remaining: {formatCurrency(remaining)}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {isFullyDisbursed ? 'Fully disbursed' : `Remaining: ${formatCurrency(remaining)}`}
+                            </p>
                           </div>
 
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
-                              <input
-                                type="number"
-                                value={bankAmounts[bank.id] || ''}
-                                onChange={(e) => setBankAmounts(prev => ({ ...prev, [bank.id]: e.target.value }))}
-                                placeholder="Amount"
-                                className="w-full pl-7 pr-2 py-2 border rounded-lg text-sm"
-                                min="0"
-                                max={remaining}
-                              />
+                          {/* Only show disbursement controls for non-fully-disbursed banks */}
+                          {!isFullyDisbursed && (
+                            <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                                <input
+                                  type="number"
+                                  value={bankAmounts[bank.id] || ''}
+                                  onChange={(e) => setBankAmounts(prev => ({ ...prev, [bank.id]: e.target.value }))}
+                                  placeholder="Amount"
+                                  className="w-full pl-7 pr-2 py-2 border rounded-lg text-sm"
+                                  min="0"
+                                  max={remaining}
+                                />
+                              </div>
+                              <button
+                                onClick={() => handleDisburseFull(bank.id)}
+                                className="px-3 py-2 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 whitespace-nowrap"
+                              >
+                                Full
+                              </button>
+                              <button
+                                onClick={() => handleDisburseBank(bank.id)}
+                                disabled={!bankAmounts[bank.id] || Number(bankAmounts[bank.id]) <= 0 || loading}
+                                className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Disburse
+                              </button>
                             </div>
-                            <button
-                              onClick={() => handleDisburseFull(bank.id)}
-                              className="px-3 py-2 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 whitespace-nowrap"
-                            >
-                              Full
-                            </button>
-                            <button
-                              onClick={() => handleDisburseBank(bank.id)}
-                              disabled={!bankAmounts[bank.id] || Number(bankAmounts[bank.id]) <= 0 || loading}
-                              className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              Disburse
-                            </button>
-                          </div>
+                          )}
 
                           {/* Disbursement History */}
                           {(disbursements[bank.id]?.length > 0 || bank.status === 'Partially Disbursed' || bank.status === 'Disbursed') && (
@@ -511,18 +518,7 @@ export default function DisbursementPage() {
                   </div>
                 )}
 
-                {/* Fully Disbursed Banks */}
-                {banks.filter(b => b.status === 'Disbursed').length > 0 && (
-                  <div className="mt-4 pt-4 border-t">
-                    <p className="text-xs text-gray-500 mb-2">Fully Disbursed</p>
-                    {banks.filter(b => b.status === 'Disbursed').map(bank => (
-                      <div key={bank.id} className="flex items-center justify-between text-sm py-1">
-                        <span className="text-gray-600">{bank.bank_name}</span>
-                        <span className="text-green-600 font-medium">{formatCurrency(bank.disbursed_amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
               </>
             ) : (
               <div className="text-center py-8 text-gray-500">
