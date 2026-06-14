@@ -19,7 +19,7 @@ const getStatusBorder = (status) => {
 };
 
 export default function PipelinePage() {
-  const { accessToken, refreshAccessToken, isAdmin } = useAuth();
+  const { accessToken, refreshAccessToken, isAdmin, effectiveRole } = useAuth();
   const [searchParams] = useSearchParams();
   const [leads, setLeads] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -434,7 +434,7 @@ export default function PipelinePage() {
                           >
                             History
                           </button>
-                          {isAdmin && (
+                          {(effectiveRole === 'admin') && (
                             <>
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}

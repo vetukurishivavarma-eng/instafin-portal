@@ -924,7 +924,7 @@ export default function LoginPage() {
                   <input
                     type="email"
                     placeholder="Enter your registered email"
-                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                   />
