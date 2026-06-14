@@ -974,23 +974,15 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     if (error) throw error;
 
     const allLeads = leads || [];
-    // A lead is considered inactive only if is_active is false (Rejected is its own status)
-    // Compute mutually exclusive categories: total = active + inactive + rejected + closed
-    const closedCount = allLeads.filter(l => l.is_closed === true || l.status === 'Closed').length;
-    const remainingAfterClosed = allLeads.filter(l => l.is_closed !== true && l.status !== 'Closed');
-    const rejectedCount = remainingAfterClosed.filter(l => l.status === 'Rejected').length;
-    const remainingAfterRejected = remainingAfterClosed.filter(l => l.status !== 'Rejected');
-    const inactiveCount = remainingAfterRejected.filter(l => l.is_active === false).length;
-    const activeLeads = remainingAfterRejected.filter(l => l.is_active !== false);
 
-    // Fetch lead_banks for active leads only to derive accurate statuses
-    const activeLeadIds = activeLeads.map(l => l.id);
+    // Fetch lead_banks for ALL leads to derive statuses accurately
+    const allLeadIds = allLeads.map(l => l.id);
     let banksByLeadId = {};
-    if (activeLeadIds.length > 0) {
+    if (allLeadIds.length > 0) {
       const { data: allBanks } = await supabase
         .from('lead_banks')
         .select('lead_id, status')
-        .in('lead_id', activeLeadIds);
+        .in('lead_id', allLeadIds);
 
       if (allBanks) {
         for (const bank of allBanks) {
@@ -1000,7 +992,40 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       }
     }
 
-    // Count only active leads by derived status — inactive leads are separate
+    // Compute derived status for each lead, then categorize into mutually exclusive buckets
+    let closedCount = 0;
+    let rejectedCount = 0;
+    let inactiveCount = 0;
+    const activeLeads = [];
+
+    for (const lead of allLeads) {
+      const banks = banksByLeadId[lead.id] || [];
+      let derivedStatus = lead.status;
+
+      if (banks.length > 0 && lead.assigned_to) {
+        const bankStatuses = banks.map(b => b.status);
+        const derived = deriveLeadStatus(bankStatuses);
+        if (derived) derivedStatus = derived;
+      }
+
+      // Priority order: Closed > Rejected > Inactive > Active
+      const isClosed = lead.is_closed === true || derivedStatus === 'Closed';
+      const isRejected = !isClosed && derivedStatus === 'Rejected' && lead.is_active !== false;
+      const isInactive = !isClosed && !isRejected && lead.is_active === false;
+
+      if (isClosed) {
+        closedCount++;
+      } else if (isRejected) {
+        rejectedCount++;
+      } else if (isInactive) {
+        inactiveCount++;
+      } else {
+        // Active — will count sub-statuses below
+        activeLeads.push({ ...lead, _derived: derivedStatus });
+      }
+    }
+
+    // Count sub-statuses from active leads by derived status
     let stats = {
       totalLeads: allLeads.length,
       activeLeads: activeLeads.length,
@@ -1017,20 +1042,9 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     };
 
     for (const lead of activeLeads) {
-      const banks = banksByLeadId[lead.id] || [];
-      let derivedStatus = lead.status;
+      const derivedStatus = lead._derived;
 
-      // Derive status from lead_banks if records exist and lead is assigned
-      if (banks.length > 0 && lead.assigned_to) {
-        const bankStatuses = banks.map(b => b.status);
-        const derived = deriveLeadStatus(bankStatuses);
-        if (derived) derivedStatus = derived;
-      }
-
-      // Closed takes precedence over derived status
-      if (lead.is_closed === true || derivedStatus === 'Closed') {
-        stats.closed++;
-      } else if (derivedStatus === 'New') {
+      if (derivedStatus === 'New') {
         stats.newLeads++;
       } else if (derivedStatus === 'Assigned') {
         stats.assigned++;
@@ -1044,11 +1058,9 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
         stats.disbursed++;
       } else if (derivedStatus === 'Rejected') {
         stats.rejected++;
-        // Rejected leads are counted both as rejected AND as inactive
       }
-      // Note: any active lead with unmatched derivedStatus falls through —
-      // it still contributes to activeLeads but won't show on any status card.
-      // This is acceptable and keeps totalLeads = activeLeads + inactiveLeads.
+      // Active lead with unmatched derivedStatus falls through —
+      // still contributes to activeLeads count but won't show on any card.
     }
 
     res.json(stats);
