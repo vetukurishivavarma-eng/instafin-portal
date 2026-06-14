@@ -94,6 +94,7 @@ export default function DashboardCharts({ filterYear: externalYear, filterMonth:
     if (key !== `${filterYear}-${filterMonth}`) return false;
     if (filterActive === 'active') return l.isActive !== false;
     if (filterActive === 'inactive') return l.isActive === false;
+    if (filterActive === 'closed') return l.isClosed === true;
     return true; // 'all'
   });
 
@@ -207,91 +208,6 @@ export default function DashboardCharts({ filterYear: externalYear, filterMonth:
 
   return (
     <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
-      {/* ===== Filter Bar: Month/Year + Active/Inactive ===== */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-        <div className="flex flex-wrap items-end gap-3 sm:gap-4">
-          {/* Year selector */}
-          <div className="flex-1 min-w-[100px]">
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Year</label>
-            <select
-              value={filterYear}
-              onChange={e => {
-                const newYear = e.target.value;
-                setFilterYear(newYear);
-                // Default to first available month in the new year
-                const monthsForYear = [...periods.keys()]
-                  .filter(k => k.startsWith(newYear))
-                  .map(k => k.split('-')[1])
-                  .sort();
-                if (monthsForYear.length > 0) {
-                  setFilterMonth(monthsForYear[0]);
-                } else {
-                  setFilterMonth('');
-                }
-              }}
-              className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all cursor-pointer"
-            >
-              {availableYears.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-          {/* Month selector */}
-          <div className="flex-1 min-w-[120px]">
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Month</label>
-            <select
-              value={filterMonth}
-              onChange={e => setFilterMonth(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all cursor-pointer"
-            >
-              {availableMonthsForYear.length > 0 ? (
-                availableMonthsForYear.map(m => {
-                  const key = `${filterYear}-${m}`;
-                  const period = periods.get(key);
-                  return (
-                    <option key={m} value={m}>
-                      {MONTH_NAMES[parseInt(m) - 1]} {period ? `(${period.count})` : ''}
-                    </option>
-                  );
-                })
-              ) : (
-                <option value="">No data</option>
-              )}
-            </select>
-          </div>
-          {/* Active/Inactive filter */}
-          <div className="flex-1 min-w-[120px]">
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Leads</label>
-            <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
-              {[
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-                { value: 'all', label: 'All' },
-              ].map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => setFilterActive(value)}
-                  className={`flex-1 text-center text-xs font-semibold px-2 py-2 rounded-lg transition-all duration-150 ${
-                    filterActive === value
-                      ? 'bg-white text-indigo-700 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Lead count badge */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 rounded-xl">
-            <span className="text-lg">{totalLeads}</span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-indigo-600">
-              {totalLeads === 1 ? 'Lead' : 'Leads'}
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Top row: 2 cards side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">

@@ -181,6 +181,7 @@ export default function DashboardPage() {
                 {[
                   { value: 'active', label: 'Active' },
                   { value: 'inactive', label: 'Inactive' },
+                  { value: 'closed', label: 'Closed' },
                   { value: 'all', label: 'All' },
                 ].map(({ value, label }) => (
                   <button
@@ -200,7 +201,7 @@ export default function DashboardPage() {
             {/* Active badge */}
             <div className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/10">
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-white font-bold text-sm">{filterActive === 'active' ? 'Active' : filterActive === 'inactive' ? 'Inactive' : 'All'} Leads</span>
+              <span className="text-white font-bold text-sm">{filterActive === 'active' ? 'Active' : filterActive === 'inactive' ? 'Inactive' : filterActive === 'closed' ? 'Closed' : 'All'} Leads</span>
             </div>
           </div>
         </div>
