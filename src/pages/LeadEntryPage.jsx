@@ -785,8 +785,8 @@ export default function LeadEntryPage() {
                       {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                     </td>
                     {(effectiveRole === 'admin' || isImpersonating || effectiveRole === 'executive') && (
-                      <td className="p-3 sm:p-4 text-center mobile-hide" data-label="Actions">
-                        <div className="flex items-center justify-end gap-1 sm:gap-2">
+                      <td className="p-3 sm:p-4 text-center mobile-hide min-w-[200px]" data-label="Actions">
+                        <div className="flex items-center justify-end gap-1 sm:gap-1.5 flex-nowrap whitespace-nowrap">
                           <button
                             onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
                             className="px-2 sm:px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"

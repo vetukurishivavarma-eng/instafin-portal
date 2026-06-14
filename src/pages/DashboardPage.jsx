@@ -174,35 +174,7 @@ export default function DashboardPage() {
                 })}
               </select>
             </div>
-            {/* Active/Inactive Toggle */}
-            <div className="flex-1 min-w-[120px]">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-white/60 mb-1.5">Leads</label>
-              <div className="flex bg-white/10 backdrop-blur-md rounded-xl p-0.5 gap-0.5 border border-white/10">
-                {[
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                  { value: 'closed', label: 'Closed' },
-                  { value: 'all', label: 'All' },
-                ].map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setFilterActive(value)}
-                    className={`flex-1 text-center text-xs font-bold px-2 py-2 rounded-lg transition-all duration-200 ${
-                      filterActive === value
-                        ? 'bg-white text-indigo-700 shadow-lg shadow-black/10'
-                        : 'text-white/70 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Active badge */}
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/10">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-white font-bold text-sm">{filterActive === 'active' ? 'Active' : filterActive === 'inactive' ? 'Inactive' : filterActive === 'closed' ? 'Closed' : 'All'} Leads</span>
-            </div>
+
           </div>
         </div>
       </div>
@@ -223,6 +195,36 @@ export default function DashboardPage() {
         <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg cursor-default hover:shadow-xl hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 ease-out">
           <p className="text-white/80 text-xs sm:text-sm font-medium">Revenue</p>
           <h3 className="text-2xl sm:text-5xl font-bold text-white mt-1 sm:mt-2">{stats.revenue}</h3>
+        </div>
+      </div>
+
+      {/* ===== LEADS FILTER TOGGLE — between stats & graphs ===== */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-lg mb-4 sm:mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Show:</span>
+          <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
+            {[
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+              { value: 'closed', label: 'Closed' },
+              { value: 'all', label: 'All' },
+            ].map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setFilterActive(value)}
+                className={`text-center text-xs font-bold px-3 sm:px-4 py-2 rounded-lg transition-all duration-150 ${
+                  filterActive === value
+                    ? 'bg-white text-indigo-700 shadow-sm shadow-black/5'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 ml-auto px-3 py-1.5 bg-indigo-50 rounded-xl">
+            <span className="text-xs font-bold text-indigo-600">{filterActive === 'active' ? 'Active' : filterActive === 'inactive' ? 'Inactive' : filterActive === 'closed' ? 'Closed' : 'All'}</span>
+          </div>
         </div>
       </div>
 
