@@ -978,7 +978,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     // Compute mutually exclusive categories: total = active + inactive + rejected + closed
     const closedCount = allLeads.filter(l => l.is_closed === true || l.status === 'Closed').length;
     const remainingAfterClosed = allLeads.filter(l => l.is_closed !== true && l.status !== 'Closed');
-    const rejectedCount = remainingAfterClosed.filter(l => l.status === 'Rejected' && l.is_active !== false).length;
+    const rejectedCount = remainingAfterClosed.filter(l => l.status === 'Rejected').length;
     const remainingAfterRejected = remainingAfterClosed.filter(l => l.status !== 'Rejected');
     const inactiveCount = remainingAfterRejected.filter(l => l.is_active === false).length;
     const activeLeads = remainingAfterRejected.filter(l => l.is_active !== false);
