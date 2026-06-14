@@ -377,7 +377,7 @@ export default function CreditQueryPage() {
   return (
     <div className="py-6 sm:py-12 px-3 sm:px-6">
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Processing</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Processing &amp; Query</h1>
         <p className="text-xs sm:text-base text-gray-500 mt-1">Manage credit inquiries raised by banks for active leads in processing stage.</p>
       </div>
 
@@ -572,7 +572,7 @@ export default function CreditQueryPage() {
           {/* Credit Queries Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Processing Queries</h3>
+              <h3 className="text-lg font-bold text-gray-900">Processing &amp; Queries</h3>
               <div className="flex items-center gap-2">
                 {/* Share via WhatsApp */}
                 {creditQueries.length > 0 && (

@@ -5,6 +5,7 @@ import StatusBadge from '../components/StatusBadge';
 import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
 import { ALL_BANKS } from '../data/banks';
+import * as XLSX from 'xlsx';
 
 export default function LeadEntryPage() {
   const { isImpersonating, impersonating, user, accessToken, effectiveRole } = useAuth();
@@ -387,6 +388,35 @@ export default function LeadEntryPage() {
     }
   };
 
+  // ===== Download Leads as XLSX =====
+  const handleDownloadXLSX = () => {
+    const dataToExport = displayLeads.length > 0 ? displayLeads : allLeads;
+    const rows = dataToExport.map(lead => ({
+      'Customer Name': lead.customerName || '',
+      'Mobile': lead.mobile || '',
+      'Loan Type': lead.loanType ? lead.loanType.replace(/_/g, ' ') : '',
+      'Expected Amount': lead.expectedAmount ? `₹${parseInt(lead.expectedAmount).toLocaleString('en-IN')}` : '',
+      'Assigned To': lead.assignedTo || '',
+      'Banks': (lead.assignedBanks || []).join(', '),
+      'Status': lead.status || '',
+      'Is Active': lead.isActive !== false ? 'Yes' : 'No',
+      'Priority': lead.priority || 'Medium',
+      'Entry Date': lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN') : '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+
+    // Auto-size columns
+    const colWidths = Object.keys(rows[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...rows.map(r => String(r[key] || '').length)) + 2
+    }));
+    ws['!cols'] = colWidths;
+
+    XLSX.writeFile(wb, `Leads_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   // Use allLeads for admin management view (shows everything), leads for current user/impersonation view
   const displayLeads = effectiveRole === 'admin' ? allLeads : leads;
   const unassignedLeads = displayLeads.filter(l => !l.assignedTo);
@@ -465,6 +495,20 @@ export default function LeadEntryPage() {
             Bulk Upload
           </button>
         )}
+        
+        {/* Download XLSX - visible to both admin and executives */}
+        <button
+          onClick={handleDownloadXLSX}
+          className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl font-bold bg-green-600 text-white hover:bg-green-700 hover-lift shadow-lg shadow-green-500/20 transition-all flex items-center gap-2 text-sm sm:text-base"
+          title="Download all leads as Excel"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Download XLSX
+        </button>
       </div>
 
       {error && (
@@ -709,7 +753,7 @@ export default function LeadEntryPage() {
                     <td className="p-3 sm:p-4 mobile-hide text-xs text-gray-500" data-label="Entry Date">
                       {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                     </td>
-                    {(effectiveRole === 'admin' || isImpersonating) && (
+                    {(effectiveRole === 'admin' || isImpersonating || effectiveRole === 'executive') && (
                       <td className="p-3 sm:p-4 text-center mobile-hide" data-label="Actions">
                         <div className="flex items-center justify-end gap-1 sm:gap-2">
                           <button
@@ -718,63 +762,63 @@ export default function LeadEntryPage() {
                           >
                             Edit
                           </button>
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
-                                  method: 'PUT',
-                                  headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-                                });
-                                if (res.ok) {
-                                  setSuccess(`Lead ${lead.isActive === false ? 'restored' : 'marked inactive'} successfully`);
-                                  loadLeads();
-                                } else {
-                                  const err = await res.json();
-                                  setError(err.error || 'Failed to toggle status');
+                          {(effectiveRole === 'admin' || isImpersonating) && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
+                                    method: 'PUT',
+                                    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+                                  });
+                                  if (res.ok) {
+                                    setSuccess(`Lead ${lead.isActive === false ? 'restored' : 'marked inactive'} successfully`);
+                                    loadLeads();
+                                  } else {
+                                    const err = await res.json();
+                                    setError(err.error || 'Failed to toggle status');
+                                  }
+                                } catch (err) {
+                                  setError('Failed to toggle status');
                                 }
-                              } catch (err) {
-                                setError('Failed to toggle status');
-                              }
-                            }}
-                            className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                              lead.isActive === false
-                                ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
-                                : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
-                            }`}
-                          >
-                            {lead.isActive === false ? 'Restore' : 'Inactive'}
-                          </button>
+                              }}
+                              className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                lead.isActive === false
+                                  ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                                  : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+                              }`}
+                            >
+                              {lead.isActive === false ? 'Restore' : 'Inactive'}
+                            </button>
+                          )}
+                          {(effectiveRole === 'executive' && !isImpersonating) && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const reason = window.prompt('Please provide a reason for delete request:');
+                                if (reason === null) return;
+                                try {
+                                  const res = await fetch(`${API_BASE}/leads/${lead.id}/request-delete`, {
+                                    method: 'POST',
+                                    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ reason: reason || 'Not specified' })
+                                  });
+                                  if (res.ok) {
+                                    setSuccess('Delete request submitted to admin for approval');
+                                  } else {
+                                    const err = await res.json();
+                                    setError(err.error || 'Failed to submit delete request');
+                                  }
+                                } catch (err) {
+                                  setError('Failed to submit delete request');
+                                }
+                              }}
+                              className="px-2 sm:px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                            >
+                              Request Delete
+                            </button>
+                          )}
                         </div>
-                      </td>
-                    )}
-                    {effectiveRole === 'executive' && !isImpersonating && (
-                      <td className="p-3 sm:p-4 text-center mobile-hide" data-label="Actions">
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const reason = window.prompt('Please provide a reason for delete request:');
-                            if (reason === null) return; // cancelled
-                            try {
-                              const res = await fetch(`${API_BASE}/leads/${lead.id}/request-delete`, {
-                                method: 'POST',
-                                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ reason: reason || 'Not specified' })
-                              });
-                              if (res.ok) {
-                                setSuccess('Delete request submitted to admin for approval');
-                              } else {
-                                const err = await res.json();
-                                setError(err.error || 'Failed to submit delete request');
-                              }
-                            } catch (err) {
-                              setError('Failed to submit delete request');
-                            }
-                          }}
-                          className="px-2 sm:px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
-                        >
-                          Request Delete
-                        </button>
                       </td>
                     )}
                   </tr>
