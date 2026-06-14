@@ -188,6 +188,22 @@ router.put('/:id/approve', authorize('admin'), async (req, res) => {
       console.warn('Failed to record deletion in status_history:', historyErr.message);
     }
 
+    // Update the delete request as approved BEFORE deleting the lead,
+    // because the lead delete may cascade and remove the delete_request row too.
+    const { data: updated, error: updateError } = await supabase
+      .from('delete_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: req.user.id,
+        reviewed_by_name: adminName,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+      .select()
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+
     // Delete related records (lead_banks, lead_checklist_status)
     await supabase.from('lead_banks').delete().eq('lead_id', deleteReq.lead_id);
     await supabase.from('lead_checklist_status').delete().eq('lead_id', deleteReq.lead_id);
@@ -199,21 +215,6 @@ router.put('/:id/approve', authorize('admin'), async (req, res) => {
       .eq('id', deleteReq.lead_id);
 
     if (deleteError) throw deleteError;
-
-    // Update the delete request as approved
-    const { data: updated, error: updateError } = await supabase
-      .from('delete_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: req.user.id,
-        reviewed_by_name: adminName,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', requestId)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
 
     // Record audit log
     try {
@@ -349,6 +350,21 @@ router.post('/:id/self-approve', authorize('admin'), async (req, res) => {
       console.warn('Failed to record deletion status:', historyErr.message);
     }
 
+    // Update the delete request as approved BEFORE deleting the lead
+    const { data: updated, error: updateError } = await supabase
+      .from('delete_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: req.user.id,
+        reviewed_by_name: adminName,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+      .select()
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+
     // Delete related records
     await supabase.from('lead_banks').delete().eq('lead_id', deleteReq.lead_id);
     await supabase.from('lead_checklist_status').delete().eq('lead_id', deleteReq.lead_id);
@@ -360,21 +376,6 @@ router.post('/:id/self-approve', authorize('admin'), async (req, res) => {
       .eq('id', deleteReq.lead_id);
 
     if (deleteError) throw deleteError;
-
-    // Update the delete request as approved
-    const { data: updated, error: updateError } = await supabase
-      .from('delete_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: req.user.id,
-        reviewed_by_name: adminName,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', requestId)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
 
     // Record audit log
     try {

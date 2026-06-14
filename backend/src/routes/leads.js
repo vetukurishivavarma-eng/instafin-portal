@@ -294,8 +294,8 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
         coapplicantName: coapplicants[0]?.name || "",
         coapplicantIncomeSource: coapplicants[0]?.incomeSource || "",
         createdAt: lead.created_at,
-        // Rejected leads are treated as inactive alongside those with is_active = false
-        isActive: lead.is_active !== false && lead.status !== 'Rejected',
+        // Rejected is its own separate status — not part of active OR inactive
+        isActive: lead.is_active !== false,
         bankDetails: banks.map(b => ({
           id: b.id,
           bankName: b.bank_name,
@@ -974,9 +974,10 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
     if (error) throw error;
 
     const allLeads = leads || [];
-    // A lead is considered inactive if is_active is false OR status is 'Rejected'
+    // A lead is considered inactive only if is_active is false (Rejected is its own status)
+    const rejectedCount = allLeads.filter(l => l.status === 'Rejected' && l.is_active !== false).length;
     const activeLeads = allLeads.filter(l => l.is_active !== false && l.status !== 'Rejected');
-    const inactiveCount = allLeads.length - activeLeads.length;
+    const inactiveCount = allLeads.filter(l => l.is_active === false).length;
 
     // Fetch lead_banks for active leads only to derive accurate statuses
     const activeLeadIds = activeLeads.map(l => l.id);
@@ -1000,6 +1001,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
       totalLeads: allLeads.length,
       activeLeads: activeLeads.length,
       inactiveLeads: inactiveCount,
+      rejectedLeads: rejectedCount,
       newLeads: 0,
       assigned: 0,
       processing: 0,
