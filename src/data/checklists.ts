@@ -151,6 +151,7 @@ const firmDocuments = {
   llpITReturns3: createChecklistItem('firm_llp_it3', 'LLP IT Returns (Last 3 Years) with Balance Sheet & P&L', 'business_documents'),
   llpCurrentStmt1: createChecklistItem('firm_llp_current_1', 'LLP Current Account Statement (Last 1 Year)', 'business_documents'),
   gstReturns1_firm: createChecklistItem('firm_gst_returns', 'GST Returns (Last 1 Year)', 'business_documents'),
+  regCertRcCopy: createChecklistItem('firm_reg_rc_copy', 'Registration Certificate (RC Copy)', 'business_documents'),
 };
 
 // ============================================================
@@ -418,7 +419,7 @@ export const DECISION_TREE: DecisionTree = {
     incomeProofsSelfEmployed.indITReturns3,
     incomeProofsSelfEmployed.indSavingsStmt1,
     firmDocuments.proprietorCurrentStmt1,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     firmDocuments.firmPanCard,
     firmDocuments.latestProvisional,
     firmDocuments.gstRegCert,
@@ -558,7 +559,7 @@ export const DECISION_TREE: DecisionTree = {
     incomeProofsSelfEmployed.indITReturns3,
     incomeProofsSelfEmployed.indSavingsStmt1,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     firmDocuments.proprietorCurrentStmt1,
     firmDocuments.latestProvisional,
     firmDocuments.gstRegCert,
@@ -700,7 +701,7 @@ export const DECISION_TREE: DecisionTree = {
     kycDocuments.photo,
     incomeProofsSelfEmployed.indITReturns3,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     incomeProofsSelfEmployed.indSavingsStmt1,
     firmDocuments.proprietorCurrentStmt1,
     firmDocuments.latestProvisional,
@@ -839,7 +840,7 @@ export const DECISION_TREE: DecisionTree = {
     kycDocuments.addressProof,
     kycDocuments.photo,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     incomeProofsSelfEmployed.indITReturns3,
     incomeProofsSelfEmployed.indSavingsStmt1,
     firmDocuments.proprietorCurrentStmt1,
@@ -978,7 +979,7 @@ export const DECISION_TREE: DecisionTree = {
     kycDocuments.pan,
     kycDocuments.addressProof,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     kycDocuments.photo,
     incomeProofsSelfEmployed.indITReturns3,
     incomeProofsSelfEmployed.indSavingsStmt1,
@@ -1117,7 +1118,7 @@ export const DECISION_TREE: DecisionTree = {
     kycDocuments.aadhaar,
     kycDocuments.pan,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     kycDocuments.addressProof,
     kycDocuments.photo,
     incomeProofsSelfEmployed.indITReturns3,
@@ -1256,7 +1257,7 @@ export const DECISION_TREE: DecisionTree = {
   'lap|topup_equity|non_salaried|indian_resident|proprietor': [
     kycDocuments.aadhaar,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     kycDocuments.pan,
     kycDocuments.addressProof,
     kycDocuments.photo,
@@ -1373,7 +1374,7 @@ export const DECISION_TREE: DecisionTree = {
   // Business Loan | New | Non-Salaried | Indian Resident | Proprietor
   'business_loan|new|non_salaried|indian_resident|proprietor': [
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     // Proprietor Business KYC
     bizProprietorPan,
     firmDocuments.udyamCert,
@@ -1498,7 +1499,7 @@ export const DECISION_TREE: DecisionTree = {
     // Section D - Individual KYC
     kycDocuments.aadhaar,
     firmDocuments.firmPanCard,
-    commonFinancialDocs.regCertRcCopy,
+    firmDocuments.regCertRcCopy,
     kycDocuments.pan,
     kycDocuments.addressProof,
     kycDocuments.photo,
@@ -1596,7 +1597,7 @@ const commonFinancialDocs = {
   gstReturns1: createChecklistItem('fin_gst_returns1', 'GST Returns (Last 1 year)', 'financial_documents'),
   udyamCert: createChecklistItem('fin_udyam', 'Udyam Registration Certificate', 'financial_documents'),
   regAoaMoa: createChecklistItem('fin_reg_aoa_moa', 'Registration Certificate, AOA, MOA (Pvt Ltd)', 'financial_documents'),
-  regCertRcCopy: createChecklistItem('fin_reg_rc_copy', 'Registration Certificate (RC Copy)', 'financial_documents'),
+
   loanSanction: createChecklistItem('fin_loan_sanction', 'Loan Sanction Letters (if any)', 'financial_documents'),
   loanStatements1: createChecklistItem('fin_loan_stmt1', 'Loan Account Statements Last 1 year (if any)', 'financial_documents'),
 };
