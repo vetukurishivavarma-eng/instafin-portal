@@ -17,6 +17,7 @@ import SanctionPage from './pages/SanctionPage'
 import DisbursementPage from './pages/DisbursementPage'
 import RevenuePage from './pages/RevenuePage'
 import ExecutivePage from './pages/ExecutivePage'
+import AuditLogPage from './pages/AuditLogPage'
 
 // Executive pages
 import LeadEntryPage from './pages/LeadEntryPage'
@@ -135,6 +136,11 @@ function AppRoutes() {
         <Route path="/admin/executives" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <ExecutivePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/audit-log" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AuditLogPage />
           </ProtectedRoute>
         } />
 

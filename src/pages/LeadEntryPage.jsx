@@ -175,30 +175,20 @@ export default function LeadEntryPage() {
       const reqRes = await fetch(`${API_BASE}/leads/${leadId}/request-delete`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: reason || 'Requested by admin' })
+        body: JSON.stringify({ reason: reason || 'Not specified' })
       });
-      if (!reqRes.ok) {
-        const errData = await reqRes.json();
-        setError(errData.error || 'Failed to submit delete request');
-        setDeletingLead(false);
-        return;
-      }
-      const reqData = await reqRes.json();
-      const approveRes = await fetch(`${API_BASE}/delete-requests/${reqData.data.id}/self-approve`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (approveRes.ok) {
+      if (reqRes.ok) {
         setDeleteConfirm(null);
         setDeleteReason('');
-        setSuccess('Lead deleted successfully!');
+        setError('');
+        setSuccess('Delete request submitted. Another admin must approve it via the bell icon (🔔) in the top navigation bar.');
         loadLeads();
       } else {
-        const errData = await approveRes.json();
-        setError(errData.error || 'Failed to self-approve deletion');
+        const errData = await reqRes.json();
+        setError(errData.error || 'Failed to submit delete request');
       }
     } catch (err) {
-      setError('Failed to delete lead');
+      setError('Failed to submit delete request');
     } finally {
       setDeletingLead(false);
     }
