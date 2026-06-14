@@ -29,12 +29,16 @@ export default function PipelinePage() {
   const [editingLead, setEditingLead] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingLead, setDeletingLead] = useState(false);
   const [viewLead, setViewLead] = useState(null);
   const [sanctionLetterUrl, setSanctionLetterUrl] = useState(null);
   const [loadingLetter, setLoadingLetter] = useState(false);
   const [statusHistory, setStatusHistory] = useState([]);
   const [showStatusHistory, setShowStatusHistory] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showHistoryFor, setShowHistoryFor] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const intervalRef = useRef(null);
 
   const loadData = async () => {
@@ -130,6 +134,62 @@ export default function PipelinePage() {
       setStatusHistory(data.data || []);
     } catch (err) {
       setStatusHistory([]);
+    }
+  };
+
+  const handleDeleteLead = async (leadId, reason) => {
+    setDeletingLead(true);
+    try {
+      // Step 1: Submit delete request
+      const reqRes = await fetch(`${API_BASE}/leads/${leadId}/request-delete`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || 'Requested by admin' })
+      });
+
+      if (!reqRes.ok) {
+        const errData = await reqRes.json();
+        setError(errData.error || 'Failed to submit delete request');
+        setDeletingLead(false);
+        return;
+      }
+
+      const reqData = await reqRes.json();
+
+      // Step 2: Self-approve the delete request
+      const approveRes = await fetch(`${API_BASE}/delete-requests/${reqData.data.id}/self-approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      if (approveRes.ok) {
+        setDeleteConfirm(null);
+        setDeleteReason('');
+        loadData();
+      } else {
+        const errData = await approveRes.json();
+        setError(errData.error || 'Failed to self-approve deletion');
+      }
+    } catch (err) {
+      setError('Failed to delete lead');
+    } finally {
+      setDeletingLead(false);
+    }
+  };
+
+  const handleShowHistory = async (lead) => {
+    setHistoryLoading(true);
+    setShowHistoryFor(lead);
+    try {
+      const res = await fetch(`${API_BASE}/status-history/${lead.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setStatusHistory(data.data || []);
+    } catch (err) {
+      setStatusHistory([]);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -284,7 +344,7 @@ export default function PipelinePage() {
                     <th className="p-3 sm:p-4 mobile-hide">Banks</th>
                     <th className="p-3 sm:p-4">Status</th>
                     <th className="p-3 sm:p-4 mobile-hide">Entry Date</th>
-                    {isAdmin && <th className="p-3 sm:p-4 text-center">Actions</th>}
+                    <th className="p-3 sm:p-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y text-sm">
@@ -365,44 +425,60 @@ export default function PipelinePage() {
                       <td className="p-3 sm:p-4 mobile-hide text-xs text-gray-500" data-label="Entry Date">
                         {lead.entryDate || lead.createdAt ? new Date(lead.entryDate || lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
-                      {isAdmin && (
-                        <td className="p-3 sm:p-4 text-center" data-label="Actions">
-                          <div className="flex items-center justify-end gap-1 sm:gap-2">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
-                              className="px-2 sm:px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
-                                    method: 'PUT',
-                                    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-                                  });
-                                  if (res.ok) {
-                                    loadData();
-                                  } else {
-                                    const err = await res.json();
-                                    setError(err.error || 'Failed to toggle status');
+                      <td className="p-3 sm:p-4 text-center" data-label="Actions">
+                        <div className="flex items-center justify-end gap-1 sm:gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleShowHistory(lead); }}
+                            className="px-2 sm:px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                            title="View Lead History"
+                          >
+                            History
+                          </button>
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setEditForm({...lead}); }}
+                                className="px-2 sm:px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const res = await fetch(`${API_BASE}/leads/${lead.id}/toggle-active`, {
+                                      method: 'PUT',
+                                      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+                                    });
+                                    if (res.ok) {
+                                      loadData();
+                                    } else {
+                                      const err = await res.json();
+                                      setError(err.error || 'Failed to toggle status');
+                                    }
+                                  } catch (err) {
+                                    setError('Failed to toggle status');
                                   }
-                                } catch (err) {
-                                  setError('Failed to toggle status');
-                                }
-                              }}
-                              className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                lead.isActive === false
-                                  ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
-                                  : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
-                              }`}
-                            >
-                              {lead.isActive === false ? 'Restore' : 'Inactive'}
-                            </button>
-                          </div>
-                        </td>
-                      )}
+                                }}
+                                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                  lead.isActive === false
+                                    ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                                    : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'
+                                }`}
+                              >
+                                {lead.isActive === false ? 'Restore' : 'Inactive'}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteConfirm(lead); setDeleteReason(''); }}
+                                className="px-2 sm:px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                                title="Delete Lead"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -721,7 +797,24 @@ export default function PipelinePage() {
               )}
             </div>
 
+            {/* Lead History Section inside Details */}
             <div className="mt-6">
+              <button
+                onClick={() => {
+                  if (statusHistory.length === 0) {
+                    fetchStatusHistory(viewLead.id);
+                  }
+                  setShowHistoryFor(viewLead);
+                  setViewLead(null);
+                  setSanctionLetterUrl(null);
+                }}
+                className="w-full py-3 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl font-semibold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2 mb-3"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                View Status History
+              </button>
               <button
                 onClick={() => { setViewLead(null); setSanctionLetterUrl(null); }}
                 className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
@@ -729,6 +822,169 @@ export default function PipelinePage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { if (!deletingLead) setDeleteConfirm(null); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Delete Lead</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete <strong>{deleteConfirm.customerName}</strong>?
+              All related documents and records will be permanently removed.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for deletion</label>
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Enter reason for deletion..."
+                rows={2}
+                className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+                disabled={deletingLead}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteConfirm(null); setDeleteReason(''); }}
+                disabled={deletingLead}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteLead(deleteConfirm.id, deleteReason)}
+                disabled={deletingLead}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deletingLead ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  'Yes, Delete Lead'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead History Popup */}
+      {showHistoryFor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setShowHistoryFor(null); setStatusHistory([]); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Lead History</h3>
+                <p className="text-sm text-gray-500">{showHistoryFor.customerName} - {showHistoryFor.mobile}</p>
+              </div>
+              <button
+                onClick={() => { setShowHistoryFor(null); setStatusHistory([]); }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <svg className="animate-spin w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              </div>
+            ) : statusHistory.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-gray-500">No status history available for this lead.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {statusHistory.map((entry, index) => (
+                  <div key={entry.id || index} className="relative flex gap-4">
+                    {/* Timeline line */}
+                    {index < statusHistory.length - 1 && (
+                      <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-gray-200"></div>
+                    )}
+                    {/* Timeline dot */}
+                    <div className="flex-shrink-0 mt-1">
+                      <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center ${
+                        entry.new_status === 'Deleted' || entry.new_status === 'Closed'
+                          ? 'bg-red-100 text-red-600'
+                          : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {entry.previous_status && (
+                            <>
+                              <span className="text-xs font-medium text-gray-500 bg-white px-2 py-0.5 rounded border">
+                                {entry.previous_status}
+                              </span>
+                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                              </svg>
+                            </>
+                          )}
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                            entry.new_status === 'Deleted' || entry.new_status === 'Closed'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {entry.new_status}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5 flex-wrap gap-1">
+                          <span className="text-xs text-gray-500">
+                            {entry.changed_by && <span className="font-medium">{entry.changed_by}</span>}
+                            {entry.changed_at && (
+                              <span className="ml-1">
+                                {new Date(entry.changed_at).toLocaleDateString('en-IN', {
+                                  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                                })}
+                              </span>
+                            )}
+                          </span>
+                          {entry.duration && (
+                            <span className="text-[10px] text-gray-400 bg-white px-2 py-0.5 rounded-full border">
+                              {entry.duration}
+                            </span>
+                          )}
+                        </div>
+                        {entry.notes && (
+                          <p className="text-xs text-gray-500 mt-1 italic border-t border-gray-100 pt-1">{entry.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

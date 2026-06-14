@@ -33,6 +33,27 @@ export default function ExecutivePage() {
   const [emailTesting, setEmailTesting] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('yeshwantraavi4@gmail.com');
 
+  // Lead History state
+  const [showHistoryFor, setShowHistoryFor] = useState(null);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const handleShowHistory = async (lead) => {
+    setHistoryLoading(true);
+    setShowHistoryFor(lead);
+    try {
+      const res = await fetch(`${API_BASE}/status-history/${lead.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setHistoryData(data.data || []);
+    } catch (err) {
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // Test SMTP configuration
   const handleTestEmail = async () => {
     if (!testEmailAddress) {
@@ -371,12 +392,20 @@ export default function ExecutivePage() {
                           </td>
                           <td className="py-3 px-4"><StatusBadge status={lead.status} /></td>
                           <td className="py-3 px-4">
-                            <button
-                              onClick={() => { setBankModal(lead); setSelectedBank(''); }}
-                              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                              Assign Bank
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => { setBankModal(lead); setSelectedBank(''); }}
+                                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+                              >
+                                Assign Bank
+                              </button>
+                              <button
+                                onClick={() => handleShowHistory(lead)}
+                                className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 transition-colors font-semibold"
+                              >
+                                History
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -794,4 +823,39 @@ export default function ExecutivePage() {
       )}
     </div>
   );
+      {/* Lead History Popup */}
+      {showHistoryFor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setShowHistoryFor(null); setHistoryData([]); }}>
+          <div className="bg-white rounded-3xl p-8 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Lead History</h3>
+                <p className="text-sm text-gray-500">{showHistoryFor.customerName} - {showHistoryFor.mobile}</p>
+              </div>
+              <button
+                onClick={() => { setShowHistoryFor(null); setHistoryData([]); }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+            {historyLoading ? (
+              <div className="text-center py-12"><p>Loading...</p></div>
+            ) : historyData.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">No status history available.</div>
+            ) : (
+              <div className="space-y-4">
+                {historyData.map((entry, index) => (
+                  <div key={entry.id || index} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">{entry.new_status}</span>
+                      <span className="text-xs text-gray-500">{entry.changed_by} - {new Date(entry.changed_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 }

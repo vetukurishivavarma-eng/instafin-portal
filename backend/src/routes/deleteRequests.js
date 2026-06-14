@@ -132,6 +132,7 @@ router.post('/:leadId/request-delete', authorize('admin', 'executive'), async (r
 });
 
 // PUT /api/delete-requests/:id/approve — Admin approves and performs deletion
+// Also supports admin self-approval (admin can approve their own request)
 router.put('/:id/approve', authorize('admin'), async (req, res) => {
   try {
     const requestId = req.params.id;
@@ -160,13 +161,38 @@ router.put('/:id/approve', authorize('admin'), async (req, res) => {
 
     const adminName = adminUser?.name || req.user.email || 'Unknown';
 
-    // Delete related records first (lead_banks, status_history, lead_checklist_status)
-    // This runs before deleting the lead itself to avoid FK issues
+    // Record final 'Deleted' status in status_history BEFORE deleting the lead
+    // This must happen before clearing history records so the 'Deleted' entry persists
+    // even though the lead will be hard-deleted (FK cascade will remove history too).
+    // We record this first to ensure it gets saved before cascade cleanup.
+    try {
+      const { data: lastHistory } = await supabase
+        .from('status_history')
+        .select('new_status')
+        .eq('lead_id', deleteReq.lead_id)
+        .order('changed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      await supabase
+        .from('status_history')
+        .insert({
+          lead_id: deleteReq.lead_id,
+          previous_status: lastHistory?.new_status || null,
+          new_status: 'Deleted',
+          changed_by: adminName,
+          changed_at: new Date().toISOString(),
+          notes: `Lead deleted - approved by ${adminName} - Reason: ${deleteReq.reason || 'Not provided'}`
+        });
+    } catch (historyErr) {
+      console.warn('Failed to record deletion in status_history:', historyErr.message);
+    }
+
+    // Delete related records (lead_banks, lead_checklist_status)
     await supabase.from('lead_banks').delete().eq('lead_id', deleteReq.lead_id);
-    await supabase.from('status_history').delete().eq('lead_id', deleteReq.lead_id);
     await supabase.from('lead_checklist_status').delete().eq('lead_id', deleteReq.lead_id);
 
-    // Hard delete the lead
+    // Hard delete the lead (this will cascade-delete status_history)
     const { error: deleteError } = await supabase
       .from('leads')
       .delete()
@@ -267,6 +293,112 @@ router.put('/:id/reject', authorize('admin'), async (req, res) => {
   } catch (error) {
     console.error('Error rejecting delete request:', error);
     res.status(500).json({ error: 'Failed to reject delete request' });
+  }
+});
+
+// POST /api/delete-requests/:id/self-approve — Admin requests + approves in one step (self-approval)
+router.post('/:id/self-approve', authorize('admin'), async (req, res) => {
+  try {
+    const requestId = req.params.id;
+
+    // Get the delete request
+    const { data: deleteReq, error: fetchError } = await supabase
+      .from('delete_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+
+    if (fetchError || !deleteReq) {
+      return res.status(404).json({ error: 'Delete request not found' });
+    }
+
+    if (deleteReq.status !== 'pending') {
+      return res.status(400).json({ error: `This request has already been ${deleteReq.status}` });
+    }
+
+    // Get admin name
+    const { data: adminUser } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    const adminName = adminUser?.name || req.user.email || 'Unknown';
+
+    // Record final 'Deleted' status before cleanup
+    try {
+      const { data: lastHistory } = await supabase
+        .from('status_history')
+        .select('new_status')
+        .eq('lead_id', deleteReq.lead_id)
+        .order('changed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      await supabase
+        .from('status_history')
+        .insert({
+          lead_id: deleteReq.lead_id,
+          previous_status: lastHistory?.new_status || null,
+          new_status: 'Deleted',
+          changed_by: adminName,
+          changed_at: new Date().toISOString(),
+          notes: `Self-approved deletion by admin (${adminName}) - Reason: ${deleteReq.reason || 'Not provided'}`
+        });
+    } catch (historyErr) {
+      console.warn('Failed to record deletion status:', historyErr.message);
+    }
+
+    // Delete related records
+    await supabase.from('lead_banks').delete().eq('lead_id', deleteReq.lead_id);
+    await supabase.from('lead_checklist_status').delete().eq('lead_id', deleteReq.lead_id);
+
+    // Hard delete the lead
+    const { error: deleteError } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', deleteReq.lead_id);
+
+    if (deleteError) throw deleteError;
+
+    // Update the delete request as approved
+    const { data: updated, error: updateError } = await supabase
+      .from('delete_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: req.user.id,
+        reviewed_by_name: adminName,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Record audit log
+    try {
+      await supabase
+        .from('audit_logs')
+        .insert({
+          lead_id: deleteReq.lead_id,
+          admin_id: req.user.id,
+          admin_name: adminName,
+          action: 'deleted',
+          details: `Self-approved deletion by admin (${adminName}) - Customer: ${deleteReq.customer_name} - Reason: ${deleteReq.reason || 'Not provided'}`,
+          created_at: new Date().toISOString()
+        });
+    } catch (auditErr) {
+      console.error('Failed to record audit log:', auditErr);
+    }
+
+    res.json({
+      message: 'Lead deleted successfully (self-approved)',
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error self-approving delete request:', error);
+    res.status(500).json({ error: 'Failed to self-approve delete request' });
   }
 });
 
