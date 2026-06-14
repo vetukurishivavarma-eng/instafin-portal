@@ -419,7 +419,8 @@ export default function LeadEntryPage() {
   // ===== Download Leads as XLSX =====
   const handleDownloadXLSX = () => {
     const dataToExport = displayLeads.length > 0 ? displayLeads : allLeads;
-    const rows = dataToExport.map(lead => ({
+    const rows = dataToExport.map((lead, idx) => ({
+      'S.No': idx + 1,
       'Customer Name': lead.customerName || '',
       'Mobile': lead.mobile || '',
       'Loan Type': lead.loanType ? lead.loanType.replace(/_/g, ' ') : '',
@@ -693,6 +694,7 @@ export default function LeadEntryPage() {
             <table className="w-full text-left">
               <thead className="bg-gray-50/70 border-b">
                 <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="p-3 sm:p-4 text-center w-10">#</th>
                   <th className="p-3 sm:p-4">Customer</th>
                   <th className="p-3 sm:p-4 mobile-hide">Mobile</th>
                   <th className="p-3 sm:p-4 mobile-hide">Loan Type</th>
@@ -704,12 +706,13 @@ export default function LeadEntryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y text-sm">
-                {filteredLeads.map(lead => (
+                {filteredLeads.map((lead, idx) => (
                   <tr
                     key={lead.id}
                     onClick={() => handleViewLead(lead)}
                     className={`hover:bg-gray-50/40 transition-colors cursor-pointer ${lead.isActive === false ? 'bg-red-50/40 opacity-75' : ''}`}
                   >
+                    <td className="p-3 sm:p-4 text-center text-gray-400 font-bold text-xs w-10" data-label="#">{idx + 1}</td>
                     <td className="p-3 sm:p-4" data-label="Customer">
                       <div className="flex flex-col">
                         <span className="text-gray-900 font-bold text-sm">{lead.customerName}</span>
