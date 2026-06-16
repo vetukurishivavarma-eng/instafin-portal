@@ -271,7 +271,11 @@ export default function PipelinePage() {
     const matchesSearch = !searchTerm ||
       lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.mobile?.includes(searchTerm);
-    const matchesStatus = !statusFilter || lead.status === statusFilter || (statusFilter === 'Inactive' && lead.isActive === false);
+    let matchesStatus = !statusFilter || lead.status === statusFilter || (statusFilter === 'Inactive' && lead.isActive === false);
+    // Handle __active__ filter from Dashboard Active card — exclude rejected, inactive, and closed
+    if (statusFilter === '__active__') {
+      matchesStatus = lead.isActive !== false && lead.status !== 'Rejected' && lead.status !== 'Closed';
+    }
     return matchesSearch && matchesStatus;
   });
 

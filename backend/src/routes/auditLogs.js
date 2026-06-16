@@ -70,7 +70,7 @@ router.get('/:leadId', authorize('admin', 'executive'), async (req, res) => {
 // GET /api/audit-logs — Get all audit logs (admin only)
 router.get('/', authorize('admin'), async (req, res) => {
   try {
-    const { leadId, limit = 50 } = req.query;
+    const { leadId, limit = 50, date } = req.query;
 
     let query = supabase
       .from('audit_logs')
@@ -80,6 +80,13 @@ router.get('/', authorize('admin'), async (req, res) => {
 
     if (leadId) {
       query = query.eq('lead_id', leadId);
+    }
+
+    // Date filter — if date is provided, filter logs for that specific day
+    if (date) {
+      const startDate = `${date}T00:00:00.000Z`;
+      const endDate = `${date}T23:59:59.999Z`;
+      query = query.gte('created_at', startDate).lte('created_at', endDate);
     }
 
     const { data: logs, error } = await query;

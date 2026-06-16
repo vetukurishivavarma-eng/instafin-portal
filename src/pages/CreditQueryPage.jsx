@@ -27,6 +27,13 @@ export default function CreditQueryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
 
+  // Follow up call state
+  const [followUps, setFollowUps] = useState([]);
+  const [followUpDateFilter, setFollowUpDateFilter] = useState('');
+  const [showAddFollowUp, setShowAddFollowUp] = useState(false);
+  const [newFollowUp, setNewFollowUp] = useState({ result: '', notes: '' });
+  const [addingFollowUp, setAddingFollowUp] = useState(false);
+
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e) {
@@ -78,6 +85,8 @@ export default function CreditQueryPage() {
     setError('');
     setSuccess('');
     setShowAddQuery(false);
+    setFollowUpDateFilter('');
+    setShowAddFollowUp(false);
 
     try {
       const res = await fetch(`${API_BASE}/credit-queries/lead/${lead.id}`, {
@@ -86,9 +95,74 @@ export default function CreditQueryPage() {
       const data = await res.json();
       setCreditQueries(data.data || []);
       setBanks(data.banks || []);
+      setFollowUps(data.followUps || []);
     } catch (err) {
       setCreditQueries([]);
       setBanks([]);
+      setFollowUps([]);
+    }
+  };
+
+  const fetchFollowUpsForLead = async (leadId, dateFilter = '') => {
+    try {
+      let url = `${API_BASE}/follow-ups/lead/${leadId}`;
+      if (dateFilter) url += `?date=${dateFilter}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setFollowUps(data.data || []);
+    } catch (err) {
+      setFollowUps([]);
+    }
+  };
+
+  const handleAddFollowUp = async (e) => {
+    e.preventDefault();
+    if (!newFollowUp.result.trim() || !selectedLead) return;
+    setAddingFollowUp(true);
+    try {
+      const res = await fetch(`${API_BASE}/follow-ups`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          lead_id: selectedLead.id,
+          result: newFollowUp.result.trim(),
+          notes: newFollowUp.notes.trim() || null
+        })
+      });
+      if (res.ok) {
+        setSuccess('Follow-up recorded successfully!');
+        setNewFollowUp({ result: '', notes: '' });
+        setShowAddFollowUp(false);
+        fetchFollowUpsForLead(selectedLead.id, followUpDateFilter);
+      } else {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to record follow-up');
+      }
+    } catch (err) {
+      setError('Failed to record follow-up');
+    } finally {
+      setAddingFollowUp(false);
+    }
+  };
+
+  const handleDeleteFollowUp = async (followUpId) => {
+    if (!window.confirm('Delete this follow-up entry?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/follow-ups/${followUpId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (res.ok) {
+        setFollowUps(prev => prev.filter(f => f.id !== followUpId));
+        setSuccess('Follow-up deleted!');
+      }
+    } catch (err) {
+      setError('Failed to delete follow-up');
     }
   };
 
@@ -96,7 +170,10 @@ export default function CreditQueryPage() {
     setSelectedLead(null);
     setCreditQueries([]);
     setBanks([]);
+    setFollowUps([]);
+    setFollowUpDateFilter('');
     setShowAddQuery(false);
+    setShowAddFollowUp(false);
     setError('');
     setSuccess('');
   };
@@ -567,6 +644,141 @@ export default function CreditQueryPage() {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Follow Up Call Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-50 to-green-50 border border-teal-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Follow Up Calls</h3>
+                  <p className="text-xs text-gray-500">Record daily follow-up results for this lead</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddFollowUp(!showAddFollowUp)}
+                className="px-4 py-2 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 transition-all flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                {showAddFollowUp ? 'Cancel' : 'New Follow-up'}
+              </button>
+            </div>
+
+            {/* Add Follow Up Form */}
+            {showAddFollowUp && (
+              <form onSubmit={handleAddFollowUp} className="bg-teal-50 rounded-xl p-5 mb-6 border border-teal-100">
+                <h4 className="font-semibold text-teal-800 text-sm mb-4">Record Today's Follow-up Result</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Follow-up Result *</label>
+                    <textarea
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm bg-white resize-none"
+                      rows={2}
+                      value={newFollowUp.result}
+                      onChange={e => setNewFollowUp({...newFollowUp, result: e.target.value})}
+                      placeholder="Describe the follow-up result..."
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Additional Notes</label>
+                    <textarea
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm bg-white resize-none"
+                      rows={2}
+                      value={newFollowUp.notes}
+                      onChange={e => setNewFollowUp({...newFollowUp, notes: e.target.value})}
+                      placeholder="Any additional notes..."
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={addingFollowUp}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {addingFollowUp ? 'Saving...' : 'Save Follow-up'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Date Filter */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-semibold text-gray-600">Filter by Date:</label>
+                <input
+                  type="date"
+                  value={followUpDateFilter}
+                  onChange={(e) => {
+                    setFollowUpDateFilter(e.target.value);
+                    if (selectedLead) {
+                      fetchFollowUpsForLead(selectedLead.id, e.target.value);
+                    }
+                  }}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-44"
+                />
+                {followUpDateFilter && (
+                  <button
+                    onClick={() => {
+                      setFollowUpDateFilter('');
+                      if (selectedLead) fetchFollowUpsForLead(selectedLead.id, '');
+                    }}
+                    className="text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Follow Ups List */}
+            {followUps.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-xl">
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <p className="font-medium">No follow-up entries yet</p>
+                <p className="text-xs mt-1 text-gray-400">Click "New Follow-up" to record today's follow-up result.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {followUps.map((fu) => (
+                  <div key={fu.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="bg-teal-100 text-teal-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                            {fu.follow_up_date ? new Date(fu.follow_up_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                          </span>
+                          {fu.created_by && (
+                            <span className="text-xs text-gray-400">by {fu.created_by}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-700 font-medium">{fu.result}</p>
+                        {fu.notes && (
+                          <p className="text-xs text-gray-500 mt-1 italic">{fu.notes}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteFollowUp(fu.id)}
+                        className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                        title="Delete"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Credit Queries Section */}

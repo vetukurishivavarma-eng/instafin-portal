@@ -25,17 +25,22 @@ export default function AuditLogPage() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => {
     if (!accessToken) return;
     fetchLogs();
-  }, [accessToken]);
+  }, [accessToken, dateFilter]);
 
   const fetchLogs = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/audit-logs`, {
+      let url = `${API_BASE}/audit-logs`;
+      if (dateFilter) {
+        url += `?date=${dateFilter}`;
+      }
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       if (res.ok) {
@@ -127,6 +132,14 @@ export default function AuditLogPage() {
               <option value="restored">Lead Restored</option>
               <option value="marked_inactive">Marked Inactive</option>
             </select>
+            <div className="w-full sm:w-auto">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="border border-gray-200 rounded-2xl px-4 sm:px-5 py-2.5 sm:py-3 text-sm bg-gray-50/50 focus:ring-2 focus:ring-indigo-200 focus:outline-none transition-all shadow-sm w-full sm:w-44"
+              />
+            </div>
             <button
               onClick={fetchLogs}
               className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-500/10 whitespace-nowrap text-sm"

@@ -182,7 +182,7 @@ export default function DashboardPage() {
       {/* ===== STAT CARDS ===== */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 stats-grid">
         <StatCard label="Total Leads" value={stats.totalLeads.toLocaleString()} gradient="from-slate-700 to-slate-900" filterStatus={null} />
-        <StatCard label="Active" value={stats.activeLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus={null} />
+        <StatCard label="Active" value={stats.activeLeads.toLocaleString()} gradient="from-blue-500 to-blue-700" filterStatus="__active__" />
         <StatCard label="New" value={stats.newLeads || 0} gradient="from-sky-400 to-cyan-600" filterStatus="New" />
         <StatCard label="Inactive" value={stats.inactiveLeads || 0} gradient="from-gray-400 to-gray-600" filterStatus="Inactive" />
         <StatCard label="Assigned" value={stats.assigned} gradient="from-orange-400 to-orange-600" filterStatus="Assigned" />

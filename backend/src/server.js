@@ -11,6 +11,7 @@ import formsRouter from './routes/forms.js';
 import creditQueriesRouter from './routes/creditQueries.js';
 import statusHistoryRouter from './routes/statusHistory.js';
 import deleteRequestsRouter from './routes/deleteRequests.js';
+import followUpsRouter from './routes/followUps.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,7 @@ app.use('/api/credit-queries', creditQueriesRouter);
 app.use('/api/status-history', statusHistoryRouter);
 app.use('/api/delete-requests', deleteRequestsRouter);
 app.use('/api/leads', deleteRequestsRouter);
+app.use('/api/follow-ups', followUpsRouter);
 
 // Health check
 app.get('/', (req, res) => {

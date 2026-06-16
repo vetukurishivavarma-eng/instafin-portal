@@ -43,6 +43,11 @@ export default function CustomerLoginPage() {
   const [viewDoc, setViewDoc] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  
+  // Document completion tracking
+  const [docCompletionStatus, setDocCompletionStatus] = useState({}); // { documentId: 'complete' | 'pending_with_reason' }
+  const [pendingReasonInput, setPendingReasonInput] = useState({}); // { documentId: 'reason text' }
+  const [showPendingReasonInput, setShowPendingReasonInput] = useState({}); // { documentId: true/false }
 
   // Bulk upload
   const [bulkFiles, setBulkFiles] = useState([]);
@@ -178,6 +183,36 @@ export default function CustomerLoginPage() {
     setExtractedProfile(null);
     setError('');
     setSuccess('');
+    setDocCompletionStatus({});
+    setPendingReasonInput({});
+    setShowPendingReasonInput({});
+  };
+
+  // ── Document Completion Handlers ──
+  const handleMarkComplete = (documentId) => {
+    setDocCompletionStatus(prev => ({ ...prev, [documentId]: 'complete' }));
+    setShowPendingReasonInput(prev => ({ ...prev, [documentId]: false }));
+    setSuccess('Document marked as complete!');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const handleMarkPending = (documentId) => {
+    const reason = pendingReasonInput[documentId] || '';
+    if (!reason.trim()) {
+      setError('Please provide a reason for keeping this document as pending');
+      return;
+    }
+    setDocCompletionStatus(prev => ({ ...prev, [documentId]: `pending: ${reason.trim()}` }));
+    setShowPendingReasonInput(prev => ({ ...prev, [documentId]: false }));
+    setSuccess('Document marked as pending with reason.');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const togglePendingReasonInput = (documentId) => {
+    setShowPendingReasonInput(prev => ({ ...prev, [documentId]: !prev[documentId] }));
+    if (!showPendingReasonInput[documentId]) {
+      setPendingReasonInput(prev => ({ ...prev, [documentId]: '' }));
+    }
   };
 
   // Load checklist based on lead's loan type
@@ -784,7 +819,15 @@ export default function CustomerLoginPage() {
         businessType: selectedLead.businessType
       };
       const bankName = getBankDetailsWithBranches() || getBankNamesString();
-      await downloadPDF(selection, checklistItems, bankName);
+      // Add pending reason annotations to items
+      const itemsWithStatus = checklistItems.map(item => {
+        const status = docCompletionStatus[item.id];
+        let notes = '';
+        if (status === 'complete') notes = '[COMPLETED]';
+        else if (status && status.startsWith('pending:')) notes = '[PENDING: ' + status.replace('pending:', '').trim() + ']';
+        return { ...item, notes };
+      });
+      await downloadPDF(selection, itemsWithStatus, bankName);
     } catch (err) {
       setError('Failed to generate PDF');
     } finally {
@@ -797,13 +840,20 @@ export default function CustomerLoginPage() {
     setIsSharing(true);
     try {
       const bankName = getBankDetailsWithBranches() || getBankNamesString();
-      await shareOnWhatsApp({
-        loanType: selectedLead.loanType,
-        items: checklistItems.filter(i => i.required).map(item => ({
-          name: item.name,
+      const itemsWithStatus = checklistItems.filter(i => i.required).map(item => {
+        const status = docCompletionStatus[item.id];
+        let notes = '';
+        if (status === 'complete') notes = ' [COMPLETED]';
+        else if (status && status.startsWith('pending:')) notes = ' [PENDING: ' + status.replace('pending:', '').trim() + ']';
+        return {
+          name: item.name + notes,
           category: item.category,
           required: item.required
-        })),
+        };
+      });
+      await shareOnWhatsApp({
+        loanType: selectedLead.loanType,
+        items: itemsWithStatus,
         bankName: bankName
       });
     } catch (err) {
@@ -820,20 +870,40 @@ export default function CustomerLoginPage() {
       return !hasUploaded && item.required;
     });
 
-    if (pendingItems.length === 0) {
+    // Also include items marked as pending with reasons
+    const markedPendingItems = checklistItems.filter(item => {
+      const status = docCompletionStatus[item.id];
+      return status && status.startsWith('pending:');
+    });
+
+    if (pendingItems.length === 0 && markedPendingItems.length === 0) {
       setSuccess('All required documents have been uploaded!');
       setTimeout(() => setSuccess(''), 3000);
       return;
     }
 
     const bankInfo = getBankDetailsWithBranches() || getBankNamesString();
-    const subject = `Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType || 'Loan'})`;
-    const body =
-      `Dear ${selectedLead.customerName},\n\n` +
-      `Please submit the following pending documents for your ${selectedLead.loanType || 'loan'} application.\n` +
-      `Bank(s): ${bankInfo}\n\n` +
-      pendingItems.map((item, i) => `${i + 1}. ${item.name} (${item.category.replace(/_/g, ' ')})`).join('\n') +
-      `\n\nPlease upload these at your earliest convenience.\n\nThank you.`;
+    const subject = `Documents Status - ${selectedLead.customerName} (${selectedLead.loanType || 'Loan'})`;
+    let body = `Dear ${selectedLead.customerName},\n\n`;
+    body += `Documents status for your ${selectedLead.loanType || 'loan'} application.\n`;
+    body += `Bank(s): ${bankInfo}\n\n`;
+
+    if (pendingItems.length > 0) {
+      body += `* Pending Upload:\n`;
+      body += pendingItems.map((item, i) => `${i + 1}. ${item.name} (${item.category.replace(/_/g, ' ')})`).join('\n');
+      body += '\n\n';
+    }
+
+    if (markedPendingItems.length > 0) {
+      body += `* Marked Pending (With Reasons):\n`;
+      body += markedPendingItems.map((item, i) => {
+        const reason = docCompletionStatus[item.id].replace('pending:', '').trim();
+        return `${i + 1}. ${item.name} - Reason: ${reason}`;
+      }).join('\n');
+      body += '\n\n';
+    }
+
+    body += `Please take necessary action.\n\nThank you.`;
 
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(gmailUrl, '_blank');
@@ -846,7 +916,13 @@ export default function CustomerLoginPage() {
       return !hasUploaded && item.required;
     });
 
-    if (pendingItems.length === 0) {
+    // Also include items marked as pending with reasons
+    const markedPendingItems = checklistItems.filter(item => {
+      const status = docCompletionStatus[item.id];
+      return status && status.startsWith('pending:');
+    });
+
+    if (pendingItems.length === 0 && markedPendingItems.length === 0) {
       setSuccess('All required documents have been uploaded!');
       setTimeout(() => setSuccess(''), 3000);
       return;
@@ -855,11 +931,33 @@ export default function CustomerLoginPage() {
     setIsSharing(true);
     try {
       const bankName = getBankDetailsWithBranches() || getBankNamesString();
+
+      // Build items list with pending reasons included
+      const allPending = [
+        ...pendingItems.map(item => {
+          const status = docCompletionStatus[item.id];
+          let notes = '';
+          if (status && status.startsWith('pending:')) {
+            notes = ' [Reason: ' + status.replace('pending:', '').trim() + ']';
+          }
+          return { ...item, notes };
+        }),
+        ...markedPendingItems.filter(item => {
+          // Only add items that were NOT already in pendingItems
+          const files = checklistStatuses[item.id];
+          const hasUploaded = files && files.length > 0;
+          return hasUploaded; // Items that have files but marked pending
+        }).map(item => {
+          const reason = docCompletionStatus[item.id].replace('pending:', '').trim();
+          return { name: item.name, category: item.category, required: item.required, notes: ' [Marked Pending: ' + reason + ']' };
+        })
+      ];
+
       await shareOnWhatsApp({
         loanType: selectedLead.loanType,
-        title: `Pending Documents - ${selectedLead.customerName} (${selectedLead.loanType ? selectedLead.loanType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Loan'})`,
-        items: pendingItems.map(item => ({
-          name: item.name,
+        title: `Documents Status - ${selectedLead.customerName} (${selectedLead.loanType ? selectedLead.loanType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Loan'})`,
+        items: allPending.map(item => ({
+          name: item.name + (item.notes || ''),
           category: item.category,
           required: item.required
         })),
@@ -2179,6 +2277,52 @@ export default function CustomerLoginPage() {
                                   {item.required ? 'Required' : 'Optional'}
                                 </span>
 
+                                {/* Mark Complete / Pending buttons */}
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <button
+                                    onClick={() => handleMarkComplete(item.id)}
+                                    className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-all border ${docCompletionStatus[item.id] === 'complete' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'}`}
+                                    title="Mark this document as complete"
+                                  >
+                                    ✓ Done
+                                  </button>
+                                  <div className="relative">
+                                    {showPendingReasonInput[item.id] ? (
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={pendingReasonInput[item.id] || ''}
+                                          onChange={(e) => setPendingReasonInput(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                          placeholder="Pending reason..."
+                                          className="w-24 text-[10px] border border-gray-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
+                                          autoFocus
+                                          onKeyDown={(e) => { if (e.key === 'Enter') handleMarkPending(item.id); if (e.key === 'Escape') togglePendingReasonInput(item.id); }}
+                                        />
+                                        <button
+                                          onClick={() => handleMarkPending(item.id)}
+                                          className="text-[10px] font-semibold px-2 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all"
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          onClick={() => togglePendingReasonInput(item.id)}
+                                          className="text-[10px] font-semibold px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-all"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => togglePendingReasonInput(item.id)}
+                                        className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-all border ${docCompletionStatus[item.id]?.startsWith('pending') ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'}`}
+                                        title="Mark this document as pending with a reason"
+                                      >
+                                        {docCompletionStatus[item.id]?.startsWith('pending') ? '⏳ Pending' : 'Mark Pending'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
                                 {/* Add File / Cancel button */}
                                 {showForm ? (
                                   <button
@@ -2515,7 +2659,7 @@ export default function CustomerLoginPage() {
                 disabled={checklistItems.length === 0 || isDownloading}
                 className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
                   checklistItems.length === 0
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-purple-700 text-white hover:bg-purple-800 shadow-sm hover:shadow-md'
                 }`}
               >
@@ -2543,7 +2687,7 @@ export default function CustomerLoginPage() {
                 disabled={checklistItems.length === 0 || isSharing}
                 className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
                   checklistItems.length === 0
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md'
                 }`}
               >
@@ -2571,7 +2715,7 @@ export default function CustomerLoginPage() {
                 disabled={checklistItems.length === 0 || pendingCount === 0}
                 className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
                   checklistItems.length === 0 || pendingCount === 0
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
                 }`}
               >
@@ -2587,7 +2731,7 @@ export default function CustomerLoginPage() {
                 disabled={checklistItems.length === 0 || isSharing || pendingCount === 0}
                 className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
                   checklistItems.length === 0 || pendingCount === 0
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm hover:shadow-md'
                 }`}
               >

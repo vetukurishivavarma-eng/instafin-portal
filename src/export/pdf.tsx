@@ -80,6 +80,12 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontStyle: 'italic',
   },
+  notes: {
+    color: '#dc2626',
+    fontStyle: 'italic',
+    fontSize: 7,
+    marginLeft: 4,
+  },
   emptyMessage: {
     fontSize: 12,
     color: '#64748b',
@@ -316,6 +322,7 @@ const ChecklistPDF: React.FC<ChecklistPDFProps> = ({ selection, items, bankName,
                   <Text style={styles.itemText}>{item.name}</Text>
                   {item.required && <Text style={styles.required}>*</Text>}
                   {!item.required && <Text style={styles.optional}>(Optional)</Text>}
+                  {item.notes && <Text style={styles.notes}>{item.notes}</Text>}
                 </View>
               ))}
             </View>

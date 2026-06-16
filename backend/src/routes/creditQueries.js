@@ -37,7 +37,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   }
 });
 
-// GET /api/credit-queries/lead/:leadId — Get credit queries for a specific lead
+// GET /api/credit-queries/lead/:leadId — Get credit queries and follow-ups for a specific lead
 router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
@@ -50,7 +50,7 @@ router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, 
 
     if (error) {
       if (error.message && (error.message.includes('relation') || error.message.includes('does not exist'))) {
-        return res.json({ data: [] });
+        return res.json({ data: [], followUps: [] });
       }
       throw error;
     }
@@ -61,9 +61,21 @@ router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, 
       .select('bank_name, branch_name')
       .eq('lead_id', leadId);
 
+    // Fetch follow-ups for this lead
+    const { data: followUps, error: fuError } = await supabase
+      .from('follow_ups')
+      .select('*')
+      .eq('lead_id', leadId)
+      .order('follow_up_date', { ascending: false });
+
+    if (fuError) {
+      console.warn('Could not fetch follow-ups:', fuError.message);
+    }
+
     res.json({
       data: queries || [],
-      banks: banks || []
+      banks: banks || [],
+      followUps: followUps || []
     });
   } catch (error) {
     console.error('Error fetching credit queries for lead:', error);

@@ -42,6 +42,7 @@ export interface ChecklistItem {
   name: string;
   category: DocumentCategory;
   required: boolean;
+  notes?: string;
 }
 
 // Checklist key format: "loanType|loanStatus|incomeSource|residentType|businessType"
