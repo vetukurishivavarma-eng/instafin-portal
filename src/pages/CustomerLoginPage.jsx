@@ -1258,13 +1258,24 @@ export default function CustomerLoginPage() {
     others: 'Others'
   };
 
+  const getDocIsPending = (itemId) => {
+    const status = docCompletionStatus[itemId];
+    return status && status.startsWith('pending:');
+  };
+
   const uploadedCount = checklistItems.filter(item => {
     const files = checklistStatuses[item.id];
-    return files && files.length > 0;
+    const hasFiles = files && files.length > 0;
+    // Exclude items that have been marked as pending
+    if (hasFiles && getDocIsPending(item.id)) return false;
+    return hasFiles;
   }).length;
   const pendingCount = checklistItems.filter(item => {
     const files = checklistStatuses[item.id];
-    return item.required && (!files || files.length === 0);
+    const hasNoFiles = !files || files.length === 0;
+    // Include items marked as pending even if they have files
+    if (getDocIsPending(item.id)) return true;
+    return item.required && hasNoFiles;
   }).length;
 
   return (
@@ -2253,20 +2264,30 @@ export default function CustomerLoginPage() {
                           const showForm = showUploadForm === item.id;
 
                           return (
-                            <li key={item.id} className={`px-4 py-3 ${uploadedFiles.length > 0 ? 'bg-green-50/50' : item.required ? 'bg-red-50/60' : ''}`}>
+                            <li key={item.id} className={`px-4 py-3 ${getDocIsPending(item.id) ? 'bg-orange-50/60 border-l-2 border-orange-400' : uploadedFiles.length > 0 ? 'bg-green-50/50' : item.required ? 'bg-red-50/60' : ''}`}>
                               <div className="flex items-center gap-3">
                                 {/* Status dot */}
                                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  uploadedFiles.length > 0 ? 'bg-green-500' : item.required ? 'bg-red-400' : 'bg-gray-300'
+                                  getDocIsPending(item.id) ? 'bg-orange-500' : uploadedFiles.length > 0 ? 'bg-green-500' : item.required ? 'bg-red-400' : 'bg-gray-300'
                                 }`} />
 
                                 {/* Document name */}
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${uploadedFiles.length > 0 ? 'text-green-800' : 'text-gray-800'}`}>
+                                  <p className={`text-sm font-medium ${getDocIsPending(item.id) ? 'text-orange-800' : uploadedFiles.length > 0 ? 'text-green-800' : 'text-gray-800'}`}>
                                     {item.name}
+                                    {getDocIsPending(item.id) && (
+                                      <span className="ml-2 text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full font-semibold">
+                                        Pending: {docCompletionStatus[item.id].replace('pending:', '').trim()}
+                                      </span>
+                                    )}
                                   </p>
-                                  {uploadedFiles.length > 0 && (
+                                  {uploadedFiles.length > 0 && !getDocIsPending(item.id) && (
                                     <p className="text-xs text-green-600 mt-0.5">{uploadedFiles.length} file(s) uploaded</p>
+                                  )}
+                                  {getDocIsPending(item.id) && (
+                                    <p className="text-xs text-orange-500 mt-0.5">
+                                      {uploadedFiles.length > 0 ? `${uploadedFiles.length} file(s) uploaded - ` : ''}Marked pending with reason
+                                    </p>
                                   )}
                                 </div>
 
