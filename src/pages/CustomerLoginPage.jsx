@@ -168,6 +168,12 @@ export default function CustomerLoginPage() {
     // Load checklist for this lead
     loadChecklistForLead(lead);
     
+    // Reset document completion status then fetch from backend
+    setDocCompletionStatus({});
+    setPendingReasonInput({});
+    setShowPendingReasonInput({});
+    fetchDocCompletions(lead.id);
+    
     // Fetch uploaded documents
     fetchChecklistStatuses(lead.id);
     
@@ -189,14 +195,29 @@ export default function CustomerLoginPage() {
   };
 
   // ── Document Completion Handlers ──
-  const handleMarkComplete = (documentId) => {
+  const handleMarkComplete = async (documentId) => {
     setDocCompletionStatus(prev => ({ ...prev, [documentId]: 'complete' }));
     setShowPendingReasonInput(prev => ({ ...prev, [documentId]: false }));
     setSuccess('Document marked as complete!');
     setTimeout(() => setSuccess(''), 3000);
+    // Persist to backend
+    if (selectedLead) {
+      try {
+        await fetch(`${API_BASE}/checklist-status/${selectedLead.id}/completion`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({ documentId, status: 'complete' })
+        });
+      } catch (err) {
+        console.error('Failed to persist completion status:', err);
+      }
+    }
   };
 
-  const handleMarkPending = (documentId) => {
+  const handleMarkPending = async (documentId) => {
     const reason = pendingReasonInput[documentId] || '';
     if (!reason.trim()) {
       setError('Please provide a reason for keeping this document as pending');
@@ -206,6 +227,21 @@ export default function CustomerLoginPage() {
     setShowPendingReasonInput(prev => ({ ...prev, [documentId]: false }));
     setSuccess('Document marked as pending with reason.');
     setTimeout(() => setSuccess(''), 3000);
+    // Persist to backend
+    if (selectedLead) {
+      try {
+        await fetch(`${API_BASE}/checklist-status/${selectedLead.id}/completion`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({ documentId, status: 'pending', reason: reason.trim() })
+        });
+      } catch (err) {
+        console.error('Failed to persist pending status:', err);
+      }
+    }
   };
 
   const togglePendingReasonInput = (documentId) => {
@@ -262,6 +298,34 @@ export default function CustomerLoginPage() {
       }
     })
     .catch(() => setChecklistStatuses({}));
+  };
+
+  // Fetch persisted document completion statuses
+  const fetchDocCompletions = (leadId) => {
+    fetch(`${API_BASE}/checklist-status/${leadId}/completions`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data && typeof data === 'object' && !data.error) {
+        // Convert backend format to frontend format
+        const statusMap = {};
+        const reasonMap = {};
+        Object.entries(data).forEach(([docId, info]) => {
+          if (info.status === 'complete') {
+            statusMap[docId] = 'complete';
+          } else if (info.status === 'pending') {
+            statusMap[docId] = `pending: ${info.reason || ''}`;
+          }
+          if (info.reason) {
+            reasonMap[docId] = info.reason;
+          }
+        });
+        setDocCompletionStatus(statusMap);
+        setPendingReasonInput(reasonMap);
+      }
+    })
+    .catch(err => console.error('Failed to fetch document completions:', err));
   };
 
   // Fetch existing summary

@@ -341,4 +341,74 @@ router.get('/:leadId/pending', authorize('admin', 'executive', 'dsa'), async (re
   }
 });
 
+// GET /api/checklist-status/:leadId/completions - Get document completion statuses
+router.get('/:leadId/completions', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { leadId } = req.params;
+
+    const { data, error } = await supabase
+      .from('lead_document_completion')
+      .select('*')
+      .eq('lead_id', leadId);
+
+    if (error) throw error;
+
+    // Return as a map of document_id -> { status, reason }
+    const completionMap = {};
+    (data || []).forEach(item => {
+      completionMap[item.document_id] = {
+        status: item.status,
+        reason: item.reason || '',
+      };
+    });
+
+    res.json(completionMap);
+  } catch (error) {
+    console.error('Error fetching document completions:', error);
+    res.status(500).json({ error: 'Failed to fetch document completions' });
+  }
+});
+
+// POST /api/checklist-status/:leadId/completion - Save or update document completion status
+router.post('/:leadId/completion', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const { documentId, status, reason } = req.body;
+
+    if (!leadId || !documentId || !status) {
+      return res.status(400).json({ error: 'leadId, documentId, and status are required' });
+    }
+
+    if (!['complete', 'pending'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be "complete" or "pending"' });
+    }
+
+    // Upsert: insert or update the completion record
+    const { data, error } = await supabase
+      .from('lead_document_completion')
+      .upsert({
+        lead_id: leadId,
+        document_id: documentId,
+        status: status,
+        reason: reason || null,
+      }, {
+        onConflict: 'lead_id, document_id',
+        ignoreDuplicates: false,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      document_id: data.document_id,
+      status: data.status,
+      reason: data.reason || '',
+    });
+  } catch (error) {
+    console.error('Error saving document completion:', error);
+    res.status(500).json({ error: 'Failed to save document completion status' });
+  }
+});
+
 export default router;
