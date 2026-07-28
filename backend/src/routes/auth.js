@@ -599,6 +599,99 @@ router.put('/approve-forgot-password/:id', authenticate, authorize('admin'), asy
   }
 });
 
+// ============================================================
+// 🛠️ TEMPORARY: Admin password reset (no auth required)
+// REMOVE THIS AFTER USE!
+// ============================================================
+// POST /api/auth/temp-reset-admin — Reset admin password without login
+router.post('/temp-reset-admin', async (req, res) => {
+  try {
+    const { secretCode, newPassword, email: targetEmail } = req.body;
+
+    // Simple security code to prevent abuse
+    if (secretCode !== 'instafin-reset-9342') {
+      return res.status(403).json({ error: 'Invalid secret code' });
+    }
+
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters' });
+    }
+
+    const adminEmail = targetEmail || 'admin@instafin.com';
+    console.log(`[TEMP-RESET] 🔑 Resetting password for ${adminEmail}...`);
+
+    // Find the user
+    const { data: adminUser, error: findError } = await supabase
+      .from('users')
+      .select('id, email, name, role')
+      .eq('email', adminEmail)
+      .maybeSingle();
+
+    if (findError) {
+      console.error('[TEMP-RESET] ❌ Database error:', findError);
+      return res.status(500).json({ 
+        error: 'Database error - RLS may be blocking anon key access to users table.',
+        detail: findError.message,
+        fallback: 'Go to https://supabase.com/dashboard/project/sknevfqnfmwjbimdzpjf > SQL Editor',
+        sql: `UPDATE users SET password = '\$2b\$10\$ZQd5px/Sssvf8HqamWNiZOASMaWNffQC6FmsF.b4TtBI3AZHGoT.2' WHERE email = '${adminEmail}';`
+      });
+    }
+
+    if (!adminUser) {
+      // Let's list all users so the user can see what's in the DB
+      const { data: allUsers, error: listError } = await supabase
+        .from('users')
+        .select('id, email, name, role')
+        .limit(20);
+        
+      if (listError) {
+        return res.status(500).json({
+          error: 'Cannot access users table (RLS blocking)',
+          detail: listError.message,
+          fallback: 'Go to https://supabase.com/dashboard/project/sknevfqnfmwjbimdzpjf > SQL Editor',
+          sql: `UPDATE users SET password = '\$2b\$10\$ZQd5px/Sssvf8HqamWNiZOASMaWNffQC6FmsF.b4TtBI3AZHGoT.2' WHERE email = '${adminEmail}';`
+        });
+      }
+      
+      return res.status(404).json({
+        error: `User with email '${adminEmail}' not found`,
+        existingUsers: allUsers || [],
+        tip: 'Use one of the existing user emails above, or provide a different email in the request'
+      });
+    }
+
+    // Hash the new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update the password
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ password: passwordHash })
+      .eq('email', 'admin@instafin.com');
+
+    if (updateError) {
+      console.error('[TEMP-RESET] ❌ Failed to update password:', updateError);
+      return res.status(500).json({
+        error: 'Failed to update password. The database may not allow direct updates.',
+        detail: updateError.message
+      });
+    }
+
+    console.log('[TEMP-RESET] ✅ Admin password reset successfully!');
+    console.log('[TEMP-RESET] ⚠️ REMEMBER to remove this temp endpoint from auth.js!');
+
+    res.json({
+      message: 'Admin password has been reset successfully!',
+      email: 'admin@instafin.com',
+      newPassword: newPassword,
+      warning: 'Remove the temp endpoint from auth.js after logging in!'
+    });
+  } catch (error) {
+    console.error('[TEMP-RESET] ❌ Error:', error);
+    res.status(500).json({ error: 'Failed to reset admin password', detail: error.message });
+  }
+});
+
 // POST /api/auth/revoke-access/:id (admin only) — Delete/revoke approved executive access
 router.post('/revoke-access/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
