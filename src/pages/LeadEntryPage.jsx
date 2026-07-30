@@ -19,6 +19,7 @@ export default function LeadEntryPage() {
     { name: 'Business Loan', key: 'business_loan' },
     { name: 'Personal Loan', key: 'personal_loan' },
     { name: 'Education Loan', key: 'education_loan' },
+    { name: 'Agri Loan', key: 'agri_loan' },
   ]);
   
   // Modal Triggers
@@ -33,7 +34,10 @@ export default function LeadEntryPage() {
     loanType: '',
     expectedAmount: '',
     referralCode: '',
-    assignedBanks: []
+    assignedBanks: [],
+    hasCoapplicant: false,
+    coapplicantName: '',
+    coapplicantIncomeSource: 'salaried'
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [assignData, setAssignData] = useState({
@@ -337,7 +341,10 @@ export default function LeadEntryPage() {
         loanType: '', 
         expectedAmount: '', 
         referralCode: '', 
-        assignedBanks: []
+        assignedBanks: [],
+        hasCoapplicant: false,
+        coapplicantName: '',
+        coapplicantIncomeSource: 'salaried'
       });
       setFieldErrors({});
     } catch (err) {
@@ -963,7 +970,50 @@ export default function LeadEntryPage() {
                 </div>
               </div>
 
+              {/* Co-applicant Section */}
+              <div className="border-t border-gray-100 pt-5 mt-2">
+                <div className="flex items-center gap-3 mb-4">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={formData.hasCoapplicant}
+                      onChange={(e) => setFormData(prev => ({ ...prev, hasCoapplicant: e.target.checked, coapplicantName: '', coapplicantIncomeSource: 'salaried' }))}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 shadow-sm"></div>
+                    <span className="ms-3 text-sm font-bold text-gray-700">👥 Has Co-applicant</span>
+                  </label>
+                </div>
 
+                {formData.hasCoapplicant && (
+                  <div className="grid md:grid-cols-2 gap-5 pl-1 border-l-2 border-indigo-200 pl-4 animate-fade-in-up">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Co-applicant Name</label>
+                      <input
+                        type="text"
+                        placeholder="Enter co-applicant name"
+                        className="border border-gray-200 rounded-2xl px-4 py-3 w-full bg-gray-50/50 transition-all focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+                        value={formData.coapplicantName || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, coapplicantName: e.target.value.replace(/[0-9]/g, '') }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Co-applicant Income Source</label>
+                      <select
+                        className="border border-gray-200 rounded-2xl px-4 py-3 w-full bg-gray-50/50 transition-all focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+                        value={formData.coapplicantIncomeSource}
+                        onChange={(e) => setFormData(prev => ({ ...prev, coapplicantIncomeSource: e.target.value }))}
+                      >
+                        <option value="salaried">Salaried</option>
+                        <option value="self-employed">Self Employed</option>
+                        <option value="business">Business</option>
+                        <option value="professional">Professional</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="pt-4 flex gap-4">
                 <button 

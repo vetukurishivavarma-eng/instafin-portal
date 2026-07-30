@@ -1059,7 +1059,7 @@ export default function ChecklistsPage() {
                               : 'Supports PDF, JPG, PNG, DOC — select multiple files at once'}
                           </p>
                         </div>
-                        <input type="file" multiple className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={handleBulkFilesSelect} />
+                        <input type="file" multiple className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls" onChange={handleBulkFilesSelect} />
                       </label>
 
                       {/* Selected files list */}
@@ -1317,7 +1317,7 @@ export default function ChecklistsPage() {
                                             <input
                                               type="file"
                                               className="hidden"
-                                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
                                               disabled={isUploading}
                                               onChange={(e) => {
                                                 if (e.target.files[0]) {

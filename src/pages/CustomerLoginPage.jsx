@@ -2163,7 +2163,7 @@ export default function CustomerLoginPage() {
                         type="file"
                         multiple
                         className="hidden"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
                         onChange={handleBulkFilesSelect}
                       />
                     </label>
@@ -2455,7 +2455,7 @@ export default function CustomerLoginPage() {
                                       <input
                                         type="file"
                                         className="hidden"
-                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
                                         disabled={uploadingDoc === item.id}
                                         onChange={(e) => {
                                           if (e.target.files[0]) {
@@ -2536,7 +2536,7 @@ export default function CustomerLoginPage() {
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
                       disabled={uploadingDoc === 'other_docs' || !uploadDescription.trim()}
                       onChange={(e) => {
                         const file = e.target.files?.[0];

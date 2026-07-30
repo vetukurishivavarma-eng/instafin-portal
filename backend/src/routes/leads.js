@@ -1214,6 +1214,10 @@ const LOAN_TYPE_CANONICAL = {
   'mudra': 'Mudra Loan',
   'education loan': 'Education Loan',
   'education': 'Education Loan',
+  'agri loan': 'Agri Loan',
+  'agriculture loan': 'Agri Loan',
+  'agriculture': 'Agri Loan',
+  'agri': 'Agri Loan',
 };
 
 function normalizeLoanType(raw) {

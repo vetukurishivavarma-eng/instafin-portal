@@ -36,6 +36,8 @@ const upload = multer({
       'image/jpg',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
     ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
