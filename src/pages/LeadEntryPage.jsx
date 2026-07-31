@@ -79,6 +79,12 @@ export default function LeadEntryPage() {
   const [deleteReason, setDeleteReason] = useState('');
   const [deletingLead, setDeletingLead] = useState(false);
 
+  // Change Executive (reassignment) state
+  const [changeExecOpen, setChangeExecOpen] = useState(false);
+  const [changeExecValue, setChangeExecValue] = useState('');
+  const [changeExecDept, setChangeExecDept] = useState('');
+  const [changingExec, setChangingExec] = useState(false);
+
   useEffect(() => {
     if (!accessToken) return;
     fetch(`${API_BASE}/leads/meta/executives`, {
@@ -389,6 +395,45 @@ export default function LeadEntryPage() {
     }
   };
 
+  const handleChangeExecutive = async (leadId) => {
+    if (!leadId || !changeExecValue) {
+      setError('Please select an executive');
+      return;
+    }
+    setChangingExec(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/leads/${leadId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ assignedTo: changeExecValue, department: changeExecDept, priority: 'Medium' })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to reassign executive');
+        setChangingExec(false);
+        return;
+      }
+      setSuccess('Executive reassigned successfully!');
+      setChangeExecOpen(false);
+      setChangeExecValue('');
+      setChangeExecDept('');
+      setViewLead(null);
+      setSanctionLetterUrl(null);
+      setShowStatusHistory(false);
+      loadLeads();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError('Failed to reassign executive');
+    } finally {
+      setChangingExec(false);
+    }
+  };
+
   const handleAssignFromList = async (leadId) => {
     if (!assignData.assignedTo) {
       setError('Please select an executive');
@@ -453,8 +498,9 @@ export default function LeadEntryPage() {
     XLSX.writeFile(wb, `Leads_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // Use allLeads for admin management view (shows everything), leads for current user/impersonation view
-  const displayLeads = effectiveRole === 'admin' ? allLeads : leads;
+  // Use allLeads for admin/ops-head management view (shows everything), leads for current user/impersonation view
+  const canManage = effectiveRole === 'admin' || effectiveRole === 'operations_head';
+  const displayLeads = canManage ? allLeads : leads;
   const unassignedLeads = displayLeads.filter(l => !l.assignedTo);
   const assignedLeads = displayLeads.filter(l => l.assignedTo);
 
@@ -585,8 +631,8 @@ export default function LeadEntryPage() {
           </button>
         </div>
 
-        {/* CARD 2: MANAGE & ASSIGN LEADS — visible only to admin */}
-        {effectiveRole === 'admin' && (
+        {/* CARD 2: MANAGE & ASSIGN LEADS — visible to admin & operations head */}
+        {canManage && (
           <div className="glass-card p-8 rounded-3xl border border-white/40 shadow-xl flex flex-col justify-between hover-lift transition-all">
             <div>
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-6 shadow-md shadow-indigo-500/20">
@@ -709,7 +755,7 @@ export default function LeadEntryPage() {
                   <th className="p-3 sm:p-4 mobile-hide">Banks</th>
                   <th className="p-3 sm:p-4">Status</th>
                   <th className="p-3 sm:p-4 mobile-hide">Entry Date</th>
-                  {(effectiveRole === 'admin' || isImpersonating || effectiveRole === 'executive') && <th className="p-3 sm:p-4 text-center mobile-hide">Actions</th>}
+                  {(canManage || isImpersonating || effectiveRole === 'executive') && <th className="p-3 sm:p-4 text-center mobile-hide">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y text-sm">
@@ -1032,7 +1078,7 @@ export default function LeadEntryPage() {
               </div>
 
               {/* Instant Executive Assignment nested inside Form popup */}
-              {effectiveRole === 'admin' && createdLead && (
+              {canManage && createdLead && (
                 <div className="bg-indigo-50/50 border border-indigo-200/50 rounded-2xl p-5 mt-6 animate-fade-in-up">
                   <h3 className="text-lg font-bold text-indigo-800 mb-3">Assign Directly to Executive</h3>
                   <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -1098,7 +1144,7 @@ export default function LeadEntryPage() {
                     <table className="w-full text-left">
                       <thead className="bg-gray-50/70 border-b">
                         <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                          <th className="p-4">Customer</th><th className="p-4">Mobile</th><th className="p-4">Loan Type</th><th className="p-4">Amount</th><th className="p-4">Status</th>{effectiveRole === 'admin' && <th className="p-4 text-center">Action</th>}
+                          <th className="p-4">Customer</th><th className="p-4">Mobile</th><th className="p-4">Loan Type</th><th className="p-4">Amount</th><th className="p-4">Status</th>{canManage && <th className="p-4 text-center">Action</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y text-sm">
@@ -1118,7 +1164,7 @@ export default function LeadEntryPage() {
                             <td className="p-4 text-gray-650 capitalize font-medium">{lead.loanType?.replace('_', ' ')}</td>
                             <td className="p-4 font-bold text-gray-900">₹{parseInt(lead.expectedAmount).toLocaleString('en-IN')}</td>
                             <td className="p-4"><StatusBadge status={lead.status} /></td>
-                            {effectiveRole === 'admin' && (
+                            {canManage && (
                               <td className="p-4 text-center">
                                 <button 
                                   onClick={() => setSelectedLead(lead.id)} 
@@ -1269,7 +1315,17 @@ export default function LeadEntryPage() {
                 <p className="font-bold text-gray-800 mt-1">₹{parseInt(viewLead.expectedAmount || 0).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                <p className="text-xs uppercase font-bold text-gray-400">Executive Assigned</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase font-bold text-gray-400">Executive Assigned</p>
+                  {canManage && (
+                    <button
+                      onClick={() => { setChangeExecOpen(true); setChangeExecValue(viewLead.assignedTo || ''); setChangeExecDept(viewLead.department || ''); }}
+                      className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Change Executive
+                    </button>
+                  )}
+                </div>
                 <p className="font-bold text-gray-800 mt-1">{viewLead.assignedTo || 'Unassigned'}</p>
               </div>
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
@@ -1289,6 +1345,56 @@ export default function LeadEntryPage() {
                 <p className="font-bold text-gray-800 mt-1">{viewLead.entryDate || viewLead.createdAt ? new Date(viewLead.entryDate || viewLead.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
               </div>
             </div>
+
+            {canManage && changeExecOpen && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 mt-4 animate-fade-in-up">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-extrabold text-indigo-900 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zM16 11a4 4 0 110-8 4 4 0 010 8z" />
+                    </svg>
+                    Change Executive
+                  </h4>
+                  <button
+                    onClick={() => setChangeExecOpen(false)}
+                    className="text-xs text-gray-500 font-semibold bg-white border border-gray-200 px-2.5 py-1 rounded-lg hover:bg-gray-100"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="grid md:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">New Executive *</label>
+                    <select
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                      value={changeExecValue}
+                      onChange={(e) => setChangeExecValue(e.target.value)}
+                    >
+                      <option value="">Select Executive</option>
+                      {executives.map(exec => <option key={exec.id} value={exec.name}>{exec.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Department</label>
+                    <select
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                      value={changeExecDept}
+                      onChange={(e) => setChangeExecDept(e.target.value)}
+                    >
+                      <option value="">Select Department</option>
+                      <option>Operations Team</option><option>Login Team</option><option>Sales Team</option><option>Credit Coordination</option>
+                    </select>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleChangeExecutive(viewLead.id)}
+                  disabled={changingExec}
+                  className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {changingExec ? 'Reassigning...' : 'Reassign Executive'}
+                </button>
+              </div>
+            )}
 
             {viewLead.hasCoapplicant && (
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mt-4">
@@ -1531,8 +1637,8 @@ export default function LeadEntryPage() {
             <p className="text-gray-500 text-sm mb-5 font-semibold">Modify all customer loan details, co-applicant info, and status.</p>
 
             <div className="space-y-5">
-              {/* Admin sees all fields; executive sees only File Status + Bank Assignment */}
-              {(effectiveRole === 'admin' && !isImpersonating) && (
+              {/* Admin/ops-head sees all fields; executive sees only File Status + Bank Assignment */}
+              {(canManage && !isImpersonating) && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
@@ -1674,36 +1780,38 @@ export default function LeadEntryPage() {
                       <span key={i} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
                         {bankName}
                         {branchName && <span className="text-green-500 ml-1">({branchName})</span>}
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (!window.confirm(`Remove "${bank}" from this lead?`)) return;
-                            try {
-                              const res = await fetch(`${API_BASE}/leads/${editingLead.id}/remove-bank`, {
-                                method: 'PUT',
-                                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ bankName: bank })
-                              });
-                              if (res.ok) {
-                                const data = await res.json();
-                                setSuccess(`"${bank}" removed!`);
-                                setEditForm(prev => ({ ...prev, assignedBanks: (prev.assignedBanks || []).filter(b => b !== bank), status: data.lead?.status || prev.status }));
-                                loadLeads();
-                              } else {
-                                const err = await res.json();
-                                setError(err.error || 'Failed to remove bank');
+                        {(effectiveRole === 'admin' || isImpersonating) && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!window.confirm(`Remove "${bank}" from this lead?`)) return;
+                              try {
+                                const res = await fetch(`${API_BASE}/leads/${editingLead.id}/remove-bank`, {
+                                  method: 'PUT',
+                                  headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ bankName: bank })
+                                });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  setSuccess(`"${bank}" removed!`);
+                                  setEditForm(prev => ({ ...prev, assignedBanks: (prev.assignedBanks || []).filter(b => b !== bank), status: data.lead?.status || prev.status }));
+                                  loadLeads();
+                                } else {
+                                  const err = await res.json();
+                                  setError(err.error || 'Failed to remove bank');
+                                }
+                              } catch (err) {
+                                setError('Failed to remove bank');
                               }
-                            } catch (err) {
-                              setError('Failed to remove bank');
-                            }
-                          }}
-                          className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
-                          title={`Remove ${bank}`}
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                            }}
+                            className="ml-0.5 text-green-500 hover:text-red-600 transition-colors"
+                            title={`Remove ${bank}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                       </span>
                     );})}
                   </div>
@@ -1807,7 +1915,7 @@ export default function LeadEntryPage() {
                 onClick={async () => {
                   try {
                     const updateBody = { status: editForm.status };
-                    if (effectiveRole === 'admin' && !isImpersonating) {
+                    if (canManage && !isImpersonating) {
                       updateBody.customerName = editForm.customerName;
                       updateBody.mobile = editForm.mobile;
                       updateBody.loanType = editForm.loanType;

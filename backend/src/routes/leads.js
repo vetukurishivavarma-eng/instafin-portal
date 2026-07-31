@@ -64,6 +64,9 @@ async function getAdminContext(req) {
 
 const router = express.Router();
 
+// Helper: roles that have full lead visibility/management (but NOT deletion)
+const isFullAccessRole = (role) => role === 'admin' || role === 'operations_head';
+
 // Helper to parse remarks containing co-applicant data (supports both single and array)
 const parseRemarksField = (remarksStr) => {
   if (!remarksStr) return { coapplicants: [], remarks: "" };
@@ -112,12 +115,12 @@ router.use(authenticate);
 router.use('/:leadId/banks', leadBanksRouter);
 
 // GET all leads with search, filter and pagination
-router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     let query = supabase.from('leads').select('*', { count: 'exact' });
 
     // Role-based filtering
-    if (req.user.role !== 'admin') {
+    if (!isFullAccessRole(req.user.role)) {
       // Match by either users table UUID (new) or executive name (legacy)
       // This covers both newly assigned leads (UUID) and previously assigned ones (name)
       const { data: userData } = await supabase
@@ -149,7 +152,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       let q = supabase.from('leads').select('*', { count: 'exact' });
 
       // Role-based filtering
-      if (req.user.role !== 'admin') {
+      if (!isFullAccessRole(req.user.role)) {
         const { data: userData } = await supabase
           .from('users')
           .select('name')
@@ -332,7 +335,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 });
 
 // GET single lead by ID
-router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { data: lead, error } = await supabase
       .from('leads')
@@ -345,7 +348,7 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     }
 
     // Role-based access
-    if (req.user.role !== 'admin' && lead.assigned_to !== req.user.id) {
+    if (!isFullAccessRole(req.user.role) && lead.assigned_to !== req.user.id) {
       // Also check if assigned_to matches the executive's name (legacy format)
       const { data: userData } = await supabase
         .from('users')
@@ -425,7 +428,7 @@ router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 });
 
 // GET executives list
-router.get('/meta/executives', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/meta/executives', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { data: executives, error } = await supabase
       .from('executives')
@@ -447,7 +450,7 @@ router.get('/meta/executives', authorize('admin', 'executive', 'dsa'), async (re
 });
 
 // POST create new lead
-router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.post('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const {
       customerName,
@@ -498,7 +501,7 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
       if (execUser) {
         assignedTo = execUser.id;
       }
-    } else if (req.user.role !== 'admin') {
+    } else if (!isFullAccessRole(req.user.role)) {
       assignedTo = req.user.id;
     }
 
@@ -599,7 +602,7 @@ router.post('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 });
 
 // PUT update lead
-router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.put('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     // Check if lead exists
     const { data: existingLead } = await supabase
@@ -613,7 +616,7 @@ router.put('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
     }
 
     // Role-based access
-    if (req.user.role !== 'admin' &&
+    if (!isFullAccessRole(req.user.role) &&
         existingLead.assigned_to !== req.user.id) {
       // Also check if assigned_to matches the executive's name (legacy format)
       const { data: userData } = await supabase
@@ -765,7 +768,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 });
 
 // PUT /api/leads/:id/close - Close a lead (only for Disbursed leads)
-router.put('/:id/close', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:id/close', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const leadId = req.params.id;
 
@@ -918,11 +921,11 @@ router.put('/:id/toggle-active', authorize('admin'), async (req, res) => {
 });
 
 // GET dashboard stats — derives statuses from lead_banks for accurate counts
-router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/stats/overview', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     let query = supabase.from('leads').select('id, status, is_active, assigned_to, is_closed');
 
-    if (req.user.role !== 'admin') {
+    if (!isFullAccessRole(req.user.role)) {
       const { data: userData } = await supabase
         .from('users')
         .select('name')
@@ -943,7 +946,7 @@ router.get('/stats/overview', authorize('admin', 'executive', 'dsa'), async (req
         (error.message.includes('is_active') || error.message.includes('column') || error.message.includes('does not exist'))) {
       console.warn('is_active column not found in stats, falling back:', error.message);
       query = supabase.from('leads').select('id, status, assigned_to, is_closed');
-      if (req.user.role !== 'admin') {
+      if (!isFullAccessRole(req.user.role)) {
         const { data: userData } = await supabase
           .from('users')
           .select('name')
@@ -1075,7 +1078,7 @@ router.get('/stats/status-distribution', authenticate, async (req, res) => {
   try {
     let query = supabase.from('leads').select('id, status, assigned_to');
 
-    if (req.user.role !== 'admin') {
+    if (!isFullAccessRole(req.user.role)) {
       const { data: userData } = await supabase
         .from('users')
         .select('name')
@@ -1147,7 +1150,7 @@ router.get('/stats/monthly-trend', authenticate, async (req, res) => {
   try {
     let query = supabase.from('leads').select('created_at, expected_amount, sanctioned_amount, disbursed_amount');
 
-    if (req.user.role !== 'admin') {
+    if (!isFullAccessRole(req.user.role)) {
       const { data: userData } = await supabase
         .from('users')
         .select('name')
@@ -1242,7 +1245,7 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
   try {
     let query = supabase.from('leads').select('loan_type, sanctioned_amount, disbursed_amount');
 
-    if (req.user.role !== 'admin') {
+    if (!isFullAccessRole(req.user.role)) {
       const { data: userData } = await supabase
         .from('users')
         .select('name')
@@ -1278,7 +1281,7 @@ router.get('/stats/loan-type-distribution', authenticate, async (req, res) => {
 });
 
 // PUT /api/leads/:id/assign - Assign lead to executive
-router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:id/assign', authorize('admin', 'operations_head'), async (req, res) => {
   try {
     const { assignedTo, department, priority } = req.body;
     const leadId = req.params.id;
@@ -1353,7 +1356,7 @@ router.put('/:id/assign', authorize('admin', 'executive'), async (req, res) => {
 });
 
 // PUT /api/leads/:id/assign-bank - Assign bank to lead (with branch name support)
-router.put('/:id/assign-bank', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:id/assign-bank', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { bankName, branchName } = req.body;
     const leadId = req.params.id;
@@ -1507,7 +1510,7 @@ router.put('/:id/remove-bank', authorize('admin', 'executive'), async (req, res)
 });
 
 // PUT /api/leads/:id/disburse - Disburse amount (partial or full)
-router.put('/:id/disburse', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:id/disburse', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { amount } = req.body;
     const leadId = req.params.id;
@@ -1581,7 +1584,7 @@ if (!fs.existsSync(summariesDir)) {
 }
 
 // GET /api/leads/:id/summary - Retrieve existing profile summary
-router.get('/:id/summary', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:id/summary', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const leadId = req.params.id;
     const fileName = `summaries/${leadId}-summary.txt`;
@@ -1632,7 +1635,7 @@ router.get('/:id/summary', authorize('admin', 'executive', 'dsa'), async (req, r
 });
 
 // POST /api/leads/:id/summarize - Generate profile summary via Gemini API
-router.post('/:id/summarize', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const leadId = req.params.id;
 

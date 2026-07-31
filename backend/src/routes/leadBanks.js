@@ -37,7 +37,7 @@ async function updateLeadDerivedStatus(leadId) {
 }
 
 // GET /api/leads/:leadId/banks — List all bank records for a lead
-router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
@@ -66,7 +66,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 });
 
 // POST /api/leads/:leadId/banks — Add a bank to a lead (with branch name)
-router.post('/', authorize('admin', 'executive'), async (req, res) => {
+router.post('/', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { leadId } = req.params;
     const { bankName, branchName } = req.body;
@@ -130,7 +130,7 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
 });
 
 // PUT /api/leads/:leadId/banks/:bankId/sanction — Sanction a specific bank
-router.put('/:bankId/sanction', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:bankId/sanction', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { leadId, bankId } = req.params;
     const { sanctionedAmount, sanctionLetterPath } = req.body;
@@ -187,7 +187,7 @@ router.put('/:bankId/sanction', authorize('admin', 'executive'), async (req, res
 });
 
 // PUT /api/leads/:leadId/banks/:bankId/reject — Reject a specific bank
-router.put('/:bankId/reject', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:bankId/reject', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { leadId, bankId } = req.params;
     const { remarks } = req.body;
@@ -239,7 +239,7 @@ router.put('/:bankId/reject', authorize('admin', 'executive'), async (req, res) 
 });
 
 // PUT /api/leads/:leadId/banks/:bankId/disburse — Disburse from a specific bank (records individual transaction)
-router.put('/:bankId/disburse', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:bankId/disburse', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { leadId, bankId } = req.params;
     const { amount, notes } = req.body;
@@ -325,7 +325,7 @@ router.put('/:bankId/disburse', authorize('admin', 'executive'), async (req, res
 });
 
 // GET /api/leads/:leadId/banks/:bankId/disbursements — Fetch disbursement history for a bank
-router.get('/:bankId/disbursements', authorize('admin', 'executive'), async (req, res) => {
+router.get('/:bankId/disbursements', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { leadId, bankId } = req.params;
 
@@ -364,7 +364,7 @@ router.get('/:bankId/disbursements', authorize('admin', 'executive'), async (req
 });
 
 // PUT /api/leads/:leadId/banks/:bankId/disbursements/:disbursementId — Edit a disbursement record
-router.put('/:bankId/disbursements/:disbursementId', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:bankId/disbursements/:disbursementId', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { leadId, bankId, disbursementId } = req.params;
     const { amount, notes } = req.body;

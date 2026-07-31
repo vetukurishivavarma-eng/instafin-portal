@@ -4,7 +4,7 @@ import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 
 export default function SanctionPage() {
-  const { accessToken, user, impersonating, isImpersonating } = useAuth();
+  const { accessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [banks, setBanks] = useState([]);
@@ -468,14 +468,16 @@ export default function SanctionPage() {
                                   View
                                 </button>
 
-                                {/* Delete button */}
-                                <button
-                                  onClick={() => handleDeleteDocument(file.id, bank.id)}
-                                  disabled={deletingDoc === file.id}
-                                  className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
-                                >
-                                  {deletingDoc === file.id ? '...' : 'Delete'}
-                                </button>
+                                {/* Delete button (hidden for Operations Head) */}
+                                {effectiveRole !== 'operations_head' && (
+                                  <button
+                                    onClick={() => handleDeleteDocument(file.id, bank.id)}
+                                    disabled={deletingDoc === file.id}
+                                    className="text-xs text-red-700 font-semibold bg-red-100 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                                  >
+                                    {deletingDoc === file.id ? '...' : 'Delete'}
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>

@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET /api/status-history/:leadId — Get status history for a lead
-router.get('/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:leadId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 

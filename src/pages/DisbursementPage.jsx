@@ -4,7 +4,7 @@ import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 
 export default function DisbursementPage() {
-  const { accessToken, refreshAccessToken, user, impersonating, isImpersonating } = useAuth();
+  const { accessToken, refreshAccessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [banks, setBanks] = useState([]);
@@ -466,38 +466,40 @@ export default function DisbursementPage() {
                                         >
                                           Edit
                                         </button>
-                                        <button
-                                          onClick={async () => {
-                                            if (!window.confirm(`Delete disbursement of ₹${Number(d.amount).toLocaleString()}? This will recalculate totals.`)) return;
-                                            setLoading(true);
-                                            try {
-                                              const token = accessToken || localStorage.getItem('instafin_token');
-                                              const res = await fetch(
-                                                `${API_BASE}/leads/${selectedLead.id}/banks/${bank.id}/disbursements/${d.id}`,
-                                                {
-                                                  method: 'DELETE',
-                                                  headers: { Authorization: `Bearer ${token}` }
+                                        {effectiveRole !== 'operations_head' && (
+                                          <button
+                                            onClick={async () => {
+                                              if (!window.confirm(`Delete disbursement of ₹${Number(d.amount).toLocaleString()}? This will recalculate totals.`)) return;
+                                              setLoading(true);
+                                              try {
+                                                const token = accessToken || localStorage.getItem('instafin_token');
+                                                const res = await fetch(
+                                                  `${API_BASE}/leads/${selectedLead.id}/banks/${bank.id}/disbursements/${d.id}`,
+                                                  {
+                                                    method: 'DELETE',
+                                                    headers: { Authorization: `Bearer ${token}` }
+                                                  }
+                                                );
+                                                if (!res.ok) {
+                                                  const errData = await res.json();
+                                                  setError(errData.error || 'Failed to delete disbursement');
+                                                  setLoading(false);
+                                                  return;
                                                 }
-                                              );
-                                              if (!res.ok) {
-                                                const errData = await res.json();
-                                                setError(errData.error || 'Failed to delete disbursement');
+                                                setSuccess('Disbursement deleted successfully');
+                                                setTimeout(() => setSuccess(''), 4000);
+                                                fetchBanks(selectedLead.id);
+                                              } catch (err) {
+                                                setError('Failed to delete disbursement');
+                                              } finally {
                                                 setLoading(false);
-                                                return;
                                               }
-                                              setSuccess('Disbursement deleted successfully');
-                                              setTimeout(() => setSuccess(''), 4000);
-                                              fetchBanks(selectedLead.id);
-                                            } catch (err) {
-                                              setError('Failed to delete disbursement');
-                                            } finally {
-                                              setLoading(false);
-                                            }
-                                          }}
-                                          className="px-1.5 py-0.5 text-[10px] font-semibold text-red-600 bg-red-50 rounded hover:bg-red-100"
-                                        >
-                                          Delete
-                                        </button>
+                                            }}
+                                            className="px-1.5 py-0.5 text-[10px] font-semibold text-red-600 bg-red-50 rounded hover:bg-red-100"
+                                          >
+                                            Delete
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   )

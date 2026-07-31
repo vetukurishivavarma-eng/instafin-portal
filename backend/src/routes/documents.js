@@ -47,7 +47,7 @@ const upload = multer({
 router.use(authenticate);
 
 // GET /api/documents/checklist?loanType=<type>
-router.get('/checklist', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/checklist', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { loanType } = req.query;
 
@@ -78,7 +78,7 @@ router.get('/checklist', authorize('admin', 'executive', 'dsa'), async (req, res
 });
 
 // POST /api/documents/upload
-router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('file'), async (req, res) => {
+router.post('/upload', authorize('admin', 'operations_head', 'executive', 'dsa'), upload.single('file'), async (req, res) => {
   try {
     const { leadId, documentType } = req.body;
 
@@ -136,7 +136,7 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
 });
 
 // GET /api/documents/lead/:leadId
-router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/lead/:leadId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
@@ -170,7 +170,7 @@ router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, 
 });
 
 // GET /api/documents/:id
-router.get('/:id', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { data: document, error } = await supabase
       .from('lead_documents')

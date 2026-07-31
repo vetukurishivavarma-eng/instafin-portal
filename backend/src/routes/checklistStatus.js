@@ -77,7 +77,7 @@ function buildDocName(name, description, originalFile) {
 
 // GET /api/checklist-status/:leadId - Get all checklist statuses for a lead
 // Returns files grouped by document_id, each file with id, description, filePath, fileName, uploadedAt
-router.get('/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:leadId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
@@ -124,7 +124,7 @@ router.get('/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) 
 
 // POST /api/checklist-status/upload - Upload a document for a checklist item
 // Now accepts description and allows multiple files per document_id (INSERT, not upsert)
-router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('file'), async (req, res) => {
+router.post('/upload', authorize('admin', 'operations_head', 'executive', 'dsa'), upload.single('file'), async (req, res) => {
   try {
     const { leadId, documentId, documentName, description } = req.body;
 
@@ -211,7 +211,7 @@ router.post('/upload', authorize('admin', 'executive', 'dsa'), upload.single('fi
 });
 
 // GET /api/checklist-status/file/:fileId - Download an uploaded file by its record ID
-router.get('/file/:fileId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/file/:fileId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { fileId } = req.params;
 
@@ -247,6 +247,51 @@ router.get('/file/:fileId', authorize('admin', 'executive', 'dsa'), async (req, 
   } catch (error) {
     console.error('File download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
+// PUT /api/checklist-status/file/:fileId - Update the description of an uploaded file
+router.put('/file/:fileId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { description } = req.body;
+
+    if (description === undefined) {
+      return res.status(400).json({ error: 'description is required' });
+    }
+
+    // Fetch the current record to preserve the document name & original file
+    const { data: record } = await supabase
+      .from('lead_checklist_status')
+      .select('document_name')
+      .eq('id', fileId)
+      .single();
+
+    if (!record) {
+      return res.status(404).json({ error: 'File record not found' });
+    }
+
+    const parsed = parseDocName(record.document_name);
+    const updatedDocName = buildDocName(parsed.name, description || '', parsed.originalFile);
+
+    const { data: updated, error } = await supabase
+      .from('lead_checklist_status')
+      .update({ document_name: updatedDocName })
+      .eq('id', fileId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      id: updated.id,
+      description: description || '',
+      documentName: parsed.name,
+      originalFile: parsed.originalFile
+    });
+  } catch (error) {
+    console.error('Update description error:', error);
+    res.status(500).json({ error: 'Failed to update description' });
   }
 });
 
@@ -324,7 +369,7 @@ router.delete('/file/:fileId', authorize('admin', 'executive', 'dsa'), async (re
 });
 
 // GET /api/checklist-status/:leadId/pending - Get only pending documents
-router.get('/:leadId/pending', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:leadId/pending', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
@@ -344,7 +389,7 @@ router.get('/:leadId/pending', authorize('admin', 'executive', 'dsa'), async (re
 });
 
 // GET /api/checklist-status/:leadId/completions - Get document completion statuses
-router.get('/:leadId/completions', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:leadId/completions', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
@@ -372,7 +417,7 @@ router.get('/:leadId/completions', authorize('admin', 'executive', 'dsa'), async
 });
 
 // POST /api/checklist-status/:leadId/completion - Save or update document completion status
-router.post('/:leadId/completion', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.post('/:leadId/completion', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
     const { documentId, status, reason } = req.body;

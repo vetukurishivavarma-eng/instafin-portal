@@ -37,9 +37,11 @@ export default function CustomerLoginPage() {
   const [checklistItems, setChecklistItems] = useState([]);
   const [checklistStatuses, setChecklistStatuses] = useState({});
   const [showUploadForm, setShowUploadForm] = useState(null);
-  const [uploadDescription, setUploadDescription] = useState('');
   const [uploadingDoc, setUploadingDoc] = useState(null);
   const [deletingDoc, setDeletingDoc] = useState(null);
+  const [editingDescId, setEditingDescId] = useState(null); // file id whose description is being edited
+  const [editDescValue, setEditDescValue] = useState('');
+  const [savingDesc, setSavingDesc] = useState(false);
   const [viewDoc, setViewDoc] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -409,7 +411,6 @@ export default function CustomerLoginPage() {
         fetchChecklistStatuses(selectedLead.id);
         setSuccess(`${documentName} uploaded successfully!`);
         setShowUploadForm(null);
-        setUploadDescription('');
         setTimeout(() => setSuccess(''), 3000);
       } else {
         const errData = await res.json();
@@ -419,6 +420,36 @@ export default function CustomerLoginPage() {
       setError('Upload failed');
     } finally {
       setUploadingDoc(null);
+    }
+  };
+
+  // Update description of an uploaded file (upload first, then describe)
+  const handleUpdateDescription = async (fileId) => {
+    if (!selectedLead) return;
+    setSavingDesc(true);
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ description: editDescValue.trim() })
+      });
+      if (res.ok) {
+        fetchChecklistStatuses(selectedLead.id);
+        setEditingDescId(null);
+        setEditDescValue('');
+        setSuccess('Description updated successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const errData = await res.json();
+        setError(errData.error || 'Failed to update description');
+      }
+    } catch (err) {
+      setError('Failed to update description');
+    } finally {
+      setSavingDesc(false);
     }
   };
 
@@ -1585,19 +1616,21 @@ export default function CustomerLoginPage() {
                               <span className="ml-1 text-green-500">({branchName})</span>
                             )}
                           </span>
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Remove ${bankName} from assigned banks?`)) {
-                                handleRemoveBank(bankName);
-                              }
-                            }}
-                            className="p-0.5 text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all rounded-full hover:bg-red-50"
-                            title={`Remove ${bankName}`}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          </button>
+                          {effectiveRole !== 'operations_head' && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Remove ${bankName} from assigned banks?`)) {
+                                  handleRemoveBank(bankName);
+                                }
+                              }}
+                              className="p-0.5 text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all rounded-full hover:bg-red-50"
+                              title={`Remove ${bankName}`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       );
                     })
@@ -2411,7 +2444,7 @@ export default function CustomerLoginPage() {
                                 {/* Add File / Cancel button */}
                                 {showForm ? (
                                   <button
-                                    onClick={() => { setShowUploadForm(null); setUploadDescription(''); }}
+                                    onClick={() => setShowUploadForm(null)}
                                     className="text-xs text-gray-500 font-semibold bg-gray-100 px-2.5 py-1.5 rounded-lg hover:bg-gray-200"
                                   >
                                     Cancel
@@ -2426,18 +2459,10 @@ export default function CustomerLoginPage() {
                                 )}
                               </div>
 
-                              {/* Upload Form */}
+                              {/* Upload Form - file first, then description after upload */}
                               {showForm && (
                                 <div className="ml-5 mt-3 p-3 bg-white border border-blue-200 rounded-xl">
                                   <div className="space-y-2">
-                                    <textarea
-                                      value={uploadDescription}
-                                      onChange={(e) => setUploadDescription(e.target.value)}
-                                      placeholder="Document description (optional)"
-                                      rows={1}
-                                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                                      disabled={uploadingDoc === item.id}
-                                    />
                                     <label className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-semibold cursor-pointer ${
                                       uploadingDoc === item.id
                                         ? 'bg-gray-300 text-gray-500 cursor-wait'
@@ -2459,11 +2484,16 @@ export default function CustomerLoginPage() {
                                         disabled={uploadingDoc === item.id}
                                         onChange={(e) => {
                                           if (e.target.files[0]) {
-                                            handleFileUpload(item.id, item.name, e.target.files[0], uploadDescription);
+                                            // Upload the file first (no description yet)
+                                            handleFileUpload(item.id, item.name, e.target.files[0], '');
                                           }
+                                          e.target.value = '';
                                         }}
                                       />
                                     </label>
+                                    <p className="text-[10px] text-gray-400 text-center">
+                                      Select a file to upload it first, then add a description to the uploaded file below.
+                                    </p>
                                   </div>
                                 </div>
                               )}
@@ -2472,33 +2502,73 @@ export default function CustomerLoginPage() {
                               {uploadedFiles.length > 0 && (
                                 <div className="ml-5 mt-2 space-y-1.5">
                                   {uploadedFiles.map((file) => (
-                                    <div key={file.id} className="flex items-center gap-2 bg-white border border-green-200 rounded-lg px-3 py-2">
-                                      <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-gray-900 truncate">
-                                          {file.description || 'No description'}
-                                        </p>
-                                        {file.uploadedAt && (
-                                          <p className="text-[10px] text-gray-500">
-                                            {new Date(file.uploadedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                          </p>
+                                    <div key={file.id} className="bg-white border border-green-200 rounded-lg px-3 py-2">
+                                      <div className="flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <div className="flex-1 min-w-0">
+                                          {editingDescId === file.id ? (
+                                            <input
+                                              type="text"
+                                              value={editDescValue}
+                                              onChange={(e) => setEditDescValue(e.target.value)}
+                                              placeholder="Enter description..."
+                                              className="w-full border border-blue-300 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                                              autoFocus
+                                              onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateDescription(file.id); if (e.key === 'Escape') setEditingDescId(null); }}
+                                            />
+                                          ) : (
+                                            <p className="text-xs font-medium text-gray-900 truncate">
+                                              {file.description || <span className="text-gray-400 italic">No description</span>}
+                                            </p>
+                                          )}
+                                          {file.uploadedAt && (
+                                            <p className="text-[10px] text-gray-500">
+                                              {new Date(file.uploadedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <button
+                                          onClick={() => handleViewDocument(file.id, item.name)}
+                                          className="text-xs text-blue-700 font-semibold bg-blue-100 px-2 py-1 rounded-lg hover:bg-blue-200"
+                                        >
+                                          View
+                                        </button>
+                                        <button
+                                          onClick={() => { setEditingDescId(file.id); setEditDescValue(file.description || ''); }}
+                                          className="text-xs text-indigo-700 font-semibold bg-indigo-100 px-2 py-1 rounded-lg hover:bg-indigo-200"
+                                          title="Add or edit description"
+                                        >
+                                          {file.description ? 'Edit' : 'Add Desc'}
+                                        </button>
+                                        {effectiveRole !== 'operations_head' && (
+                                          <button
+                                            onClick={() => handleDeleteDocument(file.id, file.description || item.name)}
+                                            disabled={deletingDoc === file.id}
+                                            className="text-xs text-red-700 font-semibold bg-red-100 px-2 py-1 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                                          >
+                                            {deletingDoc === file.id ? '...' : 'Delete'}
+                                          </button>
                                         )}
                                       </div>
-                                      <button
-                                        onClick={() => handleViewDocument(file.id, item.name)}
-                                        className="text-xs text-blue-700 font-semibold bg-blue-100 px-2 py-1 rounded-lg hover:bg-blue-200"
-                                      >
-                                        View
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteDocument(file.id, file.description || item.name)}
-                                        disabled={deletingDoc === file.id}
-                                        className="text-xs text-red-700 font-semibold bg-red-100 px-2 py-1 rounded-lg hover:bg-red-200 disabled:opacity-50"
-                                      >
-                                        {deletingDoc === file.id ? '...' : 'Delete'}
-                                      </button>
+                                      {editingDescId === file.id && (
+                                        <div className="flex items-center gap-2 mt-2">
+                                          <button
+                                            onClick={() => handleUpdateDescription(file.id)}
+                                            disabled={savingDesc}
+                                            className="text-xs text-white font-semibold bg-blue-600 px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                          >
+                                            {savingDesc ? 'Saving...' : 'Save'}
+                                          </button>
+                                          <button
+                                            onClick={() => setEditingDescId(null)}
+                                            className="text-xs text-gray-500 font-semibold bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -2514,40 +2584,45 @@ export default function CustomerLoginPage() {
             )}
           </div>
 
-            {/* Other Documents Section */}
+            {/* Other Documents Section - file first, then describe */}
             <div className="border border-gray-200 rounded-xl overflow-hidden mt-4">
               <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
                 <h4 className="font-semibold text-gray-800 text-sm">Other Documents</h4>
               </div>
               <div className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={uploadDescription}
-                    onChange={(e) => setUploadDescription(e.target.value)}
-                    placeholder="Enter document description..."
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                  <label className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all cursor-pointer">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Upload
+                <div className="mb-3">
+                  <label className="flex items-center justify-center gap-2 w-full py-2.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all cursor-pointer">
+                    {uploadingDoc === 'other_docs' ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                    )}
+                    {uploadingDoc === 'other_docs' ? 'Uploading...' : 'Choose File & Upload'}
                     <input
                       type="file"
                       className="hidden"
                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
-                      disabled={uploadingDoc === 'other_docs' || !uploadDescription.trim()}
+                      disabled={uploadingDoc === 'other_docs'}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file && uploadDescription.trim()) {
-                          handleFileUpload('other_docs', uploadDescription.trim(), file, uploadDescription.trim());
-                          setUploadDescription('');
+                        if (file) {
+                          // Upload the file first (no description yet)
+                          handleFileUpload('other_docs', 'Other Document', file, '');
                         }
                         e.target.value = '';
                       }}
                     />
                   </label>
+                  <p className="text-[10px] text-gray-400 text-center mt-1.5">
+                    Select a file to upload it first, then add a description to the uploaded file below.
+                  </p>
                 </div>
 
                 {/* Previously uploaded other documents */}
@@ -2561,7 +2636,19 @@ export default function CustomerLoginPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 truncate">{file.description || file.documentName || 'Other Document'}</p>
+                            {editingDescId === file.id ? (
+                              <input
+                                type="text"
+                                value={editDescValue}
+                                onChange={(e) => setEditDescValue(e.target.value)}
+                                placeholder="Enter description..."
+                                className="w-full border border-blue-300 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateDescription(file.id); if (e.key === 'Escape') setEditingDescId(null); }}
+                              />
+                            ) : (
+                              <p className="text-xs font-medium text-gray-800 truncate">{file.description || 'Other Document'}</p>
+                            )}
                             {file.uploadedAt && (
                               <p className="text-[10px] text-gray-500">{new Date(file.uploadedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                             )}
@@ -2574,13 +2661,39 @@ export default function CustomerLoginPage() {
                               View
                             </button>
                             <button
-                              onClick={() => handleDeleteDocument(file.id, file.description || 'Other Document')}
-                              disabled={deletingDoc === file.id}
-                              className="text-xs text-red-700 font-semibold bg-red-100 px-2 py-1 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                              onClick={() => { setEditingDescId(file.id); setEditDescValue(file.description || ''); }}
+                              className="text-xs text-indigo-700 font-semibold bg-indigo-100 px-2 py-1 rounded-lg hover:bg-indigo-200"
+                              title="Add or edit description"
                             >
-                              {deletingDoc === file.id ? '...' : 'Delete'}
+                              {file.description ? 'Edit' : 'Add Desc'}
                             </button>
+                            {effectiveRole !== 'operations_head' && (
+                              <button
+                                onClick={() => handleDeleteDocument(file.id, file.description || 'Other Document')}
+                                disabled={deletingDoc === file.id}
+                                className="text-xs text-red-700 font-semibold bg-red-100 px-2 py-1 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                              >
+                                {deletingDoc === file.id ? '...' : 'Delete'}
+                              </button>
+                            )}
                           </div>
+                          {editingDescId === file.id && (
+                            <div className="flex items-center gap-2 ml-8">
+                              <button
+                                onClick={() => handleUpdateDescription(file.id)}
+                                disabled={savingDesc}
+                                className="text-xs text-white font-semibold bg-blue-600 px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {savingDesc ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => setEditingDescId(null)}
+                                className="text-xs text-gray-500 font-semibold bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

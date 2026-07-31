@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET /api/credit-queries — Get credit queries with optional filters
-router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { lead_id, bank_name, status } = req.query;
 
@@ -38,7 +38,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 });
 
 // GET /api/credit-queries/lead/:leadId — Get credit queries and follow-ups for a specific lead
-router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/lead/:leadId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
@@ -84,7 +84,7 @@ router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, 
 });
 
 // POST /api/credit-queries — Create a new credit query
-router.post('/', authorize('admin', 'executive'), async (req, res) => {
+router.post('/', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { lead_id, bank_name, query_type, remarks } = req.body;
 
@@ -120,7 +120,7 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
 });
 
 // PUT /api/credit-queries/:id — Update credit query (e.g., add response)
-router.put('/:id', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:id', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { id } = req.params;
     const { status, remarks, response_remarks, response_date } = req.body;

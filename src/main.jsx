@@ -25,6 +25,7 @@ import LeadEntryPage from './pages/LeadEntryPage'
 import ChecklistsPage from './pages/ChecklistsPage'
 import CreditQueryPage from './pages/CreditQueryPage'
 import EligibilityPage from './pages/EligibilityPage'
+import LeadArchivesPage from './pages/LeadArchivesPage'
 
 import './index.css'
 
@@ -46,6 +47,7 @@ function ProtectedRoute({ children, allowedRoles }) {
     
     // Redirect to appropriate dashboard based on role
     if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+    if (user.role === 'operations_head') return <Navigate to="/operations/dashboard" replace />;
     if (user.role === 'executive') return <Navigate to="/executive/leads" replace />;
     return <Navigate to="/dashboard" replace />;
   }
@@ -66,6 +68,7 @@ function RoleRedirect() {
   }
 
   if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+  if (user.role === 'operations_head') return <Navigate to="/operations/dashboard" replace />;
   if (user.role === 'executive') return <Navigate to="/executive/leads" replace />;
   return <Navigate to="/dashboard" replace />;
 }
@@ -143,6 +146,11 @@ function AppRoutes() {
             <AuditLogPage />
           </ProtectedRoute>
         } />
+        <Route path="/admin/lead-archives" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <LeadArchivesPage />
+          </ProtectedRoute>
+        } />
 
         {/* Executive routes */}
         <Route path="/executive/dashboard" element={
@@ -179,6 +187,53 @@ function AppRoutes() {
         <Route path="/executive/disburse" element={
           <ProtectedRoute allowedRoles={['executive']}>
             <DisbursementPage />
+          </ProtectedRoute>
+        } />
+
+        {/* Operations Head routes - all features except Revenue and delete operations */}
+        <Route path="/operations/dashboard" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <DashboardPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/leads" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <LeadEntryPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/customer-login" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <CustomerLoginPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/checklists" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <ChecklistsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/credit-query" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <CreditQueryPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/sanction" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <SanctionPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/disburse" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <DisbursementPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/download-forms" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <DownloadFormsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/lead-archives" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <LeadArchivesPage />
           </ProtectedRoute>
         } />
 

@@ -46,7 +46,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already exists' });
     }
 
-    const validRoles = ['admin', 'executive', 'dsa'];
+    const validRoles = ['admin', 'operations_head', 'executive', 'dsa'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }

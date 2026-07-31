@@ -7,7 +7,7 @@ import API_BASE from '../config/api';
 export default function DashboardPage() {
   const { user, effectiveRole, accessToken, refreshAccessToken } = useAuth();
   const navigate = useNavigate();
-  const basePath = effectiveRole === 'admin' ? '/admin' : '/executive';
+  const basePath = effectiveRole === 'admin' ? '/admin' : effectiveRole === 'operations_head' ? '/operations' : '/executive';
   const [stats, setStats] = useState({
     totalLeads: 0,
     activeLeads: 0,

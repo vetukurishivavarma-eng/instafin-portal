@@ -133,7 +133,7 @@ export default function Layout({ children }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between min-h-[4rem] py-3">
             <div className="flex items-center">
-              <Link to={effectiveRole === 'admin' ? '/admin/dashboard' : effectiveRole === 'executive' ? '/executive/dashboard' : '/'} className="text-2xl font-bold text-blue-700">InstaFin</Link>
+              <Link to={effectiveRole === 'admin' ? '/admin/dashboard' : effectiveRole === 'operations_head' ? '/operations/dashboard' : effectiveRole === 'executive' ? '/executive/dashboard' : '/'} className="text-2xl font-bold text-blue-700">InstaFin</Link>
               {user && (
                 <span className="ml-3 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full uppercase">
                   {user.role}
@@ -172,6 +172,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/revenue" className={getLinkClass('/admin/revenue')}>Revenue</Link>
                   <Link to="/admin/executives" className={getLinkClass('/admin/executives')}>Executives</Link>
                   <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
+                  <Link to="/admin/lead-archives" className={getLinkClass('/admin/lead-archives')}>Lead Archives</Link>
                   <Link to="/admin/audit-log" className={getLinkClass('/admin/audit-log')}>Audit Log</Link>
                 </>
               )}
@@ -186,6 +187,21 @@ export default function Layout({ children }) {
                   <Link to="/executive/credit-query" className={getLinkClass('/executive/credit-query')}>Processing &amp; Query</Link>
                   <Link to="/executive/sanction" className={getLinkClass('/executive/sanction')}>Sanction</Link>
                   <Link to="/executive/disburse" className={getLinkClass('/executive/disburse')}>Disburse</Link>
+                </>
+              )}
+
+              {/* Operations Head Navigation - all features EXCEPT Revenue */}
+              {effectiveRole === 'operations_head' && (
+                <>
+                  <Link to="/operations/dashboard" className={getLinkClass('/operations/dashboard')}>Dashboard</Link>
+                  <Link to="/operations/leads" className={getLinkClass('/operations/leads')}>Leads</Link>
+                  <Link to="/operations/customer-login" className={getLinkClass('/operations/customer-login')}>Customer Login</Link>
+                  <Link to="/operations/checklists" className={getLinkClass('/operations/checklists')}>Checklist & Upload</Link>
+                  <Link to="/operations/credit-query" className={getLinkClass('/operations/credit-query')}>Processing &amp; Query</Link>
+                  <Link to="/operations/sanction" className={getLinkClass('/operations/sanction')}>Sanction</Link>
+                  <Link to="/operations/disburse" className={getLinkClass('/operations/disburse')}>Disburse</Link>
+                  <Link to="/operations/download-forms" className={getLinkClass('/operations/download-forms')}>Download Forms</Link>
+                  <Link to="/operations/lead-archives" className={getLinkClass('/operations/lead-archives')}>Lead Archives</Link>
                 </>
               )}
 
@@ -230,6 +246,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/revenue" className={getMobileLinkClass('/admin/revenue')} onClick={() => setMobileMenuOpen(false)}>Revenue</Link>
                   <Link to="/admin/executives" className={getMobileLinkClass('/admin/executives')} onClick={() => setMobileMenuOpen(false)}>Executives</Link>
                   <Link to="/admin/download-forms" className={getMobileLinkClass('/admin/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
+                  <Link to="/admin/lead-archives" className={getMobileLinkClass('/admin/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
                   <Link to="/admin/audit-log" className={getMobileLinkClass('/admin/audit-log')} onClick={() => setMobileMenuOpen(false)}>Audit Log</Link>
                 </>
               )}
@@ -244,6 +261,21 @@ export default function Layout({ children }) {
                   <Link to="/executive/credit-query" className={getMobileLinkClass('/executive/credit-query')} onClick={() => setMobileMenuOpen(false)}>Processing &amp; Query</Link>
                   <Link to="/executive/sanction" className={getMobileLinkClass('/executive/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
                   <Link to="/executive/disburse" className={getMobileLinkClass('/executive/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
+                </>
+              )}
+
+              {/* Operations Head Navigation - all features EXCEPT Revenue */}
+              {effectiveRole === 'operations_head' && (
+                <>
+                  <Link to="/operations/dashboard" className={getMobileLinkClass('/operations/dashboard')} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
+                  <Link to="/operations/leads" className={getMobileLinkClass('/operations/leads')} onClick={() => setMobileMenuOpen(false)}>Leads</Link>
+                  <Link to="/operations/customer-login" className={getMobileLinkClass('/operations/customer-login')} onClick={() => setMobileMenuOpen(false)}>Customer Login</Link>
+                  <Link to="/operations/checklists" className={getMobileLinkClass('/operations/checklists')} onClick={() => setMobileMenuOpen(false)}>Checklist & Upload</Link>
+                  <Link to="/operations/credit-query" className={getMobileLinkClass('/operations/credit-query')} onClick={() => setMobileMenuOpen(false)}>Processing &amp; Query</Link>
+                  <Link to="/operations/sanction" className={getMobileLinkClass('/operations/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
+                  <Link to="/operations/disburse" className={getMobileLinkClass('/operations/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
+                  <Link to="/operations/download-forms" className={getMobileLinkClass('/operations/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
+                  <Link to="/operations/lead-archives" className={getMobileLinkClass('/operations/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
                 </>
               )}
 

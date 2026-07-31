@@ -28,7 +28,7 @@ const sanitizeFileName = (fileName) => {
 router.use(authenticate);
 
 // GET /api/forms — Search forms by bank and/or loan type
-router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { bank, loan_type, active } = req.query;
 
@@ -78,7 +78,7 @@ router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
 });
 
 // GET /api/forms/:id/download — Download form file
-router.get('/:id/download', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/:id/download', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -347,7 +347,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 });
 
 // GET /api/forms/loan-types — Get distinct loan types from forms
-router.get('/loan-types/list', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/loan-types/list', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { data: forms, error } = await supabase
       .from('application_forms')

@@ -127,7 +127,7 @@ const columnMapping = {
 };
 
 // Preview bulk upload - analyze data without saving
-router.post('/preview', authorize('admin'), upload.single('file'), async (req, res) => {
+router.post('/preview', authorize('admin', 'operations_head'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -272,7 +272,7 @@ router.post('/preview', authorize('admin'), upload.single('file'), async (req, r
 });
 
 // Process bulk upload - actually save data
-router.post('/process', authorize('admin'), async (req, res) => {
+router.post('/process', authorize('admin', 'operations_head'), async (req, res) => {
   try {
     const {
       newLeads,

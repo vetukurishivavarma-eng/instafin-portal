@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET /api/follow-ups/lead/:leadId — Get follow-ups for a specific lead
-router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/lead/:leadId', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { leadId } = req.params;
     const { date } = req.query;
@@ -40,7 +40,7 @@ router.get('/lead/:leadId', authorize('admin', 'executive', 'dsa'), async (req, 
 });
 
 // POST /api/follow-ups — Create a new follow-up entry
-router.post('/', authorize('admin', 'executive'), async (req, res) => {
+router.post('/', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { lead_id, follow_up_date, result, notes } = req.body;
 
@@ -79,7 +79,7 @@ router.post('/', authorize('admin', 'executive'), async (req, res) => {
 });
 
 // PUT /api/follow-ups/:id — Update a follow-up entry
-router.put('/:id', authorize('admin', 'executive'), async (req, res) => {
+router.put('/:id', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
   try {
     const { id } = req.params;
     const { result, notes } = req.body;

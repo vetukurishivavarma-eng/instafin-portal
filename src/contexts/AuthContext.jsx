@@ -47,6 +47,8 @@ export function AuthProvider({ children }) {
     // Role-based redirect
     if (data.user.role === 'admin') {
       navigate('/admin/dashboard');
+    } else if (data.user.role === 'operations_head') {
+      navigate('/operations/dashboard');
     } else if (data.user.role === 'executive') {
       navigate('/executive/leads');
     } else {
@@ -106,12 +108,13 @@ export function AuthProvider({ children }) {
   const effectiveRole = impersonating ? 'executive' : user?.role;
 
   const isAdmin = user?.role === 'admin';
+  const isOperationsHead = user?.role === 'operations_head';
   const isExecutive = user?.role === 'executive';
   const isDSA = user?.role === 'dsa';
   const isImpersonating = !!impersonating;
 
   return (
-    <AuthContext.Provider value={{ user, impersonating, impersonate, stopImpersonation, effectiveRole, isImpersonating, login, logout, accessToken, refreshAccessToken, isAdmin, isExecutive, isDSA, loading }}>
+    <AuthContext.Provider value={{ user, impersonating, impersonate, stopImpersonation, effectiveRole, isImpersonating, login, logout, accessToken, refreshAccessToken, isAdmin, isOperationsHead, isExecutive, isDSA, loading }}>
       {children}
     </AuthContext.Provider>
   );

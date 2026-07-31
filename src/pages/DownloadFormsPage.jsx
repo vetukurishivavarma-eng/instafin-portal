@@ -1156,21 +1156,23 @@ export default function DownloadFormsPage() {
                 <h2 className="text-xl font-bold text-gray-900">Loan Types Management</h2>
                 <p className="text-sm text-gray-500 mt-1">Manage loan types available in the Add Lead form for executives.</p>
               </div>
-              <button
-                onClick={() => {
-                  setShowAddLoanType(true);
-                  setEditingLoanType(null);
-                  setLoanTypeForm({ name: '', key: '', description: '' });
-                  setLoanTypeFormErrors({});
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg hover:scale-105 active:scale-95"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Add Loan Type
-              </button>
+              {effectiveRole === 'admin' && (
+                <button
+                  onClick={() => {
+                    setShowAddLoanType(true);
+                    setEditingLoanType(null);
+                    setLoanTypeForm({ name: '', key: '', description: '' });
+                    setLoanTypeFormErrors({});
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg hover:scale-105 active:scale-95"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Add Loan Type
+                </button>
+              )}
             </div>
 
             {loanTypesLoading && loanTypes.length === 0 ? (
@@ -1211,51 +1213,57 @@ export default function DownloadFormsPage() {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingLoanType(lt);
-                                setLoanTypeForm({ name: lt.name, key: lt.key, description: lt.description || '' });
-                                setShowAddLoanType(true);
-                                setLoanTypeFormErrors({});
-                              }}
-                              className="px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={async () => {
-                                const newActive = lt.active !== false ? false : true;
-                                try {
-                                  const res = await fetch(`${API_BASE}/loan-types/${lt.id}`, {
-                                    method: 'PUT',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      Authorization: `Bearer ${accessToken}`
-                                    },
-                                    body: JSON.stringify({ active: newActive })
-                                  });
-                                  if (res.ok) {
-                                    setSuccess(`Loan type ${newActive ? 'activated' : 'deactivated'}!`);
-                                    loadLoanTypes();
+                            {effectiveRole === 'admin' && (
+                              <button
+                                onClick={() => {
+                                  setEditingLoanType(lt);
+                                  setLoanTypeForm({ name: lt.name, key: lt.key, description: lt.description || '' });
+                                  setShowAddLoanType(true);
+                                  setLoanTypeFormErrors({});
+                                }}
+                                className="px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {effectiveRole === 'admin' && (
+                              <button
+                                onClick={async () => {
+                                  const newActive = lt.active !== false ? false : true;
+                                  try {
+                                    const res = await fetch(`${API_BASE}/loan-types/${lt.id}`, {
+                                      method: 'PUT',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${accessToken}`
+                                      },
+                                      body: JSON.stringify({ active: newActive })
+                                    });
+                                    if (res.ok) {
+                                      setSuccess(`Loan type ${newActive ? 'activated' : 'deactivated'}!`);
+                                      loadLoanTypes();
+                                    }
+                                  } catch (err) {
+                                    setError('Failed to toggle loan type');
                                   }
-                                } catch (err) {
-                                  setError('Failed to toggle loan type');
-                                }
-                              }}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                                lt.active !== false 
-                                  ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' 
-                                  : 'bg-green-50 text-green-700 hover:bg-green-100'
-                              }`}
-                            >
-                              {lt.active !== false ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteLoanType(lt.id)}
-                              className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
-                            >
-                              Delete
-                            </button>
+                                }}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                                  lt.active !== false 
+                                    ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' 
+                                    : 'bg-green-50 text-green-700 hover:bg-green-100'
+                                }`}
+                              >
+                                {lt.active !== false ? 'Deactivate' : 'Activate'}
+                              </button>
+                            )}
+                            {effectiveRole === 'admin' && (
+                              <button
+                                onClick={() => handleDeleteLoanType(lt.id)}
+                                className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

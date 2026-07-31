@@ -4,7 +4,7 @@ import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 
 export default function CreditQueryPage() {
-  const { accessToken, user, impersonating, isImpersonating } = useAuth();
+  const { accessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [creditQueries, setCreditQueries] = useState([]);
@@ -765,15 +765,17 @@ export default function CreditQueryPage() {
                           <p className="text-xs text-gray-500 mt-1 italic">{fu.notes}</p>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleDeleteFollowUp(fu.id)}
-                        className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                        title="Delete"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      {effectiveRole !== 'operations_head' && (
+                        <button
+                          onClick={() => handleDeleteFollowUp(fu.id)}
+                          className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                          title="Delete"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -948,15 +950,17 @@ export default function CreditQueryPage() {
                               </svg>
                             </button>
                           )}
-                          <button
-                            onClick={() => handleDeleteQuery(query.id)}
-                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-                            title="Delete"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          {effectiveRole !== 'operations_head' && (
+                            <button
+                              onClick={() => handleDeleteQuery(query.id)}
+                              className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

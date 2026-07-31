@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET /api/loan-types — List all loan types
-router.get('/', authorize('admin', 'executive', 'dsa'), async (req, res) => {
+router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const { data: loanTypes, error } = await supabase
       .from('loan_types')
