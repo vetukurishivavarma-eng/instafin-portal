@@ -16,17 +16,26 @@ function pickDate(lead) {
   return lead.entryDate || lead.createdAt;
 }
 
-// Compute single lead's revenue (1% of disbursed or sanctioned amount)
+// Compute single lead's revenue - prefers the admin-entered manual revenue, falls back to 1% of disbursed/sanctioned
 function calcLeadRevenue(lead) {
+  if (lead.revenue !== null && lead.revenue !== undefined && lead.revenue !== '') {
+    return parseFloat(lead.revenue) || 0;
+  }
   const amount = parseFloat(lead.disbursedAmount || lead.sanctionedAmount || lead.expectedAmount) || 0;
   return amount * 0.01;
 }
 
 export default function RevenuePage() {
-  const { accessToken } = useAuth();
+  const { accessToken, effectiveRole, user } = useAuth();
   const [allLeads, setAllLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const isAdmin = effectiveRole === 'admin' || user?.role === 'admin';
+
+  // Manual revenue entry (admin only)
+  const [revenueDrafts, setRevenueDrafts] = useState({}); // { [leadId]: string }
+  const [savingRevenueId, setSavingRevenueId] = useState(null);
+  const [showRevenueEditor, setShowRevenueEditor] = useState(false);
 
   // Month/year filter
   const now = new Date();
@@ -52,6 +61,47 @@ export default function RevenuePage() {
       setLoading(false);
     }
   };
+
+  // Admin: save a manual revenue value for a lead
+  const handleSaveRevenue = async (lead) => {
+    const value = revenueDrafts[lead.id];
+    if (value === undefined || value === '') {
+      setError('Enter a revenue amount first.');
+      setTimeout(() => setError(''), 4000);
+      return;
+    }
+    setSavingRevenueId(lead.id);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/leads/${lead.id}/revenue`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ revenue: parseFloat(value) })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchLeads();
+        setRevenueDrafts(prev => ({ ...prev, [lead.id]: '' }));
+        setError('');
+      } else {
+        setError(data.error || 'Failed to save revenue');
+        setTimeout(() => setError(''), 4000);
+      }
+    } catch (err) {
+      setError('Failed to save revenue');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setSavingRevenueId(null);
+    }
+  };
+
+  // Leads that are eligible for revenue entry (disbursed / partially disbursed / sanctioned)
+  const revenueEligibleLeads = useMemo(() => {
+    return allLeads.filter(l => ['Disbursed', 'Partially Disbursed', 'Sanctioned'].includes(l.status));
+  }, [allLeads]);
 
   // ===== Compute per-month breakdown =====
   const monthlyBreakdown = useMemo(() => {
@@ -255,6 +305,98 @@ export default function RevenuePage() {
               <p className="text-white/60 text-xs mt-1">{currentMonthData.sanctionedCount} sanctioned + {currentMonthData.partiallyDisbursedCount} partial</p>
             </div>
           </div>
+
+          {/* ===== Manual Revenue Entry (Admin only) ===== */}
+          {isAdmin && revenueEligibleLeads.length > 0 && (
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl p-4 sm:p-6 mb-6 sm:mb-8 border-2 border-emerald-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-gray-900">Manual Revenue Entry</h2>
+                    <p className="text-xs text-gray-500">Enter the actual revenue earned for each lead — the dashboard uses these values instead of the auto-calculated 1%.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowRevenueEditor(!showRevenueEditor)}
+                  className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
+                >
+                  {showRevenueEditor ? 'Hide Editor' : 'Edit Revenue'}
+                </button>
+              </div>
+
+              {showRevenueEditor && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
+                        <th className="text-left py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Mobile</th>
+                        <th className="text-left py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Disbursed</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Current Revenue</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Enter Revenue (₹)</th>
+                        <th className="text-center py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Save</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenueEligibleLeads.map(l => {
+                        const current = calcLeadRevenue(l);
+                        const manual = l.revenue !== null && l.revenue !== undefined && l.revenue !== '';
+                        return (
+                          <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+                            <td className="py-2.5 px-2 font-semibold text-gray-800 whitespace-nowrap">{l.customerName || '—'}</td>
+                            <td className="py-2.5 px-2 text-gray-600">{l.mobile || '—'}</td>
+                            <td className="py-2.5 px-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                l.status === 'Disbursed' ? 'bg-purple-50 text-purple-700' : l.status === 'Partially Disbursed' ? 'bg-teal-50 text-teal-700' : 'bg-green-50 text-green-700'
+                              }`}>
+                                {l.status || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-semibold text-blue-600 whitespace-nowrap">
+                              {formatCurrency(parseFloat(l.disbursedAmount || l.sanctionedAmount || 0))}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-bold whitespace-nowrap">
+                              <span className={manual ? 'text-emerald-600' : 'text-gray-400'}>
+                                {formatCurrency(current)}
+                                {manual && <span className="ml-1 text-[9px] text-emerald-500 uppercase">manual</span>}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-right">
+                              <input
+                                type="number"
+                                value={revenueDrafts[l.id] !== undefined ? revenueDrafts[l.id] : (manual ? l.revenue : '')}
+                                onChange={(e) => setRevenueDrafts(prev => ({ ...prev, [l.id]: e.target.value }))}
+                                placeholder="0"
+                                className="w-32 text-right border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <button
+                                onClick={() => handleSaveRevenue(l)}
+                                disabled={savingRevenueId === l.id}
+                                className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                              >
+                                {savingRevenueId === l.id ? 'Saving...' : 'Save'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-gray-400 mt-3">
+                    Enter the actual revenue amount and click Save. Saved values are used in all dashboard totals. Leave blank to fall back to the auto-calculated 1%.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ===== Monthly Revenue Breakdown Table ===== */}
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl p-4 sm:p-6 mb-6 sm:mb-8">

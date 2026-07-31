@@ -7,6 +7,17 @@ import { downloadPDF, downloadProfilePDF, downloadEligibilityPDF } from '../expo
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
 
+// Category labels shared by the section headers and per-section analyze handler
+const CATEGORY_LABELS = {
+  kyc: 'KYC Documents',
+  income_proof: 'Income Proof',
+  business_documents: 'Business Documents',
+  property_documents: 'Property Documents',
+  financial_documents: 'Financial Documents',
+  legal_documents: 'Legal Documents',
+  others: 'Others'
+};
+
 export default function ChecklistsPage() {
   const { accessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
   const [leads, setLeads] = useState([]);
@@ -27,6 +38,8 @@ export default function ChecklistsPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
   const [extractedProfile, setExtractedProfile] = useState(null);
+  // Per-section LLM analysis (each checklist section gets its own Analyze button)
+  const [sectionAnalysis, setSectionAnalysis] = useState({}); // { [category]: { summary, loading, error } }
   const [croppedPhoto, setCroppedPhoto] = useState(null);
   const [isGeneratingProfilePDF, setIsGeneratingProfilePDF] = useState(false);
 
@@ -138,6 +151,41 @@ export default function ChecklistsPage() {
       setSummaryError('Failed to analyze documents');
       setSummaryLoading(false);
     });
+  };
+
+  // Analyze a single section's documents via the LLM
+  const handleAnalyzeSection = async (category) => {
+    if (!selectedLead) return;
+    setSectionAnalysis(prev => ({ ...prev, [category]: { summary: '', loading: true, error: '' } }));
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/summarize`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ section: category })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSectionAnalysis(prev => ({ ...prev, [category]: { summary: data.summary, loading: false, error: '' } }));
+        // Merge extracted details into the extracted profile
+        try {
+          const jsonMatch = data.summary.match(/```json([\s\S]*?)```/);
+          if (jsonMatch && jsonMatch[1]) {
+            const parsed = JSON.parse(jsonMatch[1].trim());
+            const details = parsed.extracted_details || null;
+            if (details) setExtractedProfile(prev => ({ ...(prev || {}), ...details }));
+          }
+        } catch {}
+        setSuccess(`${CATEGORY_LABELS[category] || category} analyzed successfully!`);
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setSectionAnalysis(prev => ({ ...prev, [category]: { summary: '', loading: false, error: data.error || 'Failed to analyze section' } }));
+      }
+    } catch (err) {
+      setSectionAnalysis(prev => ({ ...prev, [category]: { summary: '', loading: false, error: 'Failed to analyze section' } }));
+    }
   };
 
   // Crop face photo from Aadhaar or PAN using canvas
@@ -269,6 +317,7 @@ export default function ChecklistsPage() {
     const lead = leads.find(l => String(l.id) === String(leadId));
     if (lead) {
       setSelectedLead(lead);
+      setSectionAnalysis({});
       loadChecklistForLead(lead);
       fetchChecklistStatuses(lead.id);
       fetchSummary(lead.id);
@@ -277,6 +326,7 @@ export default function ChecklistsPage() {
       setChecklistItems([]);
       setChecklistStatuses({});
       setSummary(null);
+      setSectionAnalysis({});
     }
   };
 
@@ -1204,11 +1254,66 @@ export default function ChecklistsPage() {
                       return (
                         <div key={category} className="border border-gray-200 rounded-xl overflow-hidden">
                           <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
-                            <h4 className="font-semibold text-gray-900">{categoryLabels[category] || category}</h4>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {items.filter(i => i.required).length} required, {items.filter(i => !i.required).length} optional
-                            </p>
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <h4 className="font-semibold text-gray-900">{categoryLabels[category] || category}</h4>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {items.filter(i => i.required).length} required, {items.filter(i => !i.required).length} optional
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleAnalyzeSection(category)}
+                                disabled={sectionAnalysis[category]?.loading}
+                                className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={`Run LLM analysis on the ${categoryLabels[category] || category} documents`}
+                              >
+                                {sectionAnalysis[category]?.loading ? (
+                                  <>
+                                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    Analyzing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    {sectionAnalysis[category]?.summary ? 'Re-Analyze' : 'Analyze'}
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
+
+                          {/* Inline per-section LLM result */}
+                          {sectionAnalysis[category]?.error && (
+                            <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 text-xs text-red-700">
+                              {sectionAnalysis[category].error}
+                            </div>
+                          )}
+                          {sectionAnalysis[category]?.summary && !sectionAnalysis[category]?.loading && (
+                            <div className="px-5 py-3 bg-indigo-50/50 border-b border-indigo-100">
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide">
+                                  AI Analysis — {categoryLabels[category] || category}
+                                </p>
+                                <button
+                                  onClick={() => setSectionAnalysis(prev => ({ ...prev, [category]: { summary: '', loading: false, error: '' } }))}
+                                  className="ml-auto text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold"
+                                >
+                                  Hide
+                                </button>
+                              </div>
+                              <pre className="text-[11px] text-gray-700 whitespace-pre-wrap font-sans max-h-56 overflow-y-auto leading-relaxed">
+                                {sectionAnalysis[category].summary.replace(/```json[\s\S]*?```/g, '').trim()}
+                              </pre>
+                            </div>
+                          )}
                           <ul className="divide-y divide-gray-100">
                             {items.map(item => {
                               const uploadedFiles = checklistStatuses[item.id] || [];

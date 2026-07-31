@@ -311,7 +311,9 @@ router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async
         })),
         entryDate: lead.entry_date,
         isClosed: lead.is_closed === true,
-        closedAt: lead.closed_at
+        closedAt: lead.closed_at,
+        revenue: lead.revenue,
+        applicationForm: lead.application_form
       };
     });
 
@@ -411,6 +413,8 @@ router.get('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), as
       entryDate: lead.entry_date,
       isClosed: lead.is_closed === true,
       closedAt: lead.closed_at,
+      revenue: lead.revenue,
+      applicationForm: lead.application_form,
       bankDetails: (banks || []).map(b => ({
         id: b.id,
         bankName: b.bank_name,
@@ -725,6 +729,86 @@ router.put('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), as
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update lead' });
+  }
+});
+
+// PUT /api/leads/:id/revenue - Set manual revenue for a lead (admin only)
+router.put('/:id/revenue', authorize('admin'), async (req, res) => {
+  try {
+    const { revenue } = req.body;
+    if (revenue === undefined || revenue === null || isNaN(Number(revenue))) {
+      return res.status(400).json({ error: 'Valid revenue amount is required' });
+    }
+
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id, customer_name')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!existingLead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    const { data: updatedLead, error } = await supabase
+      .from('leads')
+      .update({ revenue: Number(revenue) })
+      .eq('id', req.params.id)
+      .select('id, revenue')
+      .single();
+
+    if (error) throw error;
+
+    // Audit log
+    const adminCtx = await getAdminContext(req);
+    if (adminCtx) {
+      await recordAuditLog(
+        req.params.id,
+        adminCtx.adminId,
+        'revenue_updated',
+        `Revenue set to ${revenue} by ${adminCtx.adminName}`,
+        adminCtx.adminName
+      );
+    }
+
+    res.json({ success: true, id: updatedLead.id, revenue: updatedLead.revenue });
+  } catch (error) {
+    console.error('Error updating revenue:', error);
+    res.status(500).json({ error: 'Failed to update revenue' });
+  }
+});
+
+// PUT /api/leads/:id/application-form - Save the LLM-filled application form (all managing roles)
+router.put('/:id/application-form', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { applicationForm } = req.body;
+    if (!applicationForm || typeof applicationForm !== 'object') {
+      return res.status(400).json({ error: 'applicationForm object is required' });
+    }
+
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!existingLead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    const { data: updatedLead, error } = await supabase
+      .from('leads')
+      .update({ application_form: applicationForm })
+      .eq('id', req.params.id)
+      .select('id, application_form')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, id: updatedLead.id, applicationForm: updatedLead.application_form });
+  } catch (error) {
+    console.error('Error saving application form:', error);
+    res.status(500).json({ error: 'Failed to save application form' });
   }
 });
 
@@ -1634,10 +1718,51 @@ router.get('/:id/summary', authorize('admin', 'operations_head', 'executive', 'd
   }
 });
 
+// Map document_id prefixes to checklist categories (used for per-section analysis)
+// Overrides checked BEFORE the generic prefix map: a few msme_/firm_ ids belong to other sections
+const SECTION_PREFIX_OVERRIDES = {
+  income_proof: ['msme_form26as'],
+  financial_documents: ['msme_cma', 'msme_partner_sanc', 'msme_partner_loan_stmt'],
+  property_documents: ['msme_sale_deed'],
+};
+
+const SECTION_PREFIX_MAP = {
+  kyc: ['kyc_'],
+  income_proof: ['inc_'],
+  business_documents: ['biz_', 'msme_', 'firm_'],
+  property_documents: ['prop_'],
+  financial_documents: ['fin_', 'loan_'],
+  legal_documents: ['legal_'],
+  others: ['other_docs', 'other_'],
+};
+
+const SECTION_LABELS = {
+  kyc: 'KYC Documents',
+  income_proof: 'Income Proof',
+  business_documents: 'Business Documents',
+  property_documents: 'Property Documents',
+  financial_documents: 'Financial Documents',
+  legal_documents: 'Legal Documents',
+  others: 'Other Documents',
+};
+
+function getSectionFromDocumentId(documentId) {
+  if (!documentId) return 'others';
+  for (const [section, prefixes] of Object.entries(SECTION_PREFIX_OVERRIDES)) {
+    if (prefixes.some(p => documentId.startsWith(p))) return section;
+  }
+  for (const [section, prefixes] of Object.entries(SECTION_PREFIX_MAP)) {
+    if (prefixes.some(p => documentId.startsWith(p))) return section;
+  }
+  return 'others';
+}
+
 // POST /api/leads/:id/summarize - Generate profile summary via Gemini API
+// Optional body: { section: 'kyc' | 'income_proof' | ... } to analyze only that section's documents
 router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const leadId = req.params.id;
+    const section = req.body?.section || null;
 
     // 1. Fetch lead details for context
     const { data: lead, error: leadErr } = await supabase
@@ -1663,11 +1788,23 @@ router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive',
       return res.status(400).json({ error: 'No documents uploaded yet. Please upload at least one document first.' });
     }
 
+    // 2b. If a section is requested, filter to only documents in that category
+    let analyzedUploads = uploads;
+    if (section) {
+      if (!SECTION_LABELS[section]) {
+        return res.status(400).json({ error: 'Invalid section. Valid sections: ' + Object.keys(SECTION_LABELS).join(', ') });
+      }
+      analyzedUploads = uploads.filter(doc => getSectionFromDocumentId(doc.document_id) === section);
+      if (analyzedUploads.length === 0) {
+        return res.status(400).json({ error: `No uploaded documents found in the ${SECTION_LABELS[section]} section for this lead.` });
+      }
+    }
+
     // 3. Prepare parts for Gemini Multimodal API
     const contentsParts = [];
     const documentDescriptions = [];
 
-    for (const doc of uploads) {
+    for (const doc of analyzedUploads) {
       const fileName = doc.file_path;
       if (!fileName) continue;
 
@@ -1733,6 +1870,7 @@ Your task is to analyze the attached documents and extract the exact details and
 - Email: ${lead.email || 'N/A'}
 - Loan Type: ${lead.loan_type || 'N/A'}
 - Expected Amount: ${lead.expected_amount || 'N/A'}
+${section ? `- Focus Section: ${SECTION_LABELS[section]} (analyze ONLY the documents belonging to this section)` : '- Focus: ALL uploaded documents'}
 
 Uploaded Documents Context:
 ${documentDescriptions.join('\n')}
@@ -1811,6 +1949,8 @@ This JSON block MUST contain the following structured fields extracted from the 
 }
 
 Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN card, or standard ID proof. Return the face_bounding_box normalized coordinates from 0 to 1000 as [ymin, xmin, ymax, xmax] (e.g., [200, 150, 450, 400]). If no face/photo is found or it is not an image/PDF, return null for face_bounding_box.
+
+For a ${section ? SECTION_LABELS[section] : 'full'} analysis, apply the same structured extraction to every uploaded document in the provided context, and always complete the JSON block with all available fields.
 `;
 
     contentsParts.unshift({ text: promptText });
@@ -1984,8 +2124,9 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
 `;
     }
 
-    // 6. Save the summary persistently
-    const fileName = `summaries/${leadId}-summary.txt`;
+    // 6. Save the summary persistently (section analyses saved to their own file so they don't overwrite the full summary)
+    const summarySuffix = section ? `-${section}` : '';
+    const fileName = `summaries/${leadId}${summarySuffix}-summary.txt`;
 
     if (process.env.NODE_ENV === 'production') {
       try {
@@ -2000,11 +2141,11 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
         if (uploadError) throw uploadError;
       } catch (storageErr) {
         console.warn('Failed to upload summary to Supabase storage, saving locally:', storageErr.message);
-        const localPath = path.join(summariesDir, `${leadId}-summary.txt`);
+        const localPath = path.join(summariesDir, `${leadId}${summarySuffix}-summary.txt`);
         fs.writeFileSync(localPath, summaryText, 'utf8');
       }
     } else {
-      const localPath = path.join(summariesDir, `${leadId}-summary.txt`);
+      const localPath = path.join(summariesDir, `${leadId}${summarySuffix}-summary.txt`);
       fs.writeFileSync(localPath, summaryText, 'utf8');
     }
 
@@ -2016,7 +2157,7 @@ Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN c
         .eq('id', leadId);
     }
 
-    res.json({ success: true, summary: summaryText });
+    res.json({ success: true, summary: summaryText, section: section || null });
   } catch (error) {
     console.error('Error generating summary:', error);
     res.status(500).json({ error: error.message || 'Failed to analyze documents' });
