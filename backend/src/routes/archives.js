@@ -1,5 +1,5 @@
 import express from 'express';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import path from 'path';
 import fs from 'fs';
 import { supabase } from '../lib/supabase.js';
@@ -264,7 +264,7 @@ router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executiv
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${customerSafe}-documents.zip"`);
 
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on('error', err => {
       console.error('Archive error:', err.message);
       try { res.status(500).end(); } catch (e) { /* headers may already be sent */ }
