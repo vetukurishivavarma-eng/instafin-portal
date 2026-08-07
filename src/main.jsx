@@ -27,6 +27,8 @@ import CreditQueryPage from './pages/CreditQueryPage'
 import EligibilityPage from './pages/EligibilityPage'
 import LeadArchivesPage from './pages/LeadArchivesPage'
 
+import CibilReportPage from './pages/CibilReportPage'
+
 import './index.css'
 
 // Protected Route wrapper
@@ -151,6 +153,11 @@ function AppRoutes() {
             <LeadArchivesPage />
           </ProtectedRoute>
         } />
+        <Route path="/admin/cibil" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <CibilReportPage />
+          </ProtectedRoute>
+        } />
 
         {/* Executive routes */}
         <Route path="/executive/dashboard" element={
@@ -187,6 +194,11 @@ function AppRoutes() {
         <Route path="/executive/disburse" element={
           <ProtectedRoute allowedRoles={['executive']}>
             <DisbursementPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/executive/cibil" element={
+          <ProtectedRoute allowedRoles={['executive']}>
+            <CibilReportPage />
           </ProtectedRoute>
         } />
 
@@ -234,6 +246,11 @@ function AppRoutes() {
         <Route path="/operations/lead-archives" element={
           <ProtectedRoute allowedRoles={['operations_head']}>
             <LeadArchivesPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/cibil" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <CibilReportPage />
           </ProtectedRoute>
         } />
 

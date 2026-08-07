@@ -129,6 +129,11 @@ export default function DownloadFormsPage() {
   const [downloadingId, setDownloadingId] = useState(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
+  // Internet sync + AI field calibration (admin)
+  const [syncingForms, setSyncingForms] = useState(false);
+  const [syncResults, setSyncResults] = useState(null);
+  const [calibratingId, setCalibratingId] = useState(null);
+
   // ──────────────────────────────────────────────
   // LOAN TYPES STATE (moved from Executives page)
   // ──────────────────────────────────────────────
@@ -185,6 +190,66 @@ export default function DownloadFormsPage() {
     e.preventDefault();
     const bank = selectedBank === 'Other' ? customBankName : selectedBank;
     fetchBankForms(bank, selectedLoanType);
+  };
+
+  const handleSyncForms = async () => {
+    if (!window.confirm('Fetch bank application forms from the internet (BOI, SBI, HDFC, Axis, Kotak) and register them in InstaFin?\n\nNote: Some bank CDNs block automated downloads — any failed forms can be added manually via \"Add New Form\".')) return;
+    setSyncingForms(true);
+    setSyncResults(null);
+    setFormsError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/forms/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncResults(data.results || []);
+        const failed = (data.results || []).filter(r => r.status === 'failed').length;
+        if (failed === 0) {
+          setSuccess('Forms synced from the internet successfully!');
+        } else {
+          setFormsError(`${failed} form(s) could not be fetched automatically. See the sync results below.`);
+        }
+        fetchBankForms();
+      } else {
+        setFormsError(data.error || 'Failed to sync forms');
+      }
+    } catch (err) {
+      setFormsError('Failed to connect to server');
+    } finally {
+      setSyncingForms(false);
+    }
+  };
+
+  const handleCalibrateForm = async (form) => {
+    if (!window.confirm(`Run AI calibration on \"${form.form_name}\"?\n\nGemini Vision will inspect the blank form once and remember where each field (name, DOB, PAN, address, ...) sits, so every future customer form can be auto-filled instantly.`)) return;
+    setCalibratingId(form.id);
+    setFormsError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/forms/${form.id}/calibrate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(data.message || 'Field calibration complete!');
+        setTimeout(() => setSuccess(''), 6000);
+        fetchBankForms();
+      } else {
+        setFormsError(data.error || 'Failed to calibrate form');
+      }
+    } catch (err) {
+      setFormsError('Failed to calibrate form');
+    } finally {
+      setCalibratingId(null);
+    }
   };
 
   const handleBankReset = () => {
@@ -1387,17 +1452,63 @@ export default function DownloadFormsPage() {
                   </svg>
                   Forms Management Console
                 </h2>
-                <button
-                  onClick={() => { setShowAddFormPanel(true); setEditingForm(null); resetFormEntry(); }}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  Add New Form
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSyncForms}
+                    disabled={syncingForms}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    title="Fetch Bank of India forms from the internet and register them"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                    {syncingForms ? 'Syncing...' : 'Sync from Internet'}
+                  </button>
+                  <button
+                    onClick={() => { setShowAddFormPanel(true); setEditingForm(null); resetFormEntry(); }}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Add New Form
+                  </button>
+                </div>
               </div>
+
+              {/* Internet Sync Results */}
+              {syncResults && (
+                <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50/40 to-blue-50/40 animate-fade-in-up">
+                  <h3 className="text-sm font-bold text-gray-700 mb-3">Internet Sync Results</h3>
+                  <div className="space-y-2">
+                    {syncResults.map(r => (
+                      <div
+                        key={r.form_name}
+                        className={`flex items-start justify-between gap-3 px-3 py-2.5 rounded-xl border text-xs ${
+                          r.status === 'failed'
+                            ? 'bg-red-50/60 border-red-100 text-red-800'
+                            : 'bg-white border-emerald-100 text-gray-800'
+                        }`}
+                      >
+                        <div className="font-bold">{r.form_name}</div>
+                        <div className="text-right">
+                          {r.status === 'added' && <span className="text-emerald-600 font-bold">✅ Added</span>}
+                          {r.status === 'updated' && <span className="text-blue-600 font-bold">🔄 Updated</span>}
+                          {r.status === 'skipped' && <span className="text-gray-500 font-bold">⏭️ Skipped</span>}
+                          {r.status === 'failed' && (
+                            <span className="text-red-600 font-semibold">❌ {r.reason || 'Failed'}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-3">
+                    If a form failed, open its URL in a browser, download the PDF, and register it with{' '}
+                    <strong>Add New Form</strong>. Then run <strong>Calibrate</strong> on it to enable auto-fill.
+                  </p>
+                </div>
+              )}
 
               {(showAddFormPanel || editingForm) && (
                 <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-50/30 to-blue-50/30">
@@ -1522,10 +1633,37 @@ export default function DownloadFormsPage() {
                               <span className="text-[10px] font-semibold text-indigo-600">{form.loan_type}</span>
                               <span className="text-[10px] text-gray-300">|</span>
                               <span className="text-[10px] font-bold text-gray-400 uppercase">{form.file_type}</span>
+                              {form.field_map?.fields && Object.keys(form.field_map.fields).length > 0 && (
+                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                                  ✓ Calibrated ({Object.keys(form.field_map.fields).length})
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleCalibrateForm(form)}
+                            disabled={calibratingId === form.id}
+                            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-50 ${
+                              form.field_map?.fields && Object.keys(form.field_map.fields).length > 0
+                                ? 'text-indigo-600 hover:bg-indigo-50'
+                                : 'text-amber-600 bg-amber-50 hover:bg-amber-100'
+                            }`}
+                            title="Detect field positions with AI — enables auto-filling this form from customer documents"
+                          >
+                            {calibratingId === form.id ? (
+                              <span className="flex items-center gap-1">
+                                <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Calibrating...
+                              </span>
+                            ) : (
+                              '⚙️ Calibrate'
+                            )}
+                          </button>
                           <button
                             onClick={() => { setEditingForm(form); setShowAddFormPanel(false); setFormFile(null); }}
                             className="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors"

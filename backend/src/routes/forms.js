@@ -4,6 +4,9 @@ import fs from 'fs';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import { syncFormsFromInternet } from '../services/formFetcher.js';
+import { calibrateFormFields } from '../services/formCalibrator.js';
+import { loadFormPdf } from '../services/formStorage.js';
 
 const router = express.Router();
 
@@ -343,6 +346,57 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
   } catch (error) {
     console.error('Error toggling form status:', error);
     res.status(500).json({ error: 'Failed to update form status' });
+  }
+});
+
+// POST /api/forms/sync — Fetch bank forms from the internet catalog (admin only)
+router.post('/sync', authorize('admin'), async (req, res) => {
+  try {
+    const { bank } = req.body || {};
+    const results = await syncFormsFromInternet(bank || null);
+    res.json({ results });
+  } catch (error) {
+    console.error('Error syncing forms from internet:', error);
+    res.status(500).json({ error: error.message || 'Failed to sync forms from internet' });
+  }
+});
+
+// POST /api/forms/:id/calibrate — Detect field positions on a blank form using Gemini Vision (admin only)
+router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: form, error } = await supabase
+      .from('application_forms')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !form) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const fileBuffer = await loadFormPdf(form);
+    const fieldMap = await calibrateFormFields(fileBuffer);
+
+    const { data: updatedForm, error: updateError } = await supabase
+      .from('application_forms')
+      .update({ field_map: fieldMap, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, form_name, field_map')
+      .single();
+
+    if (updateError) throw updateError;
+
+    const fieldCount = Object.keys(fieldMap.fields || {}).length;
+    res.json({
+      message: `Calibration complete — ${fieldCount} fields detected on ${form.form_name}`,
+      form: updatedForm,
+      fieldMap,
+    });
+  } catch (error) {
+    console.error('Error calibrating form:', error);
+    res.status(500).json({ error: error.message || 'Failed to calibrate form fields' });
   }
 });
 

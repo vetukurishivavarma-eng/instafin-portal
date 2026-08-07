@@ -13,6 +13,7 @@ import statusHistoryRouter from './routes/statusHistory.js';
 import deleteRequestsRouter from './routes/deleteRequests.js';
 import followUpsRouter from './routes/followUps.js';
 import archivesRouter from './routes/archives.js';
+import cibilRouter from './routes/cibil.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,6 +43,7 @@ app.use('/api/delete-requests', deleteRequestsRouter);
 app.use('/api/leads', deleteRequestsRouter);
 app.use('/api/follow-ups', followUpsRouter);
 app.use('/api/archives', archivesRouter);
+app.use('/api/cibil', cibilRouter);
 
 // Health check
 app.get('/', (req, res) => {

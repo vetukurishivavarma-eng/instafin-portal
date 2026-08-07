@@ -73,6 +73,10 @@ export default function CustomerLoginPage() {
 
   // Bank forms
   const [downloadingForm, setDownloadingForm] = useState(null);
+  // Auto-filled bank forms (saved per lead)
+  const [filledForms, setFilledForms] = useState([]);
+  const [fillingFormId, setFillingFormId] = useState(null);
+  const [downloadingFilledId, setDownloadingFilledId] = useState(null);
   const [editingExpectedAmount, setEditingExpectedAmount] = useState(false);
   const [editExpectedAmountValue, setEditExpectedAmountValue] = useState('');
   const [showAssignBank, setShowAssignBank] = useState(false);
@@ -192,6 +196,9 @@ export default function CustomerLoginPage() {
     
     // Fetch existing summary
     fetchSummary(lead.id);
+
+    // Fetch saved auto-filled forms
+    fetchFilledForms(lead.id);
   };
 
   const handleClearLead = () => {
@@ -208,6 +215,7 @@ export default function CustomerLoginPage() {
     setDocCompletionStatus({});
     setPendingReasonInput({});
     setShowPendingReasonInput({});
+    setFilledForms([]);
   };
 
   // ── Document Completion Handlers ──
@@ -741,6 +749,120 @@ export default function CustomerLoginPage() {
       setError('Failed to download form');
     } finally {
       setDownloadingForm(null);
+    }
+  };
+
+  // Find the first registered application form for a bank (prefer matching the lead's loan type)
+  const findFormForBank = async (bankName) => {
+    const loanTypeLabel = (selectedLead.loanType || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const params = new URLSearchParams({ bank: bankName, loan_type: loanTypeLabel });
+    const searchRes = await fetch(`${API_BASE}/forms?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const searchData = await searchRes.json();
+    const forms = searchData.data || [];
+    if (forms.length > 0) return forms[0];
+
+    const fallbackRes = await fetch(`${API_BASE}/forms?bank=${encodeURIComponent(bankName)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const fallbackData = await fallbackRes.json();
+    return (fallbackData.data || [])[0] || null;
+  };
+
+  // Fetch saved auto-filled forms for the lead
+  const fetchFilledForms = (leadId) => {
+    fetch(`${API_BASE}/leads/${leadId}/filled-forms`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (Array.isArray(data.data)) setFilledForms(data.data);
+    })
+    .catch(() => setFilledForms([]));
+  };
+
+  // Auto-fill the bank form from the lead's uploaded documents and save it
+  const handleFillForm = async (bankName) => {
+    if (!selectedLead) return;
+    setFillingFormId(bankName);
+    setError('');
+    try {
+      const form = await findFormForBank(bankName);
+      if (!form) {
+        setError(`No application form found for ${bankName}. Please add one in the Download Forms page.`);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ formId: form.id })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to fill form');
+        return;
+      }
+
+      setSuccess(data.message || `${data.formName} filled successfully!`);
+      setTimeout(() => setSuccess(''), 8000);
+      fetchFilledForms(selectedLead.id);
+
+      // Download the freshly filled PDF immediately
+      if (data.id) {
+        const dlRes = await fetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${data.id}/download`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (dlRes.ok) {
+          const blob = await dlRes.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(data.formName || 'filled-form').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }
+      }
+    } catch (err) {
+      setError('Failed to fill form');
+    } finally {
+      setFillingFormId(null);
+    }
+  };
+
+  // Download a saved auto-filled form
+  const handleDownloadFilledForm = async (ff) => {
+    if (!selectedLead) return;
+    setDownloadingFilledId(ff.id);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${ff.id}/download`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error || 'Download failed');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(ff.form_name || 'filled-form').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download filled form');
+    } finally {
+      setDownloadingFilledId(null);
     }
   };
 
@@ -2283,37 +2405,113 @@ export default function CustomerLoginPage() {
                   }
                   const label = branchName ? `${bankName} (${branchName})` : bankName;
                   return (
-                    <button
-                      key={i}
-                      onClick={() => handleDownloadForm(bankName)}
-                      disabled={downloadingForm === bankName}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all disabled:opacity-50"
-                    >
-                      {downloadingForm === bankName ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          Downloading...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                          </svg>
-                          {label} Form
-                        </>
-                      )}
-                    </button>
+                    <div key={i} className="flex flex-col gap-1.5 min-w-[180px]">
+                      <button
+                        onClick={() => handleDownloadForm(bankName)}
+                        disabled={downloadingForm === bankName}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all disabled:opacity-50"
+                      >
+                        {downloadingForm === bankName ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            {label} Form
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleFillForm(bankName)}
+                        disabled={fillingFormId === bankName}
+                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold text-xs hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50 shadow-sm"
+                        title={`Auto-fill the ${label} form from the uploaded documents and save it`}
+                      >
+                        {fillingFormId === bankName ? (
+                          <>
+                            <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Analyzing & filling...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Fill & Save
+                          </>
+                        )}
+                      </button>
+                    </div>
                   );
                 })
               ) : (
                 <p className="text-sm text-gray-400">No banks assigned to this lead.</p>
               )}
             </div>
+
+            {/* Saved Auto-Filled Forms */}
+            {filledForms.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-gray-100 animate-fade-in-up">
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Auto-Filled Forms for this Lead ({filledForms.length})
+                </div>
+                <div className="space-y-2">
+                  {filledForms.map(ff => (
+                    <div key={ff.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl">
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-gray-900 truncate">{ff.form_name}</div>
+                        <div className="text-[10px] text-gray-500 mt-0.5">
+                          {ff.bank_name}{ff.loan_type ? ` · ${ff.loan_type}` : ''} ·{' '}
+                          {ff.created_at ? new Date(ff.created_at).toLocaleString() : ''}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDownloadFilledForm(ff)}
+                        disabled={downloadingFilledId === ff.id}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all disabled:opacity-50 shrink-0"
+                      >
+                        {downloadingFilledId === ff.id ? (
+                          <>
+                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Download
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Filled automatically from the uploaded documents via AI. Re-download anytime.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Required Documents Section */}

@@ -6,6 +6,14 @@ import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import leadBanksRouter from './leadBanks.js';
 import { deriveLeadStatus, computeLeadAggregates } from '../utils/statusDerivation.js';
+import {
+  analyzeLeadDocuments,
+  extractDetailsFromSummary,
+  getSectionFromDocumentId,
+  SECTION_LABELS,
+} from '../services/gemini.js';
+import { fillPdfForm } from '../services/formFiller.js';
+import { loadFormPdf, loadStoredFile } from '../services/formStorage.js';
 
 // Helper to record status change in status_history
 async function recordStatusChange(leadId, previousStatus, newStatus, changedBy, notes) {
@@ -44,6 +52,19 @@ async function recordAuditLog(leadId, adminId, action, details, adminName) {
   } catch (err) {
     console.error('Failed to record audit log:', err);
   }
+}
+
+// Helper: verify the requesting user may access this lead (mirrors PUT /:id ownership checks)
+async function assertLeadAccess(lead, req) {
+  if (isFullAccessRole(req.user.role)) return true;
+  if (lead.assigned_to === req.user.id) return true;
+  // Legacy format: assigned_to may store the executive's name
+  const { data: userData } = await supabase
+    .from('users')
+    .select('name')
+    .eq('id', req.user.id)
+    .maybeSingle();
+  return !!userData?.name && lead.assigned_to === userData.name;
 }
 
 // Helper to check if request is from admin and get admin info
@@ -1718,45 +1739,10 @@ router.get('/:id/summary', authorize('admin', 'operations_head', 'executive', 'd
   }
 });
 
-// Map document_id prefixes to checklist categories (used for per-section analysis)
-// Overrides checked BEFORE the generic prefix map: a few msme_/firm_ ids belong to other sections
-const SECTION_PREFIX_OVERRIDES = {
-  income_proof: ['msme_form26as'],
-  financial_documents: ['msme_cma', 'msme_partner_sanc', 'msme_partner_loan_stmt'],
-  property_documents: ['msme_sale_deed'],
-};
+// Section mapping helpers now live in services/gemini.js (getSectionFromDocumentId, SECTION_LABELS)
 
-const SECTION_PREFIX_MAP = {
-  kyc: ['kyc_'],
-  income_proof: ['inc_'],
-  business_documents: ['biz_', 'msme_', 'firm_'],
-  property_documents: ['prop_'],
-  financial_documents: ['fin_', 'loan_'],
-  legal_documents: ['legal_'],
-  others: ['other_docs', 'other_'],
-};
-
-const SECTION_LABELS = {
-  kyc: 'KYC Documents',
-  income_proof: 'Income Proof',
-  business_documents: 'Business Documents',
-  property_documents: 'Property Documents',
-  financial_documents: 'Financial Documents',
-  legal_documents: 'Legal Documents',
-  others: 'Other Documents',
-};
-
-function getSectionFromDocumentId(documentId) {
-  if (!documentId) return 'others';
-  for (const [section, prefixes] of Object.entries(SECTION_PREFIX_OVERRIDES)) {
-    if (prefixes.some(p => documentId.startsWith(p))) return section;
-  }
-  for (const [section, prefixes] of Object.entries(SECTION_PREFIX_MAP)) {
-    if (prefixes.some(p => documentId.startsWith(p))) return section;
-  }
-  return 'others';
-}
-
+// POST /api/leads/:id/summarize - Generate profile summary via Gemini API
+// Optional body: { section: 'kyc' | 'income_proof' | ... } to analyze only that section's documents
 // POST /api/leads/:id/summarize - Generate profile summary via Gemini API
 // Optional body: { section: 'kyc' | 'income_proof' | ... } to analyze only that section's documents
 router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
@@ -1800,329 +1786,8 @@ router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive',
       }
     }
 
-    // 3. Prepare parts for Gemini Multimodal API
-    const contentsParts = [];
-    const documentDescriptions = [];
-
-    for (const doc of analyzedUploads) {
-      const fileName = doc.file_path;
-      if (!fileName) continue;
-
-      let fileBuffer;
-      let mimeType = 'application/pdf';
-
-      // Detect Mime Type
-      const ext = path.extname(fileName).toLowerCase();
-      if (ext === '.pdf') mimeType = 'application/pdf';
-      else if (ext === '.png') mimeType = 'image/png';
-      else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
-      else {
-        // Skip base64 parsing for unsupported file types (like Word)
-        documentDescriptions.push(`Document: "${doc.document_name}" (unsupported file type for visual rendering, listed for reference)`);
-        continue;
-      }
-
-      try {
-        const localPath = path.join(uploadsDir, fileName);
-        if (fs.existsSync(localPath)) {
-          fileBuffer = fs.readFileSync(localPath);
-        } else {
-          // Production: Download from Supabase Storage
-          const { data, error } = await supabase.storage
-            .from('lead-documents')
-            .download(fileName);
-
-          if (error) {
-            console.warn(`Could not download ${fileName} from Supabase:`, error.message);
-            continue;
-          }
-
-          if (data) {
-            if (typeof data.arrayBuffer === 'function') {
-              const arrayBuffer = await data.arrayBuffer();
-              fileBuffer = Buffer.from(arrayBuffer);
-            } else {
-              fileBuffer = Buffer.from(data);
-            }
-          }
-        }
-
-        if (fileBuffer) {
-          contentsParts.push({
-            inlineData: {
-              mimeType,
-              data: fileBuffer.toString('base64')
-            }
-          });
-          documentDescriptions.push(`Document: "${doc.document_name}" (uploaded, format: ${mimeType})`);
-        }
-      } catch (err) {
-        console.error(`Error reading file ${fileName}:`, err);
-      }
-    }
-
-    // 4. Generate user context prompt
-    const promptText = `
-You are an expert financial analyst, credit assessor, and underwriting agent at InstaFin Portal.
-Your task is to analyze the attached documents and extract the exact details and facts from them:
-- Customer Name: ${lead.customer_name}
-- Mobile: ${lead.mobile || 'N/A'}
-- Email: ${lead.email || 'N/A'}
-- Loan Type: ${lead.loan_type || 'N/A'}
-- Expected Amount: ${lead.expected_amount || 'N/A'}
-${section ? `- Focus Section: ${SECTION_LABELS[section]} (analyze ONLY the documents belonging to this section)` : '- Focus: ALL uploaded documents'}
-
-Uploaded Documents Context:
-${documentDescriptions.join('\n')}
-
-INSTRUCTIONS:
-1. DO NOT write any conversational fluff, long narratives, or essay-style paragraphs.
-2. DO NOT write any overall underwriter summary, executive underwriting summary, credit risk score/risk profiling, or credit recommendation. The user strictly wants ONLY the raw data extracted from the documents, nothing else.
-3. For each uploaded document in the list, create a distinct header starting with "## " followed by an emoji and the document title (e.g., "## 🪪 Aadhaar Card (KYC)" or "## 💳 PAN Card (KYC)" or "## 🏦 Bank Statement (Financials)" or "## 💼 Income & Business Proof").
-4. Under each document header, extract and list the exact key-value facts from that document in a clean, highly structured bullet-point format using "- **Key**: Value" pairs.
-5. If the document is missing or not uploaded, DO NOT include its section.
-
-Outline of document sections to generate:
-
-## 🪪 Aadhaar Card (KYC)
-*(Include only if Aadhaar is present. Extract these exact keys as bullet points)*
-- **Document Type**: Aadhaar Card
-- **Full Name**: [Extracted Full Name]
-- **DOB**: [Extracted Date of Birth]
-- **Gender**: [Extracted Gender]
-- **Aadhaar Number**: [Extracted Aadhaar Number (format: XXXX XXXX XXXX or masked)]
-- **Address**: [Extracted Address]
-- **Legitimacy Status**: [Matched / Spelling Mismatch / Suspicious / Valid]
-- **Verification Note**: [1 sentence concise check against applicant name "${lead.customer_name}"]
-
-## 💳 PAN Card (KYC)
-*(Include only if PAN is present. Extract these exact keys as bullet points)*
-- **Document Type**: PAN Card
-- **Full Name**: [Extracted Full Name]
-- **PAN Number**: [Extracted PAN Number (format: XXXXX1234X)]
-- **DOB**: [Extracted Date of Birth]
-- **Legitimacy Status**: [Matched / Valid]
-- **Verification Note**: [1 sentence concise check against applicant name "${lead.customer_name}"]
-
-## 🏦 Bank Statement (Financials)
-*(Include only if Bank Statement/Passbook is present. Extract these exact keys as bullet points)*
-- **Document Type**: Bank Statement
-- **Bank Name**: [Extracted Bank Name]
-- **Account Holder**: [Extracted Account Holder Name]
-- **Statement Period**: [Extracted Date Range]
-- **Average Balance**: [Extracted Average Balance Amount]
-- **Total Credits**: [Extracted total credits / income deposits]
-- **Total Debits**: [Extracted total debits]
-- **Bounces / Penalties**: [Extracted count of bounces or "None"]
-- **Legitimacy Status**: [Matched / Valid / High Consistency]
-- **Verification Note**: [1 sentence concise assessment of cash flow stability]
-
-## 💼 Income & Business Proof
-*(Include only if GST, ITR, or Salary Slips are present. Extract these exact keys as bullet points)*
-- **Document Type**: [e.g., GST Registration / ITR / Salary Slip]
-- **Business/Company Name**: [Extracted Employer or Registered Business Name]
-- **GSTIN / Registration Number**: [Extracted Registration Number if applicable]
-- **Gross Monthly Income**: [Extracted Gross Income or Turnover]
-- **Net Monthly Income**: [Extracted Net Income]
-- **Legitimacy Status**: [Matched / Valid]
-- **Verification Note**: [1 sentence summary of business activity/salaried employment proof]
-
-CRITICAL TECHNICAL INSTRUCTION:
-At the very end of your response, append a structured JSON block inside a \`\`\`json \`\`\` code block (ensure it is the ONLY JSON code block in your entire output). 
-This JSON block MUST contain the following structured fields extracted from the documents:
-{
-  "extracted_details": {
-    "full_name": "Applicant's full name as written on identity proof",
-    "dob": "Date of Birth (DD/MM/YYYY) if available",
-    "gender": "Male / Female / Other",
-    "aadhaar_number": "Aadhaar number if present (format: XXXX XXXX XXXX or masked)",
-    "pan_number": "PAN number if present (format: XXXXX1234X)",
-    "address": "Full residential address as written on Aadhaar/proof",
-    "gross_income": "Gross monthly income as a numeric value (e.g., 50000). Extract from Gross Monthly Income or similar fields. 0 if not found.",
-    "monthly_income": "Net monthly income as a numeric value (e.g., 45000). Extract from Net Monthly Income or similar fields. 0 if not found.",
-    "pf": "Provident Fund deduction amount as a numeric value (e.g., 2500). Extract from salary slip if visible. 0 if not found.",
-    "income_tax": "Income Tax / TDS deduction as a numeric value (e.g., 1500). Extract from salary slip if visible. 0 if not found.",
-    "profession_tax": "Profession Tax deduction as a numeric value (e.g., 200). Extract from salary slip if visible. 0 if not found.",
-    "rental_income": "Proposed or existing rental income as a numeric value (e.g., 10000). Extract from bank statement or income proofs. 0 if not found."
-  },
-  "face_bounding_box": [ymin, xmin, ymax, xmax]
-}
-
-Note: Locate the small profile photo of the applicant on the Aadhaar card, PAN card, or standard ID proof. Return the face_bounding_box normalized coordinates from 0 to 1000 as [ymin, xmin, ymax, xmax] (e.g., [200, 150, 450, 400]). If no face/photo is found or it is not an image/PDF, return null for face_bounding_box.
-
-For a ${section ? SECTION_LABELS[section] : 'full'} analysis, apply the same structured extraction to every uploaded document in the provided context, and always complete the JSON block with all available fields.
-`;
-
-    contentsParts.unshift({ text: promptText });
-
-    // 5. Call Gemini API
-    // 5. Call Gemini API with retries and model fallbacks
-    const apiKey = process.env.GEMINI_API_KEY;
-    let summaryText = "";
-
-    if (apiKey) {
-      console.log('Querying available Gemini models...');
-      let discoveredModel = null;
-
-      try {
-        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const listResponse = await fetch(listUrl);
-        if (listResponse.ok) {
-          const listData = await listResponse.json();
-          const availableModels = listData.models || [];
-          
-          // Try to find a model that supports generateContent and contains 'flash'
-          const flashModel = availableModels.find(m => 
-            m.supportedGenerationMethods?.includes('generateContent') && 
-            m.name?.toLowerCase().includes('flash')
-          );
-          
-          if (flashModel) {
-            discoveredModel = flashModel.name.replace('models/', '');
-            console.log(`Dynamically selected active Flash model: ${discoveredModel}`);
-          } else {
-            const anyModel = availableModels.find(m => 
-              m.supportedGenerationMethods?.includes('generateContent')
-            );
-            if (anyModel) {
-              discoveredModel = anyModel.name.replace('models/', '');
-              console.log(`Dynamically selected active model: ${discoveredModel}`);
-            }
-          }
-        }
-      } catch (listErr) {
-        console.warn('Could not query active Gemini models list:', listErr.message);
-      }
-
-      // List of candidate models to try in sequence if one experiences demand spikes/errors
-      const candidateModels = [];
-      if (discoveredModel) candidateModels.push(discoveredModel);
-      candidateModels.push('gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro');
-
-      // Unique candidate list
-      const uniqueModels = [...new Set(candidateModels)];
-
-      let success = false;
-      let lastErrorText = "";
-
-      for (const model of uniqueModels) {
-        if (success) break;
-        console.log(`Attempting document analysis with Gemini model: ${model}`);
-
-        // Try up to 3 times with exponential backoff for transient errors (503/429)
-        const maxRetries = 3;
-        for (let retry = 0; retry < maxRetries; retry++) {
-          try {
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-            const response = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: contentsParts }]
-              })
-            });
-
-            if (response.ok) {
-              const resData = await response.json();
-              summaryText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (summaryText) {
-                console.log(`Successfully completed document analysis using model: ${model}`);
-                success = true;
-                break;
-              } else {
-                throw new Error("Empty candidates response from Gemini API.");
-              }
-            }
-
-            const errorText = await response.text();
-            lastErrorText = `Model ${model} returned status ${response.status}: ${errorText}`;
-            console.warn(`Attempt with ${model} failed (status ${response.status}). Details: ${errorText}`);
-
-            // If it's a 503 (Service Unavailable) or 429 (Rate Limit), wait and retry
-            if (response.status === 503 || response.status === 429) {
-              const delay = Math.pow(2, retry) * 1500; // 1.5s, 3s, 6s
-              console.log(`Spike in demand detected (status ${response.status}). Retrying in ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-              // Non-retryable error (e.g. 400 Bad Request, 403 Invalid API Key), try next model
-              break;
-            }
-          } catch (err) {
-            lastErrorText = err.message;
-            console.error(`Error on model ${model} (attempt ${retry + 1}):`, err.message);
-            const delay = Math.pow(2, retry) * 1500;
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-      }
-
-      if (!success) {
-        console.error('All Gemini candidate models and retries failed. Throwing descriptive error.');
-        throw new Error(`Gemini API is currently overloaded or experiencing high demand. Please try again in a few seconds. (Details: ${lastErrorText})`);
-      }
-    } else {
-      console.warn('GEMINI_API_KEY environment variable is not set. Generating mock analysis for testing.');
-      summaryText = `
-## 🪪 Aadhaar Card (KYC)
-- **Document Type**: Aadhaar Card
-- **Full Name**: ${lead.customer_name}
-- **DOB**: 15/08/1990
-- **Gender**: Male
-- **Aadhaar Number**: XXXX XXXX 1234
-- **Address**: 123, High Street, Sector 5, Bengaluru, Karnataka - 560001
-- **Legitimacy Status**: Matched
-- **Verification Note**: Mock verified. Name matches the loan application perfectly.
-
-## 💳 PAN Card (KYC)
-- **Document Type**: PAN Card
-- **Full Name**: ${lead.customer_name}
-- **PAN Number**: ABCDE1234F
-- **DOB**: 15/08/1990
-- **Legitimacy Status**: Matched
-- **Verification Note**: Mock verified. Legitimate PAN record assumed.
-
-## 🏦 Bank Statement (Financials)
-- **Document Type**: Bank Statement
-- **Bank Name**: State Bank of India
-- **Account Holder**: ${lead.customer_name}
-- **Statement Period**: 01/10/2025 to 31/03/2026
-- **Average Balance**: ₹45,000
-- **Total Credits**: ₹3,00,000
-- **Total Debits**: ₹2,80,000
-- **Bounces / Penalties**: None
-- **Legitimacy Status**: High Consistency
-- **Verification Note**: Regular cash inflows matching standard income profile.
-
-## 💼 Income & Business Proof
-- **Document Type**: Salary Slip / Income Proof
-- **Business/Company Name**: InstaFin Partners Ltd
-- **GSTIN / Registration Number**: N/A (Salaried Employee)
-- **Gross Monthly Income**: ₹50,000
-- **Net Monthly Income**: ₹45,000
-- **Legitimacy Status**: Matched
-- **Verification Note**: Income source verified as ${lead.income_source || 'salaried'}.
-
-\`\`\`json
-{
-  "extracted_details": {
-    "full_name": "${lead.customer_name}",
-    "dob": "15/08/1990",
-    "gender": "Male",
-    "aadhaar_number": "XXXX XXXX 1234",
-    "pan_number": "ABCDE1234F",
-    "address": "123, High Street, Sector 5, Bengaluru, Karnataka - 560001",
-    "gross_income": 50000,
-    "monthly_income": 45000,
-    "pf": 2500,
-    "income_tax": 1500,
-    "profession_tax": 200,
-    "rental_income": 0
-  },
-  "face_bounding_box": [220, 150, 520, 420]
-}
-\`\`\`
-`;
-    }
+    // 3-5. Run the shared Gemini analysis
+    const summaryText = await analyzeLeadDocuments({ lead, uploads: analyzedUploads, section });
 
     // 6. Save the summary persistently (section analyses saved to their own file so they don't overwrite the full summary)
     const summarySuffix = section ? `-${section}` : '';
@@ -2161,6 +1826,264 @@ For a ${section ? SECTION_LABELS[section] : 'full'} analysis, apply the same str
   } catch (error) {
     console.error('Error generating summary:', error);
     res.status(500).json({ error: error.message || 'Failed to analyze documents' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// AUTO-FILL BANK APPLICATION FORMS FROM UPLOADED DOCUMENTS
+// ─────────────────────────────────────────────────────────────
+
+// Local directory where filled form PDFs are written (dev mode)
+const filledFormsDir = path.join(uploadsDir, 'filled-forms');
+
+// Build the flat values object passed to the PDF filler.
+// Source: LLM-extracted details + lead-level fields.
+function buildFormValues(lead, details) {
+  const d = details || {};
+  const { coapplicants } = parseRemarksField(lead.remarks);
+  const fmt = (v) => (v === undefined || v === null || v === '') ? '' : v;
+  const fmtMoney = (v) => {
+    const n = Number(v);
+    return (v === undefined || v === null || v === '' || !Number.isFinite(n)) ? '' : `₹${n.toLocaleString('en-IN')}`;
+  };
+  return {
+    full_name: fmt(d.full_name) || fmt(lead.customer_name),
+    dob: fmt(d.dob),
+    gender: fmt(d.gender),
+    aadhaar_number: fmt(d.aadhaar_number),
+    pan_number: fmt(d.pan_number),
+    address: fmt(d.address),
+    mobile: fmt(lead.mobile),
+    email: fmt(lead.email),
+    loan_amount: fmtMoney(lead.expected_amount || d.loan_amount),
+    loan_type: fmt(lead.loan_type),
+    gross_income: fmtMoney(d.gross_income),
+    monthly_income: fmtMoney(d.monthly_income),
+    rental_income: fmtMoney(d.rental_income),
+    co_applicant_name: coapplicants[0]?.name || '',
+    co_applicant_dob: '',
+    employer_name: fmt(d.employer_name) || fmt(lead.business_type),
+    application_date: new Date().toLocaleDateString('en-IN'),
+  };
+}
+
+// POST /api/leads/:id/fill-form — Fill a bank application form PDF from the lead's uploaded documents
+router.post('/:id/fill-form', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const { formId } = req.body || {};
+    if (!formId) {
+      return res.status(400).json({ error: 'formId is required. Pass the id of the application form to fill.' });
+    }
+
+    // 1. Fetch lead + form
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .single();
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Role-based access (same as PUT /:id)
+    if (!(await assertLeadAccess(lead, req))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { data: form, error: formErr } = await supabase
+      .from('application_forms')
+      .select('*')
+      .eq('id', formId)
+      .maybeSingle();
+    if (formErr || !form) {
+      return res.status(404).json({ error: 'Application form not found' });
+    }
+    if (!form.is_active) {
+      return res.status(410).json({ error: 'The requested form is currently unavailable.' });
+    }
+
+    // 2. Get extracted details — use the saved application_form if present, otherwise analyze documents
+    let details = (lead.application_form && typeof lead.application_form === 'object') ? lead.application_form : null;
+    if (!details || Object.keys(details).length === 0) {
+      const { data: uploads } = await supabase
+        .from('lead_checklist_status')
+        .select('*')
+        .eq('lead_id', leadId)
+        .eq('status', 'uploaded');
+
+      if (!uploads || uploads.length === 0) {
+        return res.status(400).json({ error: 'No documents uploaded for this lead. Please upload documents first.' });
+      }
+
+      const summaryText = await analyzeLeadDocuments({ lead, uploads });
+      details = extractDetailsFromSummary(summaryText) || {};
+    }
+
+    // 3. Load the blank form PDF
+    let fileBuffer;
+    try {
+      fileBuffer = await loadFormPdf(form);
+    } catch (err) {
+      return res.status(404).json({ error: 'The requested form file is currently unavailable. Please contact administrator.' });
+    }
+
+    // 4. Fill the PDF (AcroForm fields first, then AI-calibrated overlay)
+    const values = buildFormValues(lead, details);
+    const { buffer: filledBuffer, filledAcroCount, overlayCount } = await fillPdfForm({
+      fileBuffer,
+      fieldMap: form.field_map?.fields || {},
+      values,
+    });
+
+    // 5. Persist the filled PDF
+    const stamp = Date.now();
+    const storagePath = `filled-forms/${leadId}_${form.id}_${stamp}.pdf`;
+
+    if (process.env.NODE_ENV === 'production') {
+      const { error: upErr } = await supabase.storage
+        .from('lead-documents')
+        .upload(storagePath, filledBuffer, { contentType: 'application/pdf', upsert: true });
+      if (upErr) throw upErr;
+    } else {
+      if (!fs.existsSync(filledFormsDir)) {
+        fs.mkdirSync(filledFormsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(filledFormsDir, `${leadId}_${form.id}_${stamp}.pdf`), filledBuffer);
+    }
+
+    const { data: record, error: insertErr } = await supabase
+      .from('lead_filled_forms')
+      .insert({
+        lead_id: leadId,
+        form_id: form.id,
+        bank_name: form.bank_name,
+        loan_type: form.loan_type,
+        form_name: form.form_name,
+        file_path: storagePath,
+      })
+      .select()
+      .single();
+    if (insertErr) {
+      if (insertErr.message && (insertErr.message.includes('relation') || insertErr.message.includes('does not exist'))) {
+        return res.status(500).json({ error: 'Database setup incomplete: lead_filled_forms table missing. Please run migration 020_add_form_filling.sql.' });
+      }
+      throw insertErr;
+    }
+
+    // Also refresh the saved application_form JSON with the latest extracted details
+    if (details && Object.keys(details).length > 0) {
+      await supabase
+        .from('leads')
+        .update({ application_form: details, status: lead.status === 'New' || lead.status === 'Assigned' ? 'Processing' : lead.status })
+        .eq('id', leadId);
+    }
+
+    res.status(201).json({
+      success: true,
+      id: record.id,
+      formName: form.form_name,
+      bankName: form.bank_name,
+      loanType: form.loan_type,
+      filledAcroCount,
+      overlayCount,
+      message: overlayCount > 0 || filledAcroCount > 0
+        ? `${form.form_name} filled successfully (${overlayCount + filledAcroCount} fields placed).`
+        : 'Form downloaded but no fillable fields were found on this form. Run "Calibrate Fields" on the form as an admin to enable auto-fill.',
+    });
+  } catch (error) {
+    console.error('Error filling form:', error);
+    res.status(500).json({ error: error.message || 'Failed to fill application form' });
+  }
+});
+
+// GET /api/leads/:id/filled-forms — List saved filled forms for a lead
+router.get('/:id/filled-forms', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    // Role-based access
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('id, assigned_to')
+      .eq('id', req.params.id)
+      .single();
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    if (!(await assertLeadAccess(lead, req))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { data, error } = await supabase
+      .from('lead_filled_forms')
+      .select('*')
+      .eq('lead_id', req.params.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      // Table may not exist yet (migration 020 not run)
+      if (error.message && (error.message.includes('relation') || error.message.includes('does not exist'))) {
+        return res.json({ data: [] });
+      }
+      throw error;
+    }
+
+    res.json({ data: data || [] });
+  } catch (error) {
+    console.error('Error listing filled forms:', error);
+    res.status(500).json({ error: 'Failed to fetch filled forms' });
+  }
+});
+
+// GET /api/leads/:id/filled-forms/:filledId/download — Download a saved filled form PDF
+router.get('/:id/filled-forms/:filledId/download', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { id: leadId, filledId } = req.params;
+
+    // Role-based access
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('id, assigned_to')
+      .eq('id', leadId)
+      .single();
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    if (!(await assertLeadAccess(lead, req))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { data: rec, error } = await supabase
+      .from('lead_filled_forms')
+      .select('*')
+      .eq('id', filledId)
+      .eq('lead_id', leadId)
+      .single();
+
+    if (error) {
+      if (error.message && (error.message.includes('relation') || error.message.includes('does not exist'))) {
+        return res.status(500).json({ error: 'Database setup incomplete: lead_filled_forms table missing. Please run migration 020_add_form_filling.sql.' });
+      }
+      return res.status(404).json({ error: 'Filled form not found' });
+    }
+    if (!rec) {
+      return res.status(404).json({ error: 'Filled form not found' });
+    }
+
+    let fileBuffer;
+    try {
+      fileBuffer = await loadStoredFile(rec.file_path);
+    } catch (err) {
+      return res.status(404).json({ error: 'Filled form file is currently unavailable.' });
+    }
+
+    const safeName = (rec.form_name || 'filled-form').replace(/[^a-zA-Z0-9._-]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.pdf"`);
+    res.setHeader('Content-Length', fileBuffer.length);
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Error downloading filled form:', error);
+    res.status(500).json({ error: 'Failed to download filled form' });
   }
 });
 
