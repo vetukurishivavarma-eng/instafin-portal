@@ -9,7 +9,7 @@
  *  - POST /api/cibil/upload  (upload + parse a customer's CIBIL report PDF)
  */
 import path from 'path';
-import { generateWithGemini, loadDocumentBuffer } from './gemini.js';
+import { generateWithGemini, loadDocumentBuffer, validateDocumentBuffer } from './gemini.js';
 
 // ─────────────────────────────────────────────────────────────
 // Gemini prompt for CIBIL report extraction
@@ -206,6 +206,7 @@ export async function generateCibilReport(lead, uploads) {
   // Load readable files (PDF/PNG/JPG) from uploads
   const contentsParts = [];
   const fileNameList = [];
+  const skippedDocs = [];
 
   for (const doc of sortedUploads) {
     const fileName = doc.file_path;
@@ -224,13 +225,25 @@ export async function generateCibilReport(lead, uploads) {
 
     const fileBuffer = await loadDocumentBuffer(fileName);
     if (fileBuffer) {
+      // Reject corrupt/renamed/empty files before they hit Gemini
+      // (Gemini returns 400 "The document has no pages" for invalid PDFs)
+      const validation = await validateDocumentBuffer(fileBuffer, mimeType);
+      if (!validation.ok) {
+        const label = doc.document_name || fileName;
+        console.warn(`CIBIL generate: skipping unreadable document "${label}": ${validation.reason}`);
+        skippedDocs.push(`${label} (${validation.reason})`);
+        continue;
+      }
       contentsParts.push({ inlineData: { mimeType, data: fileBuffer.toString('base64') } });
       fileNameList.push(doc.document_name || fileName);
     }
   }
 
   if (contentsParts.length === 0) {
-    throw new Error('No readable documents (PDF/PNG/JPG) found for this lead. Upload documents first.');
+    const detail = skippedDocs.length
+      ? ` Unreadable file(s): ${skippedDocs.join('; ')}. Please re-upload these documents.`
+      : ' Upload documents first.';
+    throw new Error(`No readable documents (PDF/PNG/JPG) found for this lead.${detail}`);
   }
 
   const apiKey = process.env.GEMINI_API_KEY;

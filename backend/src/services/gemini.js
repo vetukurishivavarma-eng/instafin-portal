@@ -6,6 +6,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { PDFDocument } from 'pdf-lib';
 import { supabase } from '../lib/supabase.js';
 
 // ─────────────────────────────────────────────────────────────
@@ -83,10 +84,19 @@ async function discoverModelCandidates(apiKey) {
       return defaultModelCandidates();
     }
     const listData = await listResponse.json();
+    // Exclude model families that cannot do document/image understanding
+    // (image generation, TTS, robotics, computer-use, omni, embeddings, etc.)
+    const EXCLUDED_FAMILIES = ['image', 'tts', 'robotics', 'computer-use', 'omni', 'audio', 'embedding', 'food', 'er-'];
+    const isSuitable = (name) => {
+      const n = name.toLowerCase();
+      if (EXCLUDED_FAMILIES.some(x => n.includes(x))) return false;
+      return n.includes('flash') || n.includes('pro') || n.includes('-latest');
+    };
     const available = (listData.models || [])
       .filter(m =>
         m.supportedGenerationMethods?.includes('generateContent') &&
-        m.name?.startsWith('models/gemini')
+        m.name?.startsWith('models/gemini') &&
+        isSuitable(m.name.replace('models/', ''))
       )
       .map(m => m.name.replace('models/', ''))
       .sort((a, b) => scoreModelName(b) - scoreModelName(a));
@@ -185,6 +195,45 @@ export async function loadDocumentBuffer(fileName) {
 }
 
 /**
+ * Validate that a file buffer is a readable PDF or image before sending it to
+ * Gemini. Gemini rejects invalid PDFs with "The document has no pages", which
+ * previously killed the entire request. Returns { ok: true } or { ok: false, reason }.
+ */
+export async function validateDocumentBuffer(buffer, mimeType) {
+  if (!buffer || buffer.length === 0) {
+    return { ok: false, reason: 'empty file' };
+  }
+  if (mimeType === 'application/pdf') {
+    const head = buffer.subarray(0, 5).toString('ascii');
+    if (head !== '%PDF-') {
+      return { ok: false, reason: 'file is not a valid PDF (renamed or corrupt)' };
+    }
+    try {
+      const doc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+      if (doc.getPageCount() === 0) {
+        return { ok: false, reason: 'PDF has no pages' };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: `PDF could not be parsed (${e.message})` };
+    }
+  }
+  if (mimeType === 'image/png') {
+    if (buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4e || buffer[3] !== 0x47) {
+      return { ok: false, reason: 'file is not a valid PNG image' };
+    }
+    return { ok: true };
+  }
+  if (mimeType === 'image/jpeg') {
+    if (buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff) {
+      return { ok: false, reason: 'file is not a valid JPEG image' };
+    }
+    return { ok: true };
+  }
+  return { ok: false, reason: 'unsupported file type' };
+}
+
+/**
  * Analyze a lead's uploaded documents with Gemini and return the summary text.
  * @param {object} opts
  * @param {object} opts.lead         - lead row from Supabase
@@ -215,6 +264,12 @@ export async function analyzeLeadDocuments({ lead, uploads, section = null }) {
 
     fileBuffer = await loadDocumentBuffer(fileName);
     if (fileBuffer) {
+      const validation = await validateDocumentBuffer(fileBuffer, mimeType);
+      if (!validation.ok) {
+        console.warn(`Skipping unreadable document "${doc.document_name}" (${fileName}): ${validation.reason}`);
+        documentDescriptions.push(`Document: "${doc.document_name}" (skipped — ${validation.reason})`);
+        continue;
+      }
       contentsParts.push({
         inlineData: { mimeType, data: fileBuffer.toString('base64') },
       });
