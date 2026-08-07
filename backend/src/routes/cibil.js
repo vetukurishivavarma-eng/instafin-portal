@@ -7,8 +7,22 @@ import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { parseCibilReport, generateCibilReport } from '../services/cibil.js';
+import { fetchCibilReport, isCibilApiConfigured } from '../services/cibilFetch.js';
 
 const router = express.Router();
+
+// Helper: verify the requesting user may access this lead (executives/dsa only for their own)
+async function assertLeadAccess(lead, req) {
+  if (req.user.role === 'admin' || req.user.role === 'operations_head') return true;
+  if (lead.assigned_to === req.user.id) return true;
+  // Legacy format: assigned_to may store the executive's name
+  const { data: userData } = await supabase
+    .from('users')
+    .select('name')
+    .eq('id', req.user.id)
+    .maybeSingle();
+  return !!userData?.name && lead.assigned_to === userData.name;
+}
 
 const cibilDir = path.join(process.cwd(), 'uploads', 'cibil');
 if (!fs.existsSync(cibilDir)) {
@@ -142,16 +156,9 @@ router.post('/generate', authorize('admin', 'operations_head', 'executive'), asy
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    // Role-based access — executives/dsa may only generate for their own leads
-    if (req.user.role !== 'admin' && req.user.role !== 'operations_head' && lead.assigned_to !== req.user.id) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', req.user.id)
-        .maybeSingle();
-      if (!userData?.name || lead.assigned_to !== userData.name) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
+    // Role-based access — executives may only generate for their own leads
+    if (!(await assertLeadAccess(lead, req))) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Load the lead's uploaded documents
@@ -201,6 +208,94 @@ router.post('/generate', authorize('admin', 'operations_head', 'executive'), asy
       return res.status(429).json({ error: msg });
     }
     res.status(500).json({ error: msg || 'Failed to generate CIBIL report' });
+  }
+});
+
+// GET /api/cibil/config — Is the third-party CIBIL API configured?
+router.get('/config', authorize('admin', 'operations_head', 'executive', 'dsa'), (req, res) => {
+  res.json({
+    configured: isCibilApiConfigured(),
+    provider: process.env.CIBIL_API_PROVIDER || 'generic',
+  });
+});
+
+// POST /api/cibil/fetch — Fetch a real CIBIL report from the configured third-party API (PAN + identity)
+router.post('/fetch', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
+  try {
+    const { leadId, pan, name, dob, mobile } = req.body || {};
+    if (!leadId) {
+      return res.status(400).json({ error: 'leadId is required' });
+    }
+    if (!pan) {
+      return res.status(400).json({ error: 'PAN is required' });
+    }
+
+    // Verify the lead exists
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .single();
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Role-based access — executives may only fetch for their own leads
+    if (!(await assertLeadAccess(lead, req))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!isCibilApiConfigured()) {
+      return res.status(503).json({
+        error: 'The third-party CIBIL API is not configured yet. Ask the admin to set CIBIL_API_BASE_URL and CIBIL_API_KEY in the server environment (Render → Environment).',
+      });
+    }
+
+    const { report: parsed, consentReference } = await fetchCibilReport({ pan, name, dob, mobile });
+
+    // Consent / audit trail (regulated bureau pull)
+    parsed.meta = {
+      source: 'api',
+      provider: process.env.CIBIL_API_PROVIDER || 'generic',
+      consent_reference: consentReference,
+      consent_at: new Date().toISOString(),
+      fetched_by: req.user?.name || req.user?.email || null,
+      fetched_at: new Date().toISOString(),
+    };
+
+    const cibilScore = parsed?.cibil_score && Number.isFinite(parsed.cibil_score)
+      ? parsed.cibil_score
+      : null;
+
+    const { data: newReport, error: insertError } = await supabase
+      .from('cibil_reports')
+      .insert({
+        lead_id: leadId,
+        file_name: `CIBIL API · ${String(pan).trim().toUpperCase()}`,
+        file_path: null,
+        report_data: parsed,
+        cibil_score: cibilScore,
+        parsed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+
+    res.status(201).json({ data: newReport });
+  } catch (error) {
+    console.error('CIBIL fetch error:', error);
+    const msg = error.message || '';
+    if (msg.includes('not configured')) {
+      return res.status(503).json({ error: msg });
+    }
+    if (msg.includes('PAN') || msg.includes('valid')) {
+      return res.status(400).json({ error: msg });
+    }
+    if (msg.includes('request failed') || msg.includes('Could not reach')) {
+      return res.status(502).json({ error: msg });
+    }
+    res.status(500).json({ error: msg || 'Failed to fetch CIBIL report' });
   }
 });
 

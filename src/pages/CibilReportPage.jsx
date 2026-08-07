@@ -104,6 +104,15 @@ export default function CibilReportPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  // Third-party CIBIL API fetch
+  const [apiConfigured, setApiConfigured] = useState(null);
+  const [pan, setPan] = useState('');
+  const [cname, setCname] = useState('');
+  const [dob, setDob] = useState('');
+  const [apiMobile, setApiMobile] = useState('');
+  const [consent, setConsent] = useState(false);
+  const [fetchingApi, setFetchingApi] = useState(false);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -187,8 +196,26 @@ export default function CibilReportPage() {
     setReports([]);
     setActiveReport(null);
     setDocuments([]);
+    setCname(lead.customerName || '');
+    setApiMobile(lead.mobile || '');
+    setPan('');
+    setDob('');
+    setConsent(false);
     fetchReports(lead.id);
     fetchDocuments(lead.id);
+    fetchCibilConfig();
+  };
+
+  const fetchCibilConfig = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/cibil/config`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setApiConfigured(data.configured === true);
+    } catch (err) {
+      setApiConfigured(false);
+    }
   };
 
   const handleClearLead = () => {
@@ -292,6 +319,53 @@ export default function CibilReportPage() {
     }
   };
 
+  // ── Fetch from third-party CIBIL API ──
+  const fetchFromApi = async () => {
+    if (!selectedLead) {
+      setError('Please select a lead first.');
+      return;
+    }
+    if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(pan.trim().toUpperCase())) {
+      setError('Please enter a valid 10-character PAN (e.g. ABCDE1234F).');
+      return;
+    }
+    if (!consent) {
+      setError('Customer consent is required to fetch a CIBIL report.');
+      return;
+    }
+
+    setFetchingApi(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/cibil/fetch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          leadId: selectedLead.id,
+          pan: pan.trim().toUpperCase(),
+          name: cname,
+          dob,
+          mobile: apiMobile
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 503) setApiConfigured(false);
+        throw new Error(data.error || 'Failed to fetch CIBIL report');
+      }
+      setSuccess(`CIBIL report fetched from API${data.data?.cibil_score ? ` — Score ${data.data.cibil_score}` : ''}!`);
+      await fetchReports(selectedLead.id);
+    } catch (err) {
+      setError(err.message || 'Failed to fetch CIBIL report');
+    } finally {
+      setFetchingApi(false);
+    }
+  };
+
   // ── Actions ──
   const handleDownload = async (report) => {
     try {
@@ -354,7 +428,7 @@ export default function CibilReportPage() {
       <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">CIBIL Report</h1>
         <p className="text-xs sm:text-base text-gray-500 mt-1">
-          Generate an estimated credit profile from the customer's documents — or upload their CIBIL PDF and let AI extract the score, accounts &amp; enquiries.
+          Generate an estimated profile from documents, fetch the real report from your CIBIL API, or upload the customer's CIBIL PDF.
         </p>
       </div>
 
@@ -550,6 +624,104 @@ export default function CibilReportPage() {
             )}
           </div>
 
+          {/* Fetch from CIBIL API — third-party (real bureau data) */}
+          <div className="bg-white rounded-3xl border border-sky-200 shadow-sm p-6 sm:p-8">
+            <div className="flex items-start gap-4 flex-col sm:flex-row sm:items-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-200 shrink-0">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg font-bold text-gray-900">Fetch Real CIBIL Report</h2>
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">Third-party API</span>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pull the customer's actual credit report from your CIBIL API provider. Customer consent is required.
+                </p>
+              </div>
+            </div>
+
+            {apiConfigured === false && (
+              <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-700">
+                ⚙️ CIBIL API not configured — ask the admin to set <code className="font-mono font-bold">CIBIL_API_BASE_URL</code> and{' '}
+                <code className="font-mono font-bold">CIBIL_API_KEY</code> in the server environment (Render → Environment).
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">PAN Number *</label>
+                <input
+                  type="text"
+                  value={pan}
+                  maxLength={10}
+                  onChange={(e) => setPan(e.target.value.toUpperCase())}
+                  placeholder="ABCDE1234F"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent uppercase tracking-widest"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  value={cname}
+                  onChange={(e) => setCname(e.target.value)}
+                  placeholder="As per PAN"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date of Birth</label>
+                <input
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Mobile</label>
+                <input
+                  type="tel"
+                  value={apiMobile}
+                  onChange={(e) => setApiMobile(e.target.value)}
+                  placeholder="10-digit mobile"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <label className="mt-4 flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-sky-600"
+              />
+              <span className="text-xs text-gray-600">
+                I confirm the customer has given explicit consent to fetch their CIBIL credit report.
+              </span>
+            </label>
+
+            <div className="mt-4 flex items-center gap-3 flex-wrap">
+              <button
+                onClick={fetchFromApi}
+                disabled={fetchingApi || !pan || !consent || apiConfigured === false}
+                className="px-5 py-2.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm shadow-lg shadow-sky-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {fetchingApi ? 'Fetching…' : '🔗 Fetch from CIBIL API'}
+              </button>
+              {fetchingApi && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-sky-600 border-t-transparent" />
+                  Fetching from provider… this takes 10–30 seconds
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Upload zone — optional secondary (only if customer provides an actual CIBIL PDF) */}
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide">Optional — upload an actual CIBIL PDF</h3>
@@ -606,7 +778,7 @@ export default function CibilReportPage() {
                       ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}
                 >
-                  {r.cibil_score ? `${r.cibil_score} pts` : (r.file_path ? 'Parsed' : 'Generated')} · {new Date(r.parsed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {r.cibil_score ? `${r.cibil_score} pts` : (r.report_data?.source === 'api' ? 'API' : r.file_path ? 'Parsed' : 'Generated')} · {new Date(r.parsed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </button>
               ))}
             </div>
@@ -630,8 +802,11 @@ export default function CibilReportPage() {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-lg font-extrabold text-gray-900">{rp.consumer?.name || selectedLead.customerName}</p>
-                          {!activeReport.file_path && (
+                          {rp.source === 'generated' && (
                             <span className="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">AI Generated · Estimated</span>
+                          )}
+                          {rp.source === 'api' && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">CIBIL API{rp.provider ? ` · ${rp.provider}` : ''}</span>
                           )}
                         </div>
                         <p className="text-xs text-gray-500">
