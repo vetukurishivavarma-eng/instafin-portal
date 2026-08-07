@@ -52,51 +52,65 @@ export function getSectionFromDocumentId(documentId) {
 // ─────────────────────────────────────────────────────────────
 // Low-level Gemini generateContent call (model discovery + retries)
 // ─────────────────────────────────────────────────────────────
-export async function generateWithGemini(contentsParts, apiKey) {
-  if (!apiKey) return null;
 
-  console.log('Querying available Gemini models...');
-  let discoveredModel = null;
+// Score a model name — higher is preferred (flash > pro, newer > older, stable > preview)
+function scoreModelName(name) {
+  const n = (name || '').toLowerCase();
+  if (!n.includes('gemini')) return -1;
+  let score = 0;
+  if (n.includes('flash')) score += 100;
+  if (n.includes('2.5')) score += 50;
+  else if (n.includes('2.0')) score += 40;
+  else if (n.includes('1.5')) score += 20;
+  if (n.includes('preview') || n.includes('beta')) score -= 30;
+  return score;
+}
 
+// Fallbacks used only when the model list endpoint itself fails
+function defaultModelCandidates() {
+  return ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+}
+
+// Query ListModels for this API key and return every generateContent-capable
+// Gemini model, best-first. This is the source of truth — if the key's project
+// only has access to specific models (e.g. preview names), we use exactly those.
+async function discoverModelCandidates(apiKey) {
   try {
     const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     const listResponse = await fetch(listUrl);
-    if (listResponse.ok) {
-      const listData = await listResponse.json();
-      const availableModels = listData.models || [];
-
-      const flashModel = availableModels.find(m =>
-        m.supportedGenerationMethods?.includes('generateContent') &&
-        m.name?.toLowerCase().includes('flash')
-      );
-
-      if (flashModel) {
-        discoveredModel = flashModel.name.replace('models/', '');
-        console.log(`Dynamically selected active Flash model: ${discoveredModel}`);
-      } else {
-        const anyModel = availableModels.find(m =>
-          m.supportedGenerationMethods?.includes('generateContent')
-        );
-        if (anyModel) {
-          discoveredModel = anyModel.name.replace('models/', '');
-          console.log(`Dynamically selected active model: ${discoveredModel}`);
-        }
-      }
+    if (!listResponse.ok) {
+      console.warn(`Gemini model list endpoint returned status ${listResponse.status}`);
+      return defaultModelCandidates();
     }
+    const listData = await listResponse.json();
+    const available = (listData.models || [])
+      .filter(m =>
+        m.supportedGenerationMethods?.includes('generateContent') &&
+        m.name?.startsWith('models/gemini')
+      )
+      .map(m => m.name.replace('models/', ''))
+      .sort((a, b) => scoreModelName(b) - scoreModelName(a));
+    if (available.length > 0) {
+      console.log(`Gemini models available to this API key: ${available.join(', ')}`);
+      return available;
+    }
+    console.warn('No generateContent-capable Gemini models found in model list response');
+    return defaultModelCandidates();
   } catch (listErr) {
-    console.warn('Could not query active Gemini models list:', listErr.message);
+    console.warn('Could not query Gemini model list:', listErr.message);
+    return defaultModelCandidates();
   }
+}
 
-  const candidateModels = [];
-  if (discoveredModel) candidateModels.push(discoveredModel);
-  candidateModels.push('gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro');
+export async function generateWithGemini(contentsParts, apiKey) {
+  if (!apiKey) return null;
 
-  const uniqueModels = [...new Set(candidateModels)];
+  const candidateModels = await discoverModelCandidates(apiKey);
 
   let success = false;
   let lastErrorText = '';
 
-  for (const model of uniqueModels) {
+  for (const model of candidateModels) {
     if (success) break;
     console.log(`Attempting Gemini call with model: ${model}`);
 
@@ -140,7 +154,10 @@ export async function generateWithGemini(contentsParts, apiKey) {
     }
   }
 
-  throw new Error(`Gemini API is currently overloaded or experiencing high demand. Please try again in a few seconds. (Details: ${lastErrorText})`);
+  throw new Error(
+    `Gemini API is currently overloaded or experiencing high demand. Please try again in a few seconds. ` +
+    `(Tried models: ${candidateModels.join(', ')}. Last error: ${lastErrorText})`
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
