@@ -148,7 +148,7 @@ export async function generateWithGemini(contentsParts, apiKey) {
 // ─────────────────────────────────────────────────────────────
 const uploadsDir = path.join(process.cwd(), 'uploads');
 
-async function loadDocumentBuffer(fileName) {
+export async function loadDocumentBuffer(fileName) {
   const localPath = path.join(uploadsDir, fileName);
   if (fs.existsSync(localPath)) {
     return fs.readFileSync(localPath);

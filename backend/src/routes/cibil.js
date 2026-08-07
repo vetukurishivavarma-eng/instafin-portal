@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
-import { parseCibilReport } from '../services/cibil.js';
+import { parseCibilReport, generateCibilReport } from '../services/cibil.js';
 
 const router = express.Router();
 
@@ -121,6 +121,101 @@ router.post('/upload', authorize('admin', 'operations_head', 'executive'), uploa
       if (fs.existsSync(fp)) fs.unlinkSync(fp);
     }
     res.status(500).json({ error: 'Failed to upload and parse CIBIL report' });
+  }
+});
+
+// POST /api/cibil/generate — Generate an ESTIMATED credit profile from the lead's uploaded documents (no CIBIL PDF needed)
+router.post('/generate', authorize('admin', 'operations_head', 'executive'), async (req, res) => {
+  try {
+    const { leadId } = req.body;
+    if (!leadId) {
+      return res.status(400).json({ error: 'leadId is required' });
+    }
+
+    // Verify the lead exists
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .single();
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+
+    // Role-based access — executives/dsa may only generate for their own leads
+    if (req.user.role !== 'admin' && req.user.role !== 'operations_head' && lead.assigned_to !== req.user.id) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+      if (!userData?.name || lead.assigned_to !== userData.name) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    // Load the lead's uploaded documents
+    const { data: uploads, error: uploadsErr } = await supabase
+      .from('lead_checklist_status')
+      .select('*')
+      .eq('lead_id', leadId)
+      .eq('status', 'uploaded');
+    if (uploadsErr) throw uploadsErr;
+
+    if (!uploads || uploads.length === 0) {
+      return res.status(400).json({ error: 'No documents uploaded for this lead. Upload documents in the Checklists page first.' });
+    }
+
+    const parsed = await generateCibilReport(lead, uploads);
+
+    const cibilScore = parsed?.cibil_score && Number.isFinite(parsed.cibil_score)
+      ? parsed.cibil_score
+      : null;
+
+    const { data: newReport, error: insertError } = await supabase
+      .from('cibil_reports')
+      .insert({
+        lead_id: leadId,
+        file_name: 'Generated from documents',
+        file_path: null,
+        report_data: parsed,
+        cibil_score: cibilScore,
+        parsed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+
+    res.status(201).json({ data: newReport });
+  } catch (error) {
+    console.error('CIBIL generate error:', error);
+    const msg = error.message || '';
+    if (msg.includes('No readable documents')) {
+      return res.status(400).json({ error: msg });
+    }
+    if (msg.includes('Could not generate')) {
+      return res.status(422).json({ error: msg });
+    }
+    res.status(500).json({ error: 'Failed to generate CIBIL report' });
+  }
+});
+
+// GET /api/cibil/lead/:leadId/documents — List uploaded documents available for CIBIL generation
+router.get('/lead/:leadId/documents', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const { data, error } = await supabase
+      .from('lead_checklist_status')
+      .select('id, document_id, document_name, file_path')
+      .eq('lead_id', leadId)
+      .eq('status', 'uploaded');
+
+    if (error) throw error;
+    res.json({ data: data || [] });
+  } catch (error) {
+    console.error('Error fetching documents for CIBIL generation:', error);
+    res.status(500).json({ error: 'Failed to fetch documents' });
   }
 });
 

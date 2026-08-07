@@ -9,15 +9,18 @@ import API_BASE from '../config/api';
 function ScoreGauge({ score }) {
   const MIN = 300;
   const MAX = 900;
-  const pct = Math.max(0, Math.min(1, ((score ?? MIN) - MIN) / (MAX - MIN)));
+  const hasScore = score !== null && score !== undefined && Number.isFinite(Number(score));
+  const numericScore = hasScore ? Number(score) : null;
+  const pct = numericScore === null ? 0 : Math.max(0, Math.min(1, (numericScore - MIN) / (MAX - MIN)));
   const circumference = 2 * Math.PI * 84;
   const dashOffset = circumference * (1 - pct);
 
-  const band = score >= 800 ? { label: 'Excellent', color: '#10b981' }
-    : score >= 750 ? { label: 'Very Good', color: '#22c55e' }
-    : score >= 700 ? { label: 'Good', color: '#84cc16' }
-    : score >= 650 ? { label: 'Fair', color: '#eab308' }
-    : score >= 600 ? { label: 'Needs Attention', color: '#f97316' }
+  const band = !hasScore ? { label: 'Not Available', color: '#cbd5e1' }
+    : numericScore >= 800 ? { label: 'Excellent', color: '#10b981' }
+    : numericScore >= 750 ? { label: 'Very Good', color: '#22c55e' }
+    : numericScore >= 700 ? { label: 'Good', color: '#84cc16' }
+    : numericScore >= 650 ? { label: 'Fair', color: '#eab308' }
+    : numericScore >= 600 ? { label: 'Needs Attention', color: '#f97316' }
     : { label: 'Poor', color: '#ef4444' };
 
   return (
@@ -96,6 +99,11 @@ export default function CibilReportPage() {
   const [loadingReports, setLoadingReports] = useState(false);
   const [activeReport, setActiveReport] = useState(null);
 
+  // Documents for AI generation
+  const [documents, setDocuments] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -155,6 +163,21 @@ export default function CibilReportPage() {
     }
   };
 
+  const fetchDocuments = async (leadId) => {
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/cibil/lead/${leadId}/documents`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setDocuments(data.data || []);
+    } catch (err) {
+      setDocuments([]);
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
   const handleSelectLead = (lead) => {
     setSelectedLead(lead);
     setDropdownOpen(false);
@@ -163,13 +186,16 @@ export default function CibilReportPage() {
     setSuccess('');
     setReports([]);
     setActiveReport(null);
+    setDocuments([]);
     fetchReports(lead.id);
+    fetchDocuments(lead.id);
   };
 
   const handleClearLead = () => {
     setSelectedLead(null);
     setReports([]);
     setActiveReport(null);
+    setDocuments([]);
     setError('');
     setSuccess('');
   };
@@ -228,6 +254,42 @@ export default function CibilReportPage() {
     setDragOver(false);
     const file = e.dataTransfer?.files?.[0];
     if (file) uploadFile(file);
+  };
+
+  // ── Generate from documents ──
+  const generateReport = async () => {
+    if (!selectedLead) {
+      setError('Please select a lead first.');
+      return;
+    }
+    if (documents.length === 0) {
+      setError('No documents uploaded for this lead. Upload documents in the Checklists page first.');
+      return;
+    }
+
+    setGenerating(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/cibil/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ leadId: selectedLead.id })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to generate CIBIL report');
+      }
+      setSuccess(`AI credit profile generated${data.data?.cibil_score ? ` — Estimated score ${data.data.cibil_score}` : ''}!`);
+      await fetchReports(selectedLead.id);
+    } catch (err) {
+      setError(err.message || 'Failed to generate CIBIL report');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   // ── Actions ──
@@ -292,7 +354,7 @@ export default function CibilReportPage() {
       <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">CIBIL Report</h1>
         <p className="text-xs sm:text-base text-gray-500 mt-1">
-          Upload a customer's CIBIL credit report and let AI extract the score, accounts &amp; enquiries instantly.
+          Generate an estimated credit profile from the customer's documents — or upload their CIBIL PDF and let AI extract the score, accounts &amp; enquiries.
         </p>
       </div>
 
@@ -422,20 +484,84 @@ export default function CibilReportPage() {
 
       {!selectedLead ? (
         <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-3xl bg-white/50">
-          <div className="text-5xl mb-3">📄</div>
-          <p className="text-gray-500 font-semibold">Select a lead above to view or upload its CIBIL report.</p>
-          <p className="text-gray-400 text-sm mt-1">Customers can download a free CIBIL report once a year from cibil.com.</p>
+          <div className="text-5xl mb-3">🧠</div>
+          <p className="text-gray-500 font-semibold">Select a lead above to generate or view its credit report.</p>
+          <p className="text-gray-400 text-sm mt-1">The AI builds an estimated CIBIL profile from the customer's uploaded documents.</p>
         </div>
       ) : (
         <div className="space-y-6 max-w-5xl mx-auto">
-          {/* Upload zone */}
+          {/* AI Generate panel — primary action */}
+          <div className="bg-gradient-to-br from-violet-50 to-indigo-50/40 border border-violet-200 rounded-3xl shadow-sm p-6 sm:p-8">
+            <div className="flex items-start gap-4 flex-col sm:flex-row sm:items-center">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-200 shrink-0">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-gray-900">AI Credit Report Generator</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Generate an estimated CIBIL credit profile from this lead's uploaded documents — no CIBIL PDF required.
+                </p>
+              </div>
+            </div>
+
+            {docsLoading ? (
+              <div className="mt-5 text-sm text-gray-500 animate-pulse">Loading uploaded documents...</div>
+            ) : documents.length === 0 ? (
+              <div className="mt-5 rounded-2xl bg-white/70 border border-violet-100 p-4 text-sm text-gray-500">
+                No documents uploaded for this lead yet.{' '}
+                <span className="font-semibold text-gray-700">Upload documents in the Checklists page first</span> (bank statements, salary slips, loan documents, KYC), then come back here to generate.
+              </div>
+            ) : (
+              <div className="mt-5">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="text-sm text-gray-600">
+                    <span className="font-bold text-gray-900">{documents.length}</span> document{documents.length > 1 ? 's' : ''} available:
+                  </div>
+                  <button
+                    onClick={generateReport}
+                    disabled={generating}
+                    className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm shadow-lg shadow-violet-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    {generating ? 'Generating…' : '✨ Generate Report from Documents'}
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {documents.slice(0, 8).map(d => (
+                    <span key={d.id} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs text-gray-600">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {d.document_name || d.document_id}
+                    </span>
+                  ))}
+                  {documents.length > 8 && (
+                    <span className="text-xs text-gray-400 self-center">+{documents.length - 8} more</span>
+                  )}
+                </div>
+                {generating && (
+                  <div className="mt-4 rounded-2xl bg-white/80 border border-violet-100 p-4 flex items-center gap-3">
+                    <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-violet-600 border-t-transparent" />
+                    <p className="text-sm text-gray-600 font-medium">
+                      Analyzing {documents.length} document{documents.length > 1 ? 's' : ''} with AI… this takes 30–60 seconds
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Upload zone — optional secondary (only if customer provides an actual CIBIL PDF) */}
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide">Optional — upload an actual CIBIL PDF</h3>
+            <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">if the customer provides one</span>
+          </div>
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleFileDrop}
             onClick={() => { if (!uploading) fileInputRef.current?.click(); }}
             className={`border-2 border-dashed rounded-3xl p-6 sm:p-10 text-center cursor-pointer transition-all
-              ${dragOver ? 'border-blue-500 bg-blue-50 scale-[1.01] shadow-lg shadow-blue-100' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/40'}`}
+              ${dragOver ? 'border-blue-500 bg-blue-50 scale-[1.01] shadow-lg shadow-blue-100' : 'border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50/40'}`}
           >
             <input
               ref={fileInputRef}
@@ -480,7 +606,7 @@ export default function CibilReportPage() {
                       ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}
                 >
-                  {r.cibil_score ? `${r.cibil_score} pts` : 'Parsed'} · {new Date(r.parsed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {r.cibil_score ? `${r.cibil_score} pts` : (r.file_path ? 'Parsed' : 'Generated')} · {new Date(r.parsed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </button>
               ))}
             </div>
@@ -502,7 +628,12 @@ export default function CibilReportPage() {
                     <div className="flex items-center gap-3 mb-4">
                       <span className="text-2xl">👤</span>
                       <div>
-                        <p className="text-lg font-extrabold text-gray-900">{rp.consumer?.name || selectedLead.customerName}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-lg font-extrabold text-gray-900">{rp.consumer?.name || selectedLead.customerName}</p>
+                          {!activeReport.file_path && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">AI Generated · Estimated</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
                           Report generated: {rp.report_generated_on || '—'}
                         </p>
@@ -620,12 +751,14 @@ export default function CibilReportPage() {
 
               {/* Actions */}
               <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => handleDownload(activeReport)}
-                  className="px-4 py-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-700 text-gray-700 font-semibold rounded-xl text-sm transition-all shadow-sm"
-                >
-                  ⬇️ Download Original Report
-                </button>
+                {activeReport.file_path && (
+                  <button
+                    onClick={() => handleDownload(activeReport)}
+                    className="px-4 py-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-700 text-gray-700 font-semibold rounded-xl text-sm transition-all shadow-sm"
+                  >
+                    ⬇️ Download Original Report
+                  </button>
+                )}
                 {accessToken && (
                   <button
                     onClick={() => handleDelete(activeReport)}
