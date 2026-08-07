@@ -90,7 +90,9 @@ async function discoverModelCandidates(apiKey) {
     const isSuitable = (name) => {
       const n = name.toLowerCase();
       if (EXCLUDED_FAMILIES.some(x => n.includes(x))) return false;
-      return n.includes('flash') || n.includes('pro') || n.includes('-latest');
+      // Free-tier API keys have limit: 0 on pro models — only flash/lite models
+      // carry usable quota, so never attempt pro models (they always fail with 429).
+      return n.includes('flash');
     };
     const available = (listData.models || [])
       .filter(m =>
@@ -112,20 +114,45 @@ async function discoverModelCandidates(apiKey) {
   }
 }
 
+// Number of distinct models to attempt before giving up — each failed call wastes
+// time, and on the free tier the bottleneck is quota, not model availability.
+const MAX_MODEL_ATTEMPTS = 5;
+
+// Parse google.rpc.RetryInfo retryDelay (e.g. "34s") from a Gemini error body.
+// Returns ms (capped at 15s) or null if absent.
+function extractRetryDelayMs(errorText) {
+  try {
+    const parsed = JSON.parse(errorText);
+    const details = parsed?.error?.details || [];
+    for (const d of details) {
+      if (d['@type']?.includes('RetryInfo') && d.retryDelay) {
+        const secs = parseFloat(String(d.retryDelay).replace(/[^0-9.]/g, ''));
+        if (Number.isFinite(secs) && secs > 0) {
+          return Math.min(Math.round(secs * 1000), 15000);
+        }
+      }
+    }
+  } catch { /* response body may not be JSON */ }
+  return null;
+}
+
 export async function generateWithGemini(contentsParts, apiKey) {
   if (!apiKey) return null;
 
-  const candidateModels = await discoverModelCandidates(apiKey);
+  const candidateModels = (await discoverModelCandidates(apiKey)).slice(0, MAX_MODEL_ATTEMPTS);
 
   let success = false;
   let lastErrorText = '';
+  let quotaExhausted = false;
 
   for (const model of candidateModels) {
     if (success) break;
     console.log(`Attempting Gemini call with model: ${model}`);
 
-    const maxRetries = 3;
-    for (let retry = 0; retry < maxRetries; retry++) {
+    // Per model: 1 initial attempt + 1 retry after a 429 (quota is per-model,
+    // so a short wait can let the next attempt through). Never hammer more than that.
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const response = await fetch(geminiUrl, {
@@ -148,20 +175,31 @@ export async function generateWithGemini(contentsParts, apiKey) {
         lastErrorText = `Model ${model} returned status ${response.status}: ${errorText}`;
         console.warn(`Attempt with ${model} failed (status ${response.status}). Details: ${errorText}`);
 
-        if (response.status === 503 || response.status === 429) {
-          const delay = Math.pow(2, retry) * 1500; // 1.5s, 3s, 6s
-          console.log(`Spike in demand detected (status ${response.status}). Retrying in ${delay}ms...`);
+        if (response.status === 429 || response.status === 503) {
+          // "limit: 0" means this model has NO quota for this key — retrying is futile
+          if (errorText.includes('limit: 0')) {
+            quotaExhausted = true;
+            break; // skip this model, try the next
+          }
+          const delay = extractRetryDelayMs(errorText) ?? 4000;
+          console.log(`Quota/rate limit on ${model}. Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
-        } else {
-          break; // Non-retryable error, try next model
+          continue; // one retry on the same model
         }
+        break; // non-retryable error (400/404/403) → next model
       } catch (err) {
         lastErrorText = err.message;
-        console.error(`Error on model ${model} (attempt ${retry + 1}):`, err.message);
-        const delay = Math.pow(2, retry) * 1500;
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.error(`Error on model ${model} (attempt ${attempt}):`, err.message);
+        break;
       }
     }
+  }
+
+  if (quotaExhausted || lastErrorText.includes('limit: 0')) {
+    throw new Error(
+      `Gemini API free-tier quota is exhausted for this API key (some models report limit: 0). ` +
+      `Wait for the daily quota reset or enable billing at https://ai.google.dev/gemini-api/pricing to raise limits.`
+    );
   }
 
   throw new Error(

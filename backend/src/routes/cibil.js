@@ -197,7 +197,10 @@ router.post('/generate', authorize('admin', 'operations_head', 'executive'), asy
     if (msg.includes('Could not generate')) {
       return res.status(422).json({ error: msg });
     }
-    res.status(500).json({ error: 'Failed to generate CIBIL report' });
+    if (msg.includes('quota') || msg.includes('limit: 0')) {
+      return res.status(429).json({ error: msg });
+    }
+    res.status(500).json({ error: msg || 'Failed to generate CIBIL report' });
   }
 });
 
