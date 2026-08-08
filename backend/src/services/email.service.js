@@ -221,3 +221,69 @@ export async function sendRejectionEmail({ name, email }) {
     return { success: false, error: error.message, code: error.code };
   }
 }
+
+/**
+ * Send a salary penalty warning email when a Daily Hurdle task is delayed beyond the penalty threshold.
+ */
+export async function sendSalaryPenaltyEmail({ name, email, taskTitle, daysOverdue, percent = 1 }) {
+  console.log(`[EMAIL] Attempting to send SALARY PENALTY email to ${email} (${name}) for task "${taskTitle}"`);
+
+  if (!SMTP_USER || !SMTP_PASS) {
+    console.error(`[EMAIL] ❌ SMTP credentials not configured. SMTP_USER=${SMTP_USER ? 'SET' : 'NOT SET'}, SMTP_PASS=${SMTP_PASS ? 'SET' : 'NOT SET'}`);
+    return { success: false, error: 'SMTP credentials not configured. Add SMTP_USER and SMTP_PASS env vars.' };
+  }
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"${APP_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject: `⚠️ ${APP_NAME} - Salary Deduction Notice: Overdue Task`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border-radius: 16px;">
+          <div style="background: linear-gradient(135deg, #DC2626, #B91C1C); padding: 30px; border-radius: 12px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">⚠️ Salary Deduction Notice</h1>
+          </div>
+
+          <div style="background: white; padding: 30px; border-radius: 12px; margin-top: 20px;">
+            <h2 style="color: #1e293b; margin-top: 0;">Hello ${name},</h2>
+
+            <p style="color: #475569; line-height: 1.6;">
+              Your assigned task <strong>"${taskTitle}"</strong> is now
+              <strong style="color: #dc2626;">${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue</strong>.
+            </p>
+
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #b91c1c; margin: 0 0 10px;">As per company policy:</h3>
+              <p style="margin: 0; color: #475569; line-height: 1.6;">
+                <strong>1% of your monthly salary will be deducted</strong> for this month due to the
+                delayed completion of this task.
+              </p>
+            </div>
+
+            <p style="color: #475569; line-height: 1.6;">
+              Please log in to the portal, provide the reason for the delay and a
+              <strong>revised completion date</strong> for the task, and complete it at the earliest to avoid further action.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/executive/hurdles"
+                 style="background: #2563EB; color: white; padding: 14px 32px; border-radius: 12px;
+                        text-decoration: none; font-weight: bold; display: inline-block;">
+                Open Daily Hurdles →
+              </a>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+            <p style="color: #94a3b8; font-size: 12px; text-align: center;">${APP_NAME} - Streamline Your Loan Management</p>
+          </div>
+        </div>
+      `,
+    });
+
+    console.log(`[EMAIL] ✅ Salary penalty email sent to ${email}: messageId=${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error(`[EMAIL] ❌ Failed to send salary penalty email to ${email}: ${error.message}`);
+    return { success: false, error: error.message, code: error.code };
+  }
+}

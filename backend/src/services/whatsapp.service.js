@@ -79,7 +79,7 @@ Start managing leads, checklists, and loan processing right away!
  * Send rejection notification via WhatsApp
  */
 export async function sendRejectionWhatsApp({ name, mobile }) {
-  const message = `❌ *InstaFin Portal - Access Request Update* ❌
+  const message = `❌ *${APP_NAME} - Access Request Update* ❌
 
 Hello ${name},
 
@@ -87,10 +87,36 @@ Unfortunately, your access request has been *rejected* by the administrator.
 
 If you believe this is an error, please contact the administrator directly for assistance.
 
-- InstaFin Team`;
+- ${APP_NAME} Team`;
 
   if (!mobile) {
     console.log('⚠️ No mobile number provided, skipping WhatsApp notification');
+    return { success: false, error: 'No mobile number' };
+  }
+
+  return sendWhatsAppMessage(mobile, message);
+}
+
+/**
+ * Send a salary penalty warning via WhatsApp when a Daily Hurdle task is delayed
+ * beyond the penalty threshold.
+ */
+export async function sendSalaryPenaltyWhatsApp({ name, mobile, taskTitle, daysOverdue, percent = 1 }) {
+  const message = `⚠️ *${APP_NAME} - Salary Deduction Notice* ⚠️
+
+Hello ${name},
+
+Your assigned task *"${taskTitle}"* is now *${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue*.
+
+As per company policy, *${percent}% of your monthly salary will be deducted* for this month due to the delayed completion of this task.
+
+Please log in to the portal, provide the *reason for the delay* and a *revised completion date*, and complete the task at the earliest.
+🔗 ${process.env.FRONTEND_URL || 'http://localhost:5173'}/executive/hurdles
+
+- ${APP_NAME} Team`;
+
+  if (!mobile) {
+    console.log('⚠️ No mobile number provided, skipping WhatsApp penalty notification');
     return { success: false, error: 'No mobile number' };
   }
 

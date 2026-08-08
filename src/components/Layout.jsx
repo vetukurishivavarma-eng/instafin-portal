@@ -4,9 +4,32 @@ import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
 
 export default function Layout({ children }) {
-  const { user, effectiveRole, logout, accessToken } = useAuth();
+  const { user, effectiveRole, logout, accessToken, isImpersonating } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  // Daily Hurdle block state — executives with unresolved overdue tasks are locked
+  // out of every screen except the Daily Hurdles page.
+  const [blockedState, setBlockedState] = useState(null);
+  const isBlocked = effectiveRole === 'executive' && !isImpersonating && blockedState?.blocked;
+
+  const fetchBlockStatus = useCallback(async () => {
+    if (effectiveRole !== 'executive' || isImpersonating || !accessToken) return;
+    try {
+      const res = await fetch(`${API_BASE}/hurdles/block-status`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (res.ok) setBlockedState(await res.json());
+    } catch (err) {
+      // Silent fail
+    }
+  }, [effectiveRole, isImpersonating, accessToken]);
+
+  useEffect(() => {
+    fetchBlockStatus();
+    const interval = setInterval(fetchBlockStatus, 15000); // every 15 seconds
+    return () => clearInterval(interval);
+  }, [fetchBlockStatus]);
 
   // Delete request approval state
   const [showDeleteRequests, setShowDeleteRequests] = useState(false);
@@ -117,6 +140,71 @@ export default function Layout({ children }) {
     return <>{children}</>;
   }
 
+  // Blocked executive gate — only the Daily Hurdles screen stays reachable.
+  if (isBlocked && location.pathname !== '/executive/hurdles') {
+    const blocking = blockedState?.blocking || [];
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-red-950 flex items-center justify-center p-6">
+        <div className="max-w-lg w-full bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up">
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-8 text-center">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-white/15 flex items-center justify-center mb-4">
+              <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m0-8v4m-9 4a9 9 0 1118 0 9 9 0 01-18 0z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-extrabold text-white">Access Blocked</h1>
+            <p className="text-red-100 text-sm mt-2">You have overdue tasks that are not yet justified</p>
+          </div>
+          <div className="p-6 sm:p-8">
+            <p className="text-sm text-gray-600 leading-relaxed mb-5">
+              You cannot use any other screen until you provide a <strong>reason for the delay</strong> and an{' '}
+              <strong>expected completion date</strong> for each task below. This is required to track
+              pending work and keep the pipeline moving.
+            </p>
+            <div className="space-y-3 mb-6">
+              {blocking.length === 0 ? (
+                <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                  Loading blocked tasks…
+                </div>
+              ) : (
+                blocking.map(t => (
+                  <div key={t.id} className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                    <span className="text-red-500 mt-0.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">{t.title}</p>
+                      <p className="text-xs text-red-600 font-semibold mt-0.5">
+                        Overdue by {t.daysOverdue} day{t.daysOverdue > 1 ? 's' : ''} (deadline {t.deadline || 'n/a'})
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <Link
+              to="/executive/hurdles"
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm transition-all shadow-lg"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Go to Daily Hurdles
+            </Link>
+            <button
+              onClick={logout}
+              className="w-full mt-3 py-2.5 rounded-2xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 text-sm font-semibold transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const getLinkClass = (path) => {
     const isActive = location.pathname === path;
     return `text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${isActive ? 'text-blue-700 font-bold' : 'text-gray-600 hover:text-blue-700'}`;
@@ -174,6 +262,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/executives" className={getLinkClass('/admin/executives')}>Executives</Link>
                   <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
                   <Link to="/admin/lead-archives" className={getLinkClass('/admin/lead-archives')}>Lead Archives</Link>
+                  <Link to="/admin/hurdles" className={getLinkClass('/admin/hurdles')}>Daily Hurdles</Link>
                   <Link to="/admin/audit-log" className={getLinkClass('/admin/audit-log')}>Audit Log</Link>
                 </>
               )}
@@ -189,6 +278,7 @@ export default function Layout({ children }) {
                   <Link to="/executive/cibil" className={getLinkClass('/executive/cibil')}>CIBIL Report</Link>
                   <Link to="/executive/sanction" className={getLinkClass('/executive/sanction')}>Sanction</Link>
                   <Link to="/executive/disburse" className={getLinkClass('/executive/disburse')}>Disburse</Link>
+                  <Link to="/executive/hurdles" className={getLinkClass('/executive/hurdles')}>Daily Hurdles</Link>
                 </>
               )}
 
@@ -205,6 +295,7 @@ export default function Layout({ children }) {
                   <Link to="/operations/disburse" className={getLinkClass('/operations/disburse')}>Disburse</Link>
                   <Link to="/operations/download-forms" className={getLinkClass('/operations/download-forms')}>Download Forms</Link>
                   <Link to="/operations/lead-archives" className={getLinkClass('/operations/lead-archives')}>Lead Archives</Link>
+                  <Link to="/operations/hurdles" className={getLinkClass('/operations/hurdles')}>Daily Hurdles</Link>
                 </>
               )}
 
@@ -251,6 +342,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/executives" className={getMobileLinkClass('/admin/executives')} onClick={() => setMobileMenuOpen(false)}>Executives</Link>
                   <Link to="/admin/download-forms" className={getMobileLinkClass('/admin/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
                   <Link to="/admin/lead-archives" className={getMobileLinkClass('/admin/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
+                  <Link to="/admin/hurdles" className={getMobileLinkClass('/admin/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
                   <Link to="/admin/audit-log" className={getMobileLinkClass('/admin/audit-log')} onClick={() => setMobileMenuOpen(false)}>Audit Log</Link>
                 </>
               )}
@@ -266,6 +358,7 @@ export default function Layout({ children }) {
                   <Link to="/executive/cibil" className={getMobileLinkClass('/executive/cibil')} onClick={() => setMobileMenuOpen(false)}>CIBIL Report</Link>
                   <Link to="/executive/sanction" className={getMobileLinkClass('/executive/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
                   <Link to="/executive/disburse" className={getMobileLinkClass('/executive/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
+                  <Link to="/executive/hurdles" className={getMobileLinkClass('/executive/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
                 </>
               )}
 
@@ -282,6 +375,7 @@ export default function Layout({ children }) {
                   <Link to="/operations/disburse" className={getMobileLinkClass('/operations/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
                   <Link to="/operations/download-forms" className={getMobileLinkClass('/operations/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
                   <Link to="/operations/lead-archives" className={getMobileLinkClass('/operations/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
+                  <Link to="/operations/hurdles" className={getMobileLinkClass('/operations/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
                 </>
               )}
 
