@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import API_BASE from '../config/api';
 import { getChecklistWithFallback, getCoapplicantChecklist, clearChecklistCache } from '../utils/resolver';
-import { downloadEligibilityPDF, downloadPDF } from '../export/pdf';
+import { downloadEligibilityPDF, downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
 
@@ -11,6 +11,26 @@ import { matchFiles } from '../utils/bulkDocMatcher';
 const normalizeValue = (val) => {
   if (!val) return val;
   return val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+};
+
+// Pull the extracted_details JSON block out of a section's raw AI analysis text
+const parseSectionDetails = (text) => {
+  if (!text) return null;
+  try {
+    const jsonMatch = text.match(/```json([\s\S]*?)```/);
+    if (jsonMatch && jsonMatch[1]) {
+      const parsed = JSON.parse(jsonMatch[1].trim());
+      return parsed.extracted_details || null;
+    }
+  } catch {}
+  return null;
+};
+
+// Indian-format currency for auto-filled figures (₹1,23,456)
+const formatINR = (n) => {
+  const num = Number(n);
+  if (!n || isNaN(num)) return null;
+  return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
 
 // Format currency
@@ -65,6 +85,7 @@ export default function CustomerLoginPage() {
 
   // Per-section LLM analysis (each checklist section gets its own Analyze button)
   const [sectionAnalysis, setSectionAnalysis] = useState({}); // { [category]: { summary, loading, error } }
+  const [downloadingFinancialPDF, setDownloadingFinancialPDF] = useState(false);
 
   // Bank forms
   const [downloadingForm, setDownloadingForm] = useState(null);
@@ -437,6 +458,31 @@ export default function CustomerLoginPage() {
       }
     } catch (err) {
       setSectionAnalysis(prev => ({ ...prev, [category]: { summary: '', loading: false, error: 'Failed to analyze section' } }));
+    }
+  };
+
+  // Auto-fill a downloadable Loan Application PDF from the Financial Documents analysis
+  const handleDownloadFinancialPDF = async (details, summaryText) => {
+    if (!selectedLead) return;
+    setDownloadingFinancialPDF(true);
+    try {
+      await downloadProfilePDF(
+        {
+          id: selectedLead.id,
+          customerName: selectedLead.customerName,
+          mobile: selectedLead.mobile,
+          loanType: selectedLead.loanType,
+          expectedAmount: selectedLead.expectedAmount,
+          status: selectedLead.status,
+        },
+        details || {},
+        summaryText || ''
+      );
+    } catch (err) {
+      setError('Failed to generate the auto-filled PDF');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setDownloadingFinancialPDF(false);
     }
   };
 
@@ -2456,6 +2502,7 @@ export default function CustomerLoginPage() {
                 {categoryOrder.map(category => {
                   const items = checklistItems.filter(item => item.category === category);
                   if (items.length === 0) return null;
+                  const sectionDetails = parseSectionDetails(sectionAnalysis[category]?.summary);
 
                   return (
                     <div key={category} className="border border-gray-200 rounded-xl overflow-hidden">
@@ -2515,6 +2562,85 @@ export default function CustomerLoginPage() {
                           </pre>
                         </div>
                       )}
+
+                      {/* Financial Documents: auto-fill the loan application PDF from extracted figures */}
+                      {category === 'financial_documents' && sectionAnalysis[category]?.summary && !sectionAnalysis[category]?.loading && (
+                        <div className="px-4 py-3 border-b border-gray-100 bg-emerald-50/40 space-y-3">
+                          {sectionDetails && (formatINR(sectionDetails.gross_income) || formatINR(sectionDetails.monthly_income) || formatINR(sectionDetails.rental_income)) && (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                              {formatINR(sectionDetails.gross_income) && (
+                                <div className="bg-white rounded-lg border border-emerald-100 px-2.5 py-1.5">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Gross Income</p>
+                                  <p className="font-bold text-gray-900">{formatINR(sectionDetails.gross_income)}</p>
+                                </div>
+                              )}
+                              {formatINR(sectionDetails.monthly_income) && (
+                                <div className="bg-white rounded-lg border border-emerald-100 px-2.5 py-1.5">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Net Income</p>
+                                  <p className="font-bold text-gray-900">{formatINR(sectionDetails.monthly_income)}</p>
+                                </div>
+                              )}
+                              {formatINR(sectionDetails.pf) && (
+                                <div className="bg-white rounded-lg border border-emerald-100 px-2.5 py-1.5">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">PF Deduction</p>
+                                  <p className="font-bold text-gray-900">{formatINR(sectionDetails.pf)}</p>
+                                </div>
+                              )}
+                              {formatINR(sectionDetails.rental_income) && (
+                                <div className="bg-white rounded-lg border border-emerald-100 px-2.5 py-1.5">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Rental Income</p>
+                                  <p className="font-bold text-gray-900">{formatINR(sectionDetails.rental_income)}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => handleDownloadFinancialPDF(sectionDetails, sectionAnalysis[category].summary)}
+                            disabled={downloadingFinancialPDF}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {downloadingFinancialPDF ? 'Generating PDF...' : 'Download Auto-Filled Application PDF'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Legal & Financial Documents: flag discrepancies against the lead's entered data */}
+                      {(category === 'legal_documents' || category === 'financial_documents') && sectionDetails && !sectionAnalysis[category]?.loading && (() => {
+                        const normalize = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+                        const docName = sectionDetails.full_name;
+                        const leadName = selectedLead?.customerName;
+                        const nameChecked = !!docName && !!leadName;
+                        const nameMatches = nameChecked && normalize(docName) === normalize(leadName);
+                        if (!nameChecked) return null;
+                        return (
+                          <div className="px-4 py-3 border-b border-gray-100">
+                            <div className={`rounded-xl p-3 border flex items-start gap-2.5 text-xs ${
+                              nameMatches ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                            }`}>
+                              <svg className={`w-4 h-4 flex-shrink-0 mt-0.5 ${nameMatches ? 'text-green-600' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                {nameMatches ? (
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                ) : (
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                )}
+                              </svg>
+                              <div>
+                                <p className="font-bold text-gray-900">
+                                  {nameMatches ? 'No Discrepancy Found' : 'Discrepancy Flagged'}
+                                </p>
+                                <p className="text-gray-600 mt-0.5">
+                                  {nameMatches
+                                    ? `Name on document ("${docName}") matches the lead's entered name.`
+                                    : `Lead entered as "${leadName}" but this document shows "${docName}". Verify this is the correct customer's documents.`}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       <ul className="divide-y divide-gray-100">
                         {items.map(item => {
@@ -2863,142 +2989,6 @@ export default function CustomerLoginPage() {
               </div>
             </div>
 
-          {/* Document vs Data Discrepancy Check */}
-          <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 px-5 sm:px-6 py-4 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white bg-opacity-10 rounded-xl">
-                  <svg className={`w-5 h-5 text-white ${summaryLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg leading-tight">Document vs Data Discrepancy Check</h3>
-                  <p className="text-xs text-indigo-200">Flags mismatches between uploaded documents and the lead's entered data</p>
-                </div>
-              </div>
-              {uploadedCount > 0 && !summaryLoading && (
-                <button
-                  onClick={handleGenerateSummary}
-                  className="text-xs font-semibold bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 rounded-lg transition-all"
-                >
-                  {summary ? 'Re-Check' : 'Check Documents'}
-                </button>
-              )}
-            </div>
-
-            <div className="p-5 sm:p-6">
-              {summaryLoading ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="relative w-16 h-16 mb-4">
-                    <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
-                    <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
-                  </div>
-                  <p className="font-semibold text-gray-900">Analyzing Uploaded Documents...</p>
-                  <p className="text-xs text-gray-500 mt-1 max-w-[280px]">Gemini is extracting KYC details to check against the lead's entered data...</p>
-                </div>
-              ) : summary ? (() => {
-                const normalize = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
-                const docName = extractedProfile?.full_name;
-                const leadName = selectedLead?.customerName;
-                const nameChecked = !!docName && !!leadName;
-                const nameMatches = nameChecked && normalize(docName) === normalize(leadName);
-                const hasAnyExtractedField = extractedProfile && Object.values(extractedProfile).some(v => v);
-                return (
-                  <div className="space-y-3">
-                    {!hasAnyExtractedField ? (
-                      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600">
-                        No KYC details could be extracted from the uploaded documents yet. Try re-uploading clearer copies and re-checking.
-                      </div>
-                    ) : (
-                      <>
-                        <div className={`rounded-2xl p-4 border flex items-start gap-3 ${
-                          !nameChecked ? 'bg-gray-50 border-gray-200' : nameMatches ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-                        }`}>
-                          <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 ${!nameChecked ? 'text-gray-400' : nameMatches ? 'text-green-600' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                            {nameChecked && nameMatches ? (
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            ) : (
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                            )}
-                          </svg>
-                          <div className="text-sm">
-                            <p className="font-bold text-gray-900">
-                              {!nameChecked ? 'Name Not Verified' : nameMatches ? 'Customer Name Matches' : 'Customer Name Mismatch'}
-                            </p>
-                            {!nameChecked ? (
-                              <p className="text-gray-600 mt-0.5">Not enough data to compare — {docName ? "no name entered for this lead." : "no name found in uploaded documents."}</p>
-                            ) : nameMatches ? (
-                              <p className="text-gray-600 mt-0.5">Document name "{docName}" matches the lead's entered name.</p>
-                            ) : (
-                              <p className="text-gray-600 mt-0.5">Lead entered as <strong>"{leadName}"</strong> but the uploaded document shows <strong>"{docName}"</strong>. Verify this is the correct customer's documents.</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4">
-                          <h4 className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-3">Extracted From Documents</h4>
-                          <div className="space-y-2 text-xs text-gray-700">
-                            <div className="grid grid-cols-3">
-                              <span className="font-medium text-gray-500">Full Name</span>
-                              <span className="col-span-2 font-semibold text-gray-900">{extractedProfile?.full_name || 'N/A'}</span>
-                            </div>
-                            <div className="grid grid-cols-3">
-                              <span className="font-medium text-gray-500">DOB / Gender</span>
-                              <span className="col-span-2 font-semibold text-gray-900">
-                                {extractedProfile?.dob || 'N/A'} {extractedProfile?.gender ? `(${extractedProfile.gender})` : ''}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-3">
-                              <span className="font-medium text-gray-500">Aadhaar No</span>
-                              <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile?.aadhaar_number || 'N/A'}</span>
-                            </div>
-                            <div className="grid grid-cols-3">
-                              <span className="font-medium text-gray-500">PAN Number</span>
-                              <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile?.pan_number || 'N/A'}</span>
-                            </div>
-                            <div className="grid grid-cols-3">
-                              <span className="font-medium text-gray-500">Address</span>
-                              <span className="col-span-2 text-gray-600 leading-normal">{extractedProfile?.address || 'N/A'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })() : (
-                <div className="text-center py-12 flex flex-col items-center">
-                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-400">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <h4 className="font-bold text-gray-900 mb-1">No Discrepancy Check Run Yet</h4>
-                  <p className="text-xs text-gray-500 max-w-xs mb-6">
-                    {uploadedCount === 0
-                      ? "Upload documents first in the section above, then click 'Check Documents' to flag any mismatches with the lead's entered data."
-                      : "All documents uploaded! Click below to have Gemini extract KYC details and check for discrepancies."}
-                  </p>
-                  <button
-                    onClick={handleGenerateSummary}
-                    disabled={uploadedCount === 0}
-                    className={`w-full max-w-xs py-3 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
-                      uploadedCount === 0
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:shadow-lg'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Check Documents for Discrepancies
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Checklist Action Buttons */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-6">
             <div className="flex flex-wrap gap-3">
@@ -3102,10 +3092,28 @@ export default function CustomerLoginPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M15 14h.01M12 14h.01M15 17h.01M12 17h.01M9 11h.01M12 11h.01M15 11h.01M12 11h.01M9 14h.01M12 14h.01M15 14h.01M12 14h.01M9 17h.01M12 17h.01M15 17h.01M12 17h.01" />
                 </svg>
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className="text-lg font-bold text-gray-900">Eligibility Calculator</h3>
                 <p className="text-sm text-gray-500">Fields auto-populated from AI profile analysis where available</p>
               </div>
+              {uploadedCount > 0 && !summaryLoading && (
+                <button
+                  onClick={handleGenerateSummary}
+                  className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors flex-shrink-0"
+                  title="Analyze all uploaded documents to auto-populate the fields below"
+                >
+                  {summary ? 'Re-Analyze Documents' : 'Analyze Documents'}
+                </button>
+              )}
+              {summaryLoading && (
+                <span className="text-xs font-semibold text-blue-600 flex items-center gap-1.5 flex-shrink-0">
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Analyzing...
+                </span>
+              )}
             </div>
 
             <div className="grid lg:grid-cols-2 gap-8">
