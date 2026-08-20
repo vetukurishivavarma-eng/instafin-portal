@@ -10,6 +10,7 @@ import {
 import { downloadPDF } from '../export/pdf';
 import { useAuth } from '../contexts/AuthContext';
 import { ALL_BANKS } from '../data/banks';
+import { evaluateFormula, FORMULA_VARIABLES } from '../utils/formulaEval';
 import { 
   getBuiltinKeywordMap, 
   getCustomKeywordOverrides,
@@ -135,6 +136,21 @@ export default function DownloadFormsPage() {
   const [calibratingId, setCalibratingId] = useState(null);
 
   // ──────────────────────────────────────────────
+  // ELIGIBILITY FORMULAS STATE
+  // ──────────────────────────────────────────────
+  const [eligFormulas, setEligFormulas] = useState([]);
+  const [loadingEligFormulas, setLoadingEligFormulas] = useState(false);
+  const [eligFormBank, setEligFormBank] = useState('');
+  const [eligFormLoanType, setEligFormLoanType] = useState('');
+  const [eligFormRate, setEligFormRate] = useState('');
+  const [eligFormPeriod, setEligFormPeriod] = useState('');
+  const [eligFormEmiNmi, setEligFormEmiNmi] = useState('');
+  const [eligFormFormula, setEligFormFormula] = useState('');
+  const [eligFormSaving, setEligFormSaving] = useState(false);
+  const [eligFormError, setEligFormError] = useState('');
+  const [eligFormDeletingId, setEligFormDeletingId] = useState(null);
+
+  // ──────────────────────────────────────────────
   // LOAN TYPES STATE (moved from Executives page)
   // ──────────────────────────────────────────────
   const [loanTypes, setLoanTypes] = useState([]);
@@ -159,6 +175,120 @@ export default function DownloadFormsPage() {
       fetchBankForms();
     }
   }, [activeTab]);
+
+  // Fetch eligibility formulas on tab switch
+  useEffect(() => {
+    if (activeTab === 'eligibility_formulas') {
+      fetchEligFormulas();
+    }
+  }, [activeTab]);
+
+  const fetchEligFormulas = async () => {
+    setLoadingEligFormulas(true);
+    try {
+      const res = await fetch(`${API_BASE}/eligibility-formulas`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setEligFormulas(Array.isArray(data) ? data : []);
+    } catch {
+      setEligFormulas([]);
+    } finally {
+      setLoadingEligFormulas(false);
+    }
+  };
+
+  const eligFormPreview = React.useMemo(() => {
+    if (!eligFormFormula.trim()) return null;
+    // Sample figures purely to sanity-check the formula while editing
+    const sampleGross = 50000;
+    const samplePf = 1800, sampleIt = 0, sampleProfTax = 200;
+    const sampleDeductions = samplePf + sampleIt + sampleProfTax;
+    const sampleNetSalary = sampleGross - sampleDeductions;
+    const sampleRental = 0;
+    const sampleNetIncome = sampleNetSalary + sampleRental;
+    const sampleExistingEmis = 5000;
+    const rate = parseFloat(eligFormRate) || 0;
+    const period = parseInt(eligFormPeriod, 10) || 0;
+    const emiNmiPercent = parseFloat(eligFormEmiNmi) || 50;
+    const monthlyRate = rate / 100 / 12;
+    const emiPerLac = monthlyRate > 0 && period > 0
+      ? (100000 * monthlyRate * Math.pow(1 + monthlyRate, period)) / (Math.pow(1 + monthlyRate, period) - 1)
+      : 0;
+    const emiAvailable = (sampleNetIncome * emiNmiPercent / 100) - sampleExistingEmis;
+    return evaluateFormula(eligFormFormula, {
+      grossSalary: sampleGross, netSalary: sampleNetSalary, coapplicantGross: 0,
+      rentalIncome: sampleRental, pf: samplePf, incomeTax: sampleIt, professionTax: sampleProfTax,
+      totalDeductions: sampleDeductions, netIncome: sampleNetIncome, totalExistingEmis: sampleExistingEmis,
+      emiAvailable, rate, period, emiNmiPercent, emiPerLac,
+    });
+  }, [eligFormFormula, eligFormRate, eligFormPeriod, eligFormEmiNmi]);
+
+  const handleSaveEligFormula = async () => {
+    setEligFormError('');
+    if (!eligFormBank || !eligFormLoanType) {
+      setEligFormError('Select a bank and loan type first.');
+      return;
+    }
+    if (eligFormFormula.trim() && eligFormPreview?.error) {
+      setEligFormError(`Formula error: ${eligFormPreview.error}`);
+      return;
+    }
+    setEligFormSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/eligibility-formulas`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bankName: eligFormBank,
+          loanType: eligFormLoanType,
+          formula: eligFormFormula.trim() || null,
+          rate: eligFormRate || null,
+          period: eligFormPeriod || null,
+          emiNmiPercent: eligFormEmiNmi || null,
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEligFormError(data.error || 'Failed to save formula');
+        return;
+      }
+      setSuccess(`Saved eligibility settings for ${eligFormBank} — ${eligFormLoanType}`);
+      setEligFormBank(''); setEligFormLoanType(''); setEligFormRate(''); setEligFormPeriod(''); setEligFormEmiNmi(''); setEligFormFormula('');
+      fetchEligFormulas();
+    } catch {
+      setEligFormError('Failed to save formula');
+    } finally {
+      setEligFormSaving(false);
+    }
+  };
+
+  const handleEditEligFormula = (row) => {
+    setEligFormBank(row.bankName);
+    setEligFormLoanType(row.loanType);
+    setEligFormRate(row.rate !== null && row.rate !== undefined ? String(row.rate) : '');
+    setEligFormPeriod(row.period !== null && row.period !== undefined ? String(row.period) : '');
+    setEligFormEmiNmi(row.emiNmiPercent !== null && row.emiNmiPercent !== undefined ? String(row.emiNmiPercent) : '');
+    setEligFormFormula(row.formula || '');
+  };
+
+  const handleDeleteEligFormula = async (id) => {
+    setEligFormDeletingId(id);
+    try {
+      await fetch(`${API_BASE}/eligibility-formulas/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      fetchEligFormulas();
+    } catch {
+      setEligFormError('Failed to delete formula');
+    } finally {
+      setEligFormDeletingId(null);
+    }
+  };
 
   const fetchBankForms = async (bank, loanType) => {
     setLoadingForms(true);
@@ -780,6 +910,16 @@ export default function DownloadFormsPage() {
             🔑 Bulk Upload Keywords
           </button>
         )}
+        <button
+          onClick={() => { setActiveTab('eligibility_formulas'); setSuccess(''); }}
+          className={`px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center gap-2 ${
+            activeTab === 'eligibility_formulas'
+              ? 'bg-emerald-700 text-white shadow-md shadow-emerald-500/10'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          🧮 Eligibility Calculator
+        </button>
       </div>
 
       {/* ──────────────────────────────────────── */}
@@ -1434,6 +1574,153 @@ export default function DownloadFormsPage() {
       {/* ──────────────────────────────────────── */}
       {activeTab === 'bulk_keywords' && (
         <KeywordConfigPanel user={user} success={success} setSuccess={setSuccess} setError={setError} />
+      )}
+
+      {/* ──────────────────────────────────────── */}
+      {/* TAB 6: ELIGIBILITY CALCULATOR FORMULAS   */}
+      {/* ──────────────────────────────────────── */}
+      {activeTab === 'eligibility_formulas' && (
+        <div className="max-w-6xl mx-auto space-y-8">
+          <div className="bg-white rounded-3xl border border-gray-150 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Per-Bank Eligibility Formula</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Set the rate, tenure and EMI/NMI% defaults for a bank + loan type, and optionally a
+              spreadsheet-style formula that computes the eligible amount directly (overrides the
+              standard reducing-balance EMI math). Used by the Eligibility Calculator on Customer Login.
+            </p>
+
+            <div className="grid md:grid-cols-4 gap-3 mb-3">
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Bank *</label>
+                <select
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-emerald-100 outline-none"
+                  value={eligFormBank}
+                  onChange={e => setEligFormBank(e.target.value)}
+                >
+                  <option value="">Select Bank</option>
+                  {ALL_BANKS.map(bank => <option key={bank} value={bank}>{bank}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Loan Type *</label>
+                <select
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-emerald-100 outline-none"
+                  value={eligFormLoanType}
+                  onChange={e => setEligFormLoanType(e.target.value)}
+                >
+                  <option value="">Select Type</option>
+                  {BANK_LOAN_TYPES.map(lt => <option key={lt} value={lt}>{lt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rate % p.a.</label>
+                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2.5 text-sm" placeholder="8.5"
+                  value={eligFormRate} onChange={e => /^\d*\.?\d*$/.test(e.target.value) && setEligFormRate(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Period (months)</label>
+                <input type="text" inputMode="numeric" className="w-full border rounded-xl px-3 py-2.5 text-sm" placeholder="240"
+                  value={eligFormPeriod} onChange={e => /^\d*$/.test(e.target.value) && setEligFormPeriod(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-4 gap-3 mb-4">
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">EMI/NMI %</label>
+                <input type="text" inputMode="decimal" className="w-full border rounded-xl px-3 py-2.5 text-sm" placeholder="50"
+                  value={eligFormEmiNmi} onChange={e => /^\d*\.?\d*$/.test(e.target.value) && setEligFormEmiNmi(e.target.value)} />
+              </div>
+              <div className="md:col-span-3">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  Formula (optional — spreadsheet style, e.g. <code className="font-mono">min(netIncome*0.5, emiAvailable)*emiPerLac/100000*100000</code>)
+                </label>
+                <input type="text" className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono" placeholder="e.g. (netIncome - totalExistingEmis) * 0.5"
+                  value={eligFormFormula} onChange={e => setEligFormFormula(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              {FORMULA_VARIABLES.map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setEligFormFormula(prev => prev + (prev && !/[\s(+\-*/^]$/.test(prev) ? ' ' : '') + v)}
+                  className="text-[10px] font-mono bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-lg"
+                  title={`Insert variable "${v}"`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            {eligFormFormula.trim() && (
+              <div className={`text-xs rounded-xl px-3 py-2 mb-3 ${eligFormPreview?.error ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                {eligFormPreview?.error
+                  ? `Formula error: ${eligFormPreview.error}`
+                  : `Preview (sample figures): eligible amount ≈ ₹${Math.round(eligFormPreview?.value || 0).toLocaleString('en-IN')}`}
+              </div>
+            )}
+
+            {eligFormError && (
+              <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-3">{eligFormError}</div>
+            )}
+
+            <button
+              onClick={handleSaveEligFormula}
+              disabled={eligFormSaving}
+              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all disabled:opacity-50"
+            >
+              {eligFormSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-gray-150 shadow-sm p-6">
+            <h3 className="text-sm font-bold text-gray-900 mb-4">Saved Formulas ({eligFormulas.length})</h3>
+            {loadingEligFormulas ? (
+              <p className="text-sm text-gray-400">Loading...</p>
+            ) : eligFormulas.length === 0 ? (
+              <p className="text-sm text-gray-400">No bank formulas configured yet — every lead uses the manually-entered rate/period/EMI-NMI% in the Eligibility Calculator.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-gray-500 uppercase text-[10px]">
+                      <th className="py-2 pr-3">Bank</th>
+                      <th className="py-2 pr-3">Loan Type</th>
+                      <th className="py-2 pr-3">Rate</th>
+                      <th className="py-2 pr-3">Period</th>
+                      <th className="py-2 pr-3">EMI/NMI%</th>
+                      <th className="py-2 pr-3">Formula</th>
+                      <th className="py-2 pr-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eligFormulas.map(row => (
+                      <tr key={row.id} className="border-b border-gray-100">
+                        <td className="py-2 pr-3 font-semibold text-gray-800">{row.bankName}</td>
+                        <td className="py-2 pr-3">{row.loanType}</td>
+                        <td className="py-2 pr-3">{row.rate ? `${row.rate}%` : '—'}</td>
+                        <td className="py-2 pr-3">{row.period || '—'}</td>
+                        <td className="py-2 pr-3">{row.emiNmiPercent ? `${row.emiNmiPercent}%` : '—'}</td>
+                        <td className="py-2 pr-3 font-mono text-gray-600 max-w-xs truncate" title={row.formula || ''}>{row.formula || '—'}</td>
+                        <td className="py-2 pr-3 text-right whitespace-nowrap">
+                          <button onClick={() => handleEditEligFormula(row)} className="text-indigo-600 hover:text-indigo-800 font-semibold mr-3">Edit</button>
+                          <button
+                            onClick={() => handleDeleteEligFormula(row.id)}
+                            disabled={eligFormDeletingId === row.id}
+                            className="text-red-600 hover:text-red-800 font-semibold disabled:opacity-50"
+                          >
+                            {eligFormDeletingId === row.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ──────────────────────────────────────── */}

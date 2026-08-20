@@ -15,6 +15,7 @@ import followUpsRouter from './routes/followUps.js';
 import archivesRouter from './routes/archives.js';
 import cibilRouter from './routes/cibil.js';
 import hurdlesRouter from './routes/hurdles.js';
+import eligibilityFormulasRouter from './routes/eligibilityFormulas.js';
 import { hurdleGuard } from './middleware/hurdleGuard.js';
 
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api/follow-ups', followUpsRouter);
 app.use('/api/archives', archivesRouter);
 app.use('/api/cibil', cibilRouter);
 app.use('/api/hurdles', hurdlesRouter);
+app.use('/api/eligibility-formulas', eligibilityFormulasRouter);
 
 // Health check
 app.get('/', (req, res) => {
