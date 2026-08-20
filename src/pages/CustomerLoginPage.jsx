@@ -66,11 +66,6 @@ export default function CustomerLoginPage() {
   // Per-section LLM analysis (each checklist section gets its own Analyze button)
   const [sectionAnalysis, setSectionAnalysis] = useState({}); // { [category]: { summary, loading, error } }
 
-  // Editable Loan Application Form (auto-filled by LLM, user can edit and save)
-  const [appForm, setAppForm] = useState(null);
-  const [appFormLoaded, setAppFormLoaded] = useState(false);
-  const [savingAppForm, setSavingAppForm] = useState(false);
-
   // Bank forms
   const [downloadingForm, setDownloadingForm] = useState(null);
   // Auto-filled bank forms (saved per lead)
@@ -369,7 +364,6 @@ export default function CustomerLoginPage() {
             const parsed = JSON.parse(jsonMatch[1].trim());
             const details = parsed.extracted_details || null;
             setExtractedProfile(details);
-            if (details) setAppForm(prev => ({ ...(prev || {}), ...details }));
           }
         } catch {}
       }
@@ -402,7 +396,6 @@ export default function CustomerLoginPage() {
             const parsed = JSON.parse(jsonMatch[1].trim());
             const details = parsed.extracted_details || null;
             setExtractedProfile(details);
-            if (details) setAppForm(prev => ({ ...(prev || {}), ...details }));
           }
         } catch {}
       } else {
@@ -431,7 +424,7 @@ export default function CustomerLoginPage() {
       const data = await res.json();
       if (res.ok) {
         setSectionAnalysis(prev => ({ ...prev, [category]: { summary: data.summary, loading: false, error: '' } }));
-        // Merge extracted details into the editable application form
+        // Merge extracted details into the AI-verified profile
         try {
           const jsonMatch = data.summary.match(/```json([\s\S]*?)```/);
           if (jsonMatch && jsonMatch[1]) {
@@ -439,7 +432,6 @@ export default function CustomerLoginPage() {
             const details = parsed.extracted_details || null;
             if (details) {
               setExtractedProfile(prev => ({ ...(prev || {}), ...details }));
-              setAppForm(prev => ({ ...(prev || {}), ...details }));
             }
           }
         } catch {}
@@ -450,33 +442,6 @@ export default function CustomerLoginPage() {
       }
     } catch (err) {
       setSectionAnalysis(prev => ({ ...prev, [category]: { summary: '', loading: false, error: 'Failed to analyze section' } }));
-    }
-  };
-
-  // Save the editable application form
-  const handleSaveAppForm = async () => {
-    if (!selectedLead) return;
-    setSavingAppForm(true);
-    try {
-      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/application-form`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ applicationForm: appForm })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSuccess('Application form saved successfully!');
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.error || 'Failed to save application form');
-      }
-    } catch (err) {
-      setError('Failed to save application form');
-    } finally {
-      setSavingAppForm(false);
     }
   };
 
@@ -2176,201 +2141,6 @@ export default function CustomerLoginPage() {
                       Cancel
                     </button>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Auto-filled Application Form from Uploaded Docs - editable, LLM auto-filled */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Loan Application Form</h3>
-                  <p className="text-xs text-gray-500">Auto-filled by the LLM from uploaded documents — editable &amp; savable</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {uploadedCount > 0 && !summaryLoading && (
-                  <button
-                    onClick={handleGenerateSummary}
-                    className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-all flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    {summary ? 'Re-Analyze' : 'Analyze Documents'}
-                  </button>
-                )}
-                {appForm && Object.keys(appForm).length > 0 && (
-                  <button
-                    onClick={handleSaveAppForm}
-                    disabled={savingAppForm}
-                    className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {savingAppForm ? 'Saving...' : 'Save Form'}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {summaryLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="relative w-12 h-12 mb-3">
-                  <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
-                  <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
-                </div>
-                <p className="font-semibold text-gray-700 text-sm">Analyzing uploaded documents...</p>
-                <p className="text-xs text-gray-400 mt-1">Extracting KYC details to auto-fill the application form.</p>
-              </div>
-            ) : (
-              <div className="bg-gray-50 rounded-xl p-5">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Full Name</label>
-                    <input
-                      type="text"
-                      value={appForm?.full_name || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), full_name: e.target.value }))}
-                      placeholder="Auto-filled from KYC documents"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Date of Birth</label>
-                    <input
-                      type="text"
-                      value={appForm?.dob || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), dob: e.target.value }))}
-                      placeholder="DD/MM/YYYY"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Gender</label>
-                    <select
-                      value={appForm?.gender || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), gender: e.target.value }))}
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="">Select</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Aadhaar Number</label>
-                    <input
-                      type="text"
-                      value={appForm?.aadhaar_number || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), aadhaar_number: e.target.value }))}
-                      placeholder="XXXX XXXX XXXX"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none tracking-wider"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">PAN Number</label>
-                    <input
-                      type="text"
-                      value={appForm?.pan_number || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), pan_number: e.target.value }))}
-                      placeholder="ABCDE1234F"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none tracking-wider"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Gross Monthly Income (₹)</label>
-                    <input
-                      type="number"
-                      value={appForm?.gross_income || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), gross_income: e.target.value }))}
-                      placeholder="0"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Net Monthly Income (₹)</label>
-                    <input
-                      type="number"
-                      value={appForm?.monthly_income || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), monthly_income: e.target.value }))}
-                      placeholder="0"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">PF Deduction (₹)</label>
-                    <input
-                      type="number"
-                      value={appForm?.pf || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), pf: e.target.value }))}
-                      placeholder="0"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Income Tax / TDS (₹)</label>
-                    <input
-                      type="number"
-                      value={appForm?.income_tax || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), income_tax: e.target.value }))}
-                      placeholder="0"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Profession Tax (₹)</label>
-                    <input
-                      type="number"
-                      value={appForm?.profession_tax || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), profession_tax: e.target.value }))}
-                      placeholder="0"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rental Income (₹)</label>
-                    <input
-                      type="number"
-                      value={appForm?.rental_income || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), rental_income: e.target.value }))}
-                      placeholder="0"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Address</label>
-                    <textarea
-                      rows="2"
-                      value={appForm?.address || ''}
-                      onChange={(e) => setAppForm(prev => ({ ...(prev || {}), address: e.target.value }))}
-                      placeholder="Full residential address"
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                </div>
-                <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between gap-3 flex-wrap">
-                  <p className="text-[10px] text-gray-400 italic">
-                    Fields are auto-filled from document analysis. Click the Analyze button on any document section (or "Analyze Documents" above) to re-extract, then edit and save.
-                  </p>
-                  {appForm && Object.keys(appForm).length > 0 && (
-                    <button
-                      onClick={handleSaveAppForm}
-                      disabled={savingAppForm}
-                      className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-all disabled:opacity-50"
-                    >
-                      {savingAppForm ? 'Saving...' : 'Save Form'}
-                    </button>
-                  )}
                 </div>
               </div>
             )}
