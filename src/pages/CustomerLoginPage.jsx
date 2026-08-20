@@ -100,7 +100,6 @@ export default function CustomerLoginPage() {
   const [eligCoapplicantGross, setEligCoapplicantGross] = useState('');
   const [showEligModal, setShowEligModal] = useState(false);
   const [eligDownloading, setEligDownloading] = useState(false);
-  const [searchSummary, setSearchSummary] = useState('');
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -1451,57 +1450,6 @@ export default function CustomerLoginPage() {
   useEffect(() => {
     if (summary) prefillEligibilityFromSummary();
   }, [summary]);
-
-  // ===== Markdown rendering helpers for AI summary =====
-  const parseBoldText = (text, searchTerm) => {
-    if (typeof text !== 'string') return text;
-    const parts = text.split(/(\*\*.*?\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>;
-      }
-      if (!searchTerm) return part;
-      const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const subParts = part.split(new RegExp(`(${escaped})`, 'gi'));
-      return subParts.map((sub, j) =>
-        sub.toLowerCase() === searchTerm.toLowerCase()
-          ? <mark key={`${i}-${j}`} className="bg-yellow-300 text-gray-900 rounded px-0.5">{sub}</mark>
-          : sub
-      );
-    });
-  };
-
-  const renderSummary = (text, searchTerm = '') => {
-    if (!text) return null;
-    return text.split('\n').map((line, index) => {
-      if (line.startsWith('### ')) {
-        return <h4 key={index} className="text-md font-bold text-gray-800 mt-4 mb-2">{line.replace('### ', '')}</h4>;
-      }
-      if (line.startsWith('## ')) {
-        return <h3 key={index} className="text-lg font-bold text-indigo-900 mt-5 mb-3 border-b border-indigo-50 pb-1">{line.replace('## ', '')}</h3>;
-      }
-      if (line.startsWith('# ')) {
-        return <h2 key={index} className="text-xl font-bold text-indigo-950 mt-6 mb-4">{line.replace('# ', '')}</h2>;
-      }
-      if (line.startsWith('- ') || line.startsWith('* ')) {
-        const cleanLine = line.replace(/^[-*]\s+/, '');
-        return (
-          <li key={index} className="ml-6 list-disc text-gray-700 my-1">
-            {parseBoldText(cleanLine, searchTerm)}
-          </li>
-        );
-      }
-      if (line.trim() === '') {
-        return <div key={index} className="h-2" />;
-      }
-      return <p key={index} className="text-gray-700 my-1 leading-relaxed">{parseBoldText(line, searchTerm)}</p>;
-    });
-  };
-
-  const stripJsonBlock = (text) => {
-    if (!text) return text;
-    return text.replace(/```json[\s\S]*?```/g, '').trim();
-  };
 
   // Filter leads
   const filteredLeads = leads.filter(l =>
@@ -2919,7 +2867,7 @@ export default function CustomerLoginPage() {
               </div>
             </div>
 
-          {/* Customer Profile Analysis Section */}
+          {/* Document vs Data Discrepancy Check */}
           <div className="bg-white rounded-2xl shadow-sm border border-indigo-200 overflow-hidden">
             <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 px-5 sm:px-6 py-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -2929,8 +2877,8 @@ export default function CustomerLoginPage() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg leading-tight">Full Customer Profile Analysis</h3>
-                  <p className="text-xs text-indigo-200">AI-powered analysis from all uploaded documents</p>
+                  <h3 className="font-bold text-lg leading-tight">Document vs Data Discrepancy Check</h3>
+                  <p className="text-xs text-indigo-200">Flags mismatches between uploaded documents and the lead's entered data</p>
                 </div>
               </div>
               {uploadedCount > 0 && !summaryLoading && (
@@ -2938,7 +2886,7 @@ export default function CustomerLoginPage() {
                   onClick={handleGenerateSummary}
                   className="text-xs font-semibold bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 rounded-lg transition-all"
                 >
-                  {summary ? 'Re-Analyze' : 'Analyze Documents'}
+                  {summary ? 'Re-Check' : 'Check Documents'}
                 </button>
               )}
             </div>
@@ -2950,101 +2898,91 @@ export default function CustomerLoginPage() {
                     <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
                     <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
                   </div>
-                  <p className="font-semibold text-gray-900">Analyzing All Uploaded Files...</p>
-                  <p className="text-xs text-gray-500 mt-1 max-w-[280px]">Gemini is parsing documents, verifying data, and conducting credit risk analysis...</p>
+                  <p className="font-semibold text-gray-900">Analyzing Uploaded Documents...</p>
+                  <p className="text-xs text-gray-500 mt-1 max-w-[280px]">Gemini is extracting KYC details to check against the lead's entered data...</p>
                 </div>
-              ) : summary ? (
-                <div className="max-h-[600px] overflow-y-auto pr-1">
-                  <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-4 text-xs text-indigo-800 flex items-start gap-2.5">
-                    <svg className="w-5 h-5 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <strong>AI Inspection Complete.</strong> Analysis based on all uploaded documents has been saved.
-                    </div>
-                  </div>
-
-                  {extractedProfile && (
-                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-4">
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-indigo-100">
-                        <span className="flex h-2 w-2 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                        <h4 className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider">AI Verified KYC Profile</h4>
+              ) : summary ? (() => {
+                const normalize = (s) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+                const docName = extractedProfile?.full_name;
+                const leadName = selectedLead?.customerName;
+                const nameChecked = !!docName && !!leadName;
+                const nameMatches = nameChecked && normalize(docName) === normalize(leadName);
+                const hasAnyExtractedField = extractedProfile && Object.values(extractedProfile).some(v => v);
+                return (
+                  <div className="space-y-3">
+                    {!hasAnyExtractedField ? (
+                      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600">
+                        No KYC details could be extracted from the uploaded documents yet. Try re-uploading clearer copies and re-checking.
                       </div>
-                      <div className="space-y-2 text-xs text-gray-700">
-                        <div className="grid grid-cols-3">
-                          <span className="font-medium text-gray-500">Full Name</span>
-                          <span className="col-span-2 font-semibold text-gray-900">{extractedProfile.full_name || 'N/A'}</span>
+                    ) : (
+                      <>
+                        <div className={`rounded-2xl p-4 border flex items-start gap-3 ${
+                          !nameChecked ? 'bg-gray-50 border-gray-200' : nameMatches ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                        }`}>
+                          <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 ${!nameChecked ? 'text-gray-400' : nameMatches ? 'text-green-600' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            {nameChecked && nameMatches ? (
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            ) : (
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                            )}
+                          </svg>
+                          <div className="text-sm">
+                            <p className="font-bold text-gray-900">
+                              {!nameChecked ? 'Name Not Verified' : nameMatches ? 'Customer Name Matches' : 'Customer Name Mismatch'}
+                            </p>
+                            {!nameChecked ? (
+                              <p className="text-gray-600 mt-0.5">Not enough data to compare — {docName ? "no name entered for this lead." : "no name found in uploaded documents."}</p>
+                            ) : nameMatches ? (
+                              <p className="text-gray-600 mt-0.5">Document name "{docName}" matches the lead's entered name.</p>
+                            ) : (
+                              <p className="text-gray-600 mt-0.5">Lead entered as <strong>"{leadName}"</strong> but the uploaded document shows <strong>"{docName}"</strong>. Verify this is the correct customer's documents.</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-3">
-                          <span className="font-medium text-gray-500">DOB / Gender</span>
-                          <span className="col-span-2 font-semibold text-gray-900">
-                            {extractedProfile.dob || 'N/A'} {extractedProfile.gender ? `(${extractedProfile.gender})` : ''}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3">
-                          <span className="font-medium text-gray-500">Aadhaar No</span>
-                          <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile.aadhaar_number || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-3">
-                          <span className="font-medium text-gray-500">PAN Number</span>
-                          <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile.pan_number || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-3">
-                          <span className="font-medium text-gray-500">Address</span>
-                          <span className="col-span-2 text-gray-600 leading-normal">{extractedProfile.address || 'N/A'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Search bar for summary */}
-                  <div className="relative mb-4">
-                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
-                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      <input
-                        type="text"
-                        placeholder="Search in profile analysis..."
-                        className="flex-1 text-sm text-gray-700 outline-none bg-transparent"
-                        value={searchSummary}
-                        onChange={(e) => setSearchSummary(e.target.value)}
-                      />
-                      {searchSummary && (
-                        <>
-                          <span className="text-xs text-gray-400">
-                            {(stripJsonBlock(summary || '').match(new RegExp(searchSummary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length} match{((stripJsonBlock(summary || '').match(new RegExp(searchSummary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length) !== 1 ? 'es' : ''}
-                          </span>
-                          <button
-                            onClick={() => setSearchSummary('')}
-                            className="p-0.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          </button>
-                        </>
-                      )}
-                    </div>
+                        <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4">
+                          <h4 className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-3">Extracted From Documents</h4>
+                          <div className="space-y-2 text-xs text-gray-700">
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">Full Name</span>
+                              <span className="col-span-2 font-semibold text-gray-900">{extractedProfile?.full_name || 'N/A'}</span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">DOB / Gender</span>
+                              <span className="col-span-2 font-semibold text-gray-900">
+                                {extractedProfile?.dob || 'N/A'} {extractedProfile?.gender ? `(${extractedProfile.gender})` : ''}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">Aadhaar No</span>
+                              <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile?.aadhaar_number || 'N/A'}</span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">PAN Number</span>
+                              <span className="col-span-2 font-semibold text-gray-900 tracking-wider">{extractedProfile?.pan_number || 'N/A'}</span>
+                            </div>
+                            <div className="grid grid-cols-3">
+                              <span className="font-medium text-gray-500">Address</span>
+                              <span className="col-span-2 text-gray-600 leading-normal">{extractedProfile?.address || 'N/A'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-
-                  {renderSummary(stripJsonBlock(summary), searchSummary)}
-                </div>
-              ) : (
+                );
+              })() : (
                 <div className="text-center py-12 flex flex-col items-center">
                   <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 text-gray-400">
                     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
-                  <h4 className="font-bold text-gray-900 mb-1">No Profile Summary Generated</h4>
+                  <h4 className="font-bold text-gray-900 mb-1">No Discrepancy Check Run Yet</h4>
                   <p className="text-xs text-gray-500 max-w-xs mb-6">
                     {uploadedCount === 0
-                      ? "Upload documents first in the section above, then click 'Analyze Documents' to generate the profile analysis."
-                      : "All documents uploaded! Click below to have Gemini analyze and summarize this lead's credit profile."}
+                      ? "Upload documents first in the section above, then click 'Check Documents' to flag any mismatches with the lead's entered data."
+                      : "All documents uploaded! Click below to have Gemini extract KYC details and check for discrepancies."}
                   </p>
                   <button
                     onClick={handleGenerateSummary}
@@ -3058,7 +2996,7 @@ export default function CustomerLoginPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Analyze Documents & Summarize
+                    Check Documents for Discrepancies
                   </button>
                 </div>
               )}
