@@ -334,6 +334,10 @@ router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async
         isClosed: lead.is_closed === true,
         closedAt: lead.closed_at,
         revenue: lead.revenue,
+        revenuePercent: lead.revenue_percent,
+        revenueReceived: lead.revenue_received,
+        revenuePending: lead.revenue_pending,
+        revenueReceivedDate: lead.revenue_received_date,
         applicationForm: lead.application_form
       };
     });
@@ -435,6 +439,10 @@ router.get('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), as
       isClosed: lead.is_closed === true,
       closedAt: lead.closed_at,
       revenue: lead.revenue,
+      revenuePercent: lead.revenue_percent,
+      revenueReceived: lead.revenue_received,
+      revenuePending: lead.revenue_pending,
+      revenueReceivedDate: lead.revenue_received_date,
       applicationForm: lead.application_form,
       bankDetails: (banks || []).map(b => ({
         id: b.id,
@@ -754,11 +762,35 @@ router.put('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), as
 });
 
 // PUT /api/leads/:id/revenue - Set manual revenue for a lead (admin only)
+// Accepts any combination of: revenue (legacy override), revenuePercent, revenueReceived,
+// revenuePending, revenueReceivedDate. Only the fields provided are updated.
 router.put('/:id/revenue', authorize('admin'), async (req, res) => {
   try {
-    const { revenue } = req.body;
-    if (revenue === undefined || revenue === null || isNaN(Number(revenue))) {
-      return res.status(400).json({ error: 'Valid revenue amount is required' });
+    const { revenue, revenuePercent, revenueReceived, revenuePending, revenueReceivedDate } = req.body;
+
+    const update = {};
+    if (revenue !== undefined && revenue !== null && revenue !== '') {
+      if (isNaN(Number(revenue))) return res.status(400).json({ error: 'Valid revenue amount is required' });
+      update.revenue = Number(revenue);
+    }
+    if (revenuePercent !== undefined && revenuePercent !== null && revenuePercent !== '') {
+      if (isNaN(Number(revenuePercent))) return res.status(400).json({ error: 'Valid revenue percent is required' });
+      update.revenue_percent = Number(revenuePercent);
+    }
+    if (revenueReceived !== undefined && revenueReceived !== null && revenueReceived !== '') {
+      if (isNaN(Number(revenueReceived))) return res.status(400).json({ error: 'Valid revenue received amount is required' });
+      update.revenue_received = Number(revenueReceived);
+    }
+    if (revenuePending !== undefined && revenuePending !== null && revenuePending !== '') {
+      if (isNaN(Number(revenuePending))) return res.status(400).json({ error: 'Valid revenue pending amount is required' });
+      update.revenue_pending = Number(revenuePending);
+    }
+    if (revenueReceivedDate !== undefined && revenueReceivedDate !== null && revenueReceivedDate !== '') {
+      update.revenue_received_date = revenueReceivedDate;
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ error: 'At least one revenue field is required' });
     }
 
     const { data: existingLead } = await supabase
@@ -773,9 +805,9 @@ router.put('/:id/revenue', authorize('admin'), async (req, res) => {
 
     const { data: updatedLead, error } = await supabase
       .from('leads')
-      .update({ revenue: Number(revenue) })
+      .update(update)
       .eq('id', req.params.id)
-      .select('id, revenue')
+      .select('id, revenue, revenue_percent, revenue_received, revenue_pending, revenue_received_date')
       .single();
 
     if (error) throw error;
@@ -787,12 +819,20 @@ router.put('/:id/revenue', authorize('admin'), async (req, res) => {
         req.params.id,
         adminCtx.adminId,
         'revenue_updated',
-        `Revenue set to ${revenue} by ${adminCtx.adminName}`,
+        `Revenue updated (${Object.keys(update).join(', ')}) by ${adminCtx.adminName}`,
         adminCtx.adminName
       );
     }
 
-    res.json({ success: true, id: updatedLead.id, revenue: updatedLead.revenue });
+    res.json({
+      success: true,
+      id: updatedLead.id,
+      revenue: updatedLead.revenue,
+      revenuePercent: updatedLead.revenue_percent,
+      revenueReceived: updatedLead.revenue_received,
+      revenuePending: updatedLead.revenue_pending,
+      revenueReceivedDate: updatedLead.revenue_received_date
+    });
   } catch (error) {
     console.error('Error updating revenue:', error);
     res.status(500).json({ error: 'Failed to update revenue' });

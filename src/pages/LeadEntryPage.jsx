@@ -5,7 +5,14 @@ import StatusBadge from '../components/StatusBadge';
 import BulkUploadModal from '../components/BulkUploadModal';
 import API_BASE from '../config/api';
 import { ALL_BANKS } from '../data/banks';
+import { getChecklistWithFallback } from '../utils/resolver';
 import * as XLSX from 'xlsx';
+
+// Normalize field values for checklist matching
+const normalizeValue = (val) => {
+  if (!val) return val;
+  return val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+};
 
 export default function LeadEntryPage() {
   const { isImpersonating, impersonating, user, accessToken, effectiveRole } = useAuth();
@@ -74,6 +81,8 @@ export default function LeadEntryPage() {
   const [loadingLetter, setLoadingLetter] = useState(false);
   const [statusHistory, setStatusHistory] = useState([]);
   const [showStatusHistory, setShowStatusHistory] = useState(false);
+  const [docChecklistItems, setDocChecklistItems] = useState([]);
+  const [docStatuses, setDocStatuses] = useState({});
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteReason, setDeleteReason] = useState('');
@@ -210,6 +219,30 @@ export default function LeadEntryPage() {
       fetchSanctionLetter(lead.id);
     }
     fetchStatusHistory(lead.id);
+    fetchDocProgress(lead);
+  };
+
+  const fetchDocProgress = async (lead) => {
+    setDocChecklistItems([]);
+    setDocStatuses({});
+    const selection = {
+      loanType: normalizeValue(lead.loanType),
+      loanStatus: normalizeValue(lead.loanStatus) || 'new',
+      incomeSource: normalizeValue(lead.incomeSource),
+      residentType: normalizeValue(lead.residentType),
+      businessType: normalizeValue(lead.businessType)
+    };
+    if (!selection.loanType) return;
+    setDocChecklistItems(getChecklistWithFallback(selection));
+    try {
+      const res = await fetch(`${API_BASE}/checklist-status/${lead.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      setDocStatuses(data.grouped || {});
+    } catch (err) {
+      console.error('Failed to fetch document progress:', err);
+    }
   };
 
   const handleDownloadSanctionLetter = async (leadId) => {
@@ -1345,6 +1378,25 @@ export default function LeadEntryPage() {
                 <p className="font-bold text-gray-800 mt-1">{viewLead.entryDate || viewLead.createdAt ? new Date(viewLead.entryDate || viewLead.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
               </div>
             </div>
+
+            {docChecklistItems.length > 0 && (() => {
+              const uploadedDocCount = docChecklistItems.filter(item => (docStatuses[item.id] || []).length > 0).length;
+              const docPercent = Math.round((uploadedDocCount / docChecklistItems.length) * 100);
+              return (
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mt-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs uppercase font-bold text-gray-400">Document Upload Progress</p>
+                    <p className="text-xs font-bold text-gray-600">{uploadedDocCount}/{docChecklistItems.length} ({docPercent}%)</p>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-blue-400 to-indigo-500 h-2 rounded-full transition-all"
+                      style={{ width: `${docPercent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {canManage && changeExecOpen && (
               <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 mt-4 animate-fade-in-up">

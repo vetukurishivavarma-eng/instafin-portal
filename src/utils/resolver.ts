@@ -10,6 +10,21 @@ import { DECISION_TREE, COMMON_CHECKLIST } from '../data/checklists';
 // Memoization cache - singleton to persist across calls
 const checklistCache: Map<string, ChecklistItem[]> = new Map();
 
+// CIBIL Report is not part of the loan-type decision tree — every applicant
+// uploads it the same way, so it's appended to every checklist here rather
+// than duplicated across hundreds of DECISION_TREE entries.
+const CIBIL_REPORT_ITEM: ChecklistItem = {
+  id: 'cibil_report_upload',
+  name: 'CIBIL Report',
+  category: 'financial_documents',
+  required: false,
+};
+
+function withCibilReportItem(items: ChecklistItem[]): ChecklistItem[] {
+  if (items.some(item => item.id === CIBIL_REPORT_ITEM.id)) return items;
+  return [...items, CIBIL_REPORT_ITEM];
+}
+
 export interface ChecklistOverride {
   added: ChecklistItem[];
   deleted: string[];
@@ -248,6 +263,8 @@ export function getChecklist(selection: Selection): ChecklistItem[] {
     filtered = applyOverridesForKey(filtered, actualKey);
   }
 
+  filtered = withCibilReportItem(filtered);
+
   // Cache the result
   checklistCache.set(key, filtered);
 
@@ -276,6 +293,7 @@ export function getChecklistByKey(key: string): ChecklistItem[] | undefined {
 
   // Apply overrides using the shared helper
   filtered = applyOverridesForKey(filtered, key);
+  filtered = withCibilReportItem(filtered);
 
   checklistCache.set(key, filtered);
   return filtered;
@@ -394,13 +412,13 @@ export function getChecklistWithFallback(selection: Selection): ChecklistItem[] 
         // Apply overrides using the shared helper — use the fallbackKey
         // since that's the actual DECISION_TREE key the admin can modify
         filtered = applyOverridesForKey(filtered, fallbackKey);
-        return filtered;
+        return withCibilReportItem(filtered);
       }
     }
   }
 
   // Final absolute fallback: common checklist
-  return COMMON_CHECKLIST || [];
+  return withCibilReportItem(COMMON_CHECKLIST || []);
 }
 
 /**

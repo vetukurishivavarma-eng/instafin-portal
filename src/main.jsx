@@ -27,7 +27,6 @@ import CreditQueryPage from './pages/CreditQueryPage'
 import EligibilityPage from './pages/EligibilityPage'
 import LeadArchivesPage from './pages/LeadArchivesPage'
 
-import CibilReportPage from './pages/CibilReportPage'
 import HurdlePage from './pages/HurdlePage'
 
 import './index.css'
@@ -154,11 +153,6 @@ function AppRoutes() {
             <LeadArchivesPage />
           </ProtectedRoute>
         } />
-        <Route path="/admin/cibil" element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <CibilReportPage />
-          </ProtectedRoute>
-        } />
         <Route path="/admin/hurdles" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <HurdlePage />
@@ -200,11 +194,6 @@ function AppRoutes() {
         <Route path="/executive/disburse" element={
           <ProtectedRoute allowedRoles={['executive']}>
             <DisbursementPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/executive/cibil" element={
-          <ProtectedRoute allowedRoles={['executive']}>
-            <CibilReportPage />
           </ProtectedRoute>
         } />
         <Route path="/executive/hurdles" element={
@@ -257,11 +246,6 @@ function AppRoutes() {
         <Route path="/operations/lead-archives" element={
           <ProtectedRoute allowedRoles={['operations_head']}>
             <LeadArchivesPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/operations/cibil" element={
-          <ProtectedRoute allowedRoles={['operations_head']}>
-            <CibilReportPage />
           </ProtectedRoute>
         } />
         <Route path="/operations/hurdles" element={

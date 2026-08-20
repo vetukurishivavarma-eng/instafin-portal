@@ -16,13 +16,28 @@ function pickDate(lead) {
   return lead.entryDate || lead.createdAt;
 }
 
-// Compute single lead's revenue - prefers the admin-entered manual revenue, falls back to 1% of disbursed/sanctioned
+// The date revenue counts toward in the monthly breakdown: the admin-entered
+// "revenue received" date if set, otherwise the lead's entry/creation date.
+function pickRevenueDate(lead) {
+  return lead.revenueReceivedDate || pickDate(lead);
+}
+
+// Compute single lead's revenue - prefers Revenue Received + Revenue Pending, then the
+// legacy manual override, then falls back to the lead's revenue percent (default 1%) of disbursed/sanctioned
 function calcLeadRevenue(lead) {
+  const received = parseFloat(lead.revenueReceived);
+  const pending = parseFloat(lead.revenuePending);
+  if (!isNaN(received) || !isNaN(pending)) {
+    return (isNaN(received) ? 0 : received) + (isNaN(pending) ? 0 : pending);
+  }
   if (lead.revenue !== null && lead.revenue !== undefined && lead.revenue !== '') {
     return parseFloat(lead.revenue) || 0;
   }
+  const percent = lead.revenuePercent !== null && lead.revenuePercent !== undefined && lead.revenuePercent !== ''
+    ? parseFloat(lead.revenuePercent)
+    : 1;
   const amount = parseFloat(lead.disbursedAmount || lead.sanctionedAmount || lead.expectedAmount) || 0;
-  return amount * 0.01;
+  return amount * (percent / 100);
 }
 
 export default function RevenuePage() {
@@ -33,9 +48,25 @@ export default function RevenuePage() {
   const isAdmin = effectiveRole === 'admin' || user?.role === 'admin';
 
   // Manual revenue entry (admin only)
-  const [revenueDrafts, setRevenueDrafts] = useState({}); // { [leadId]: string }
+  const [revenueDrafts, setRevenueDrafts] = useState({}); // { [leadId]: { percent, received, pending, receivedDate } }
   const [savingRevenueId, setSavingRevenueId] = useState(null);
   const [showRevenueEditor, setShowRevenueEditor] = useState(false);
+
+  const getRevenueDraft = (lead) => {
+    return revenueDrafts[lead.id] || {
+      percent: lead.revenuePercent !== null && lead.revenuePercent !== undefined ? String(lead.revenuePercent) : '1',
+      received: lead.revenueReceived !== null && lead.revenueReceived !== undefined ? String(lead.revenueReceived) : '',
+      pending: lead.revenuePending !== null && lead.revenuePending !== undefined ? String(lead.revenuePending) : '',
+      receivedDate: lead.revenueReceivedDate ? String(lead.revenueReceivedDate).slice(0, 10) : '',
+    };
+  };
+
+  const setRevenueDraftField = (leadId, lead, field, value) => {
+    setRevenueDrafts(prev => ({
+      ...prev,
+      [leadId]: { ...getRevenueDraft(lead), ...prev[leadId], [field]: value }
+    }));
+  };
 
   // Month/year filter
   const now = new Date();
@@ -62,11 +93,11 @@ export default function RevenuePage() {
     }
   };
 
-  // Admin: save a manual revenue value for a lead
+  // Admin: save manual revenue percent/received/pending/date for a lead
   const handleSaveRevenue = async (lead) => {
-    const value = revenueDrafts[lead.id];
-    if (value === undefined || value === '') {
-      setError('Enter a revenue amount first.');
+    const draft = getRevenueDraft(lead);
+    if (draft.percent === '' && draft.received === '' && draft.pending === '' && draft.receivedDate === '') {
+      setError('Enter at least one revenue field first.');
       setTimeout(() => setError(''), 4000);
       return;
     }
@@ -79,12 +110,21 @@ export default function RevenuePage() {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ revenue: parseFloat(value) })
+        body: JSON.stringify({
+          revenuePercent: draft.percent !== '' ? parseFloat(draft.percent) : undefined,
+          revenueReceived: draft.received !== '' ? parseFloat(draft.received) : undefined,
+          revenuePending: draft.pending !== '' ? parseFloat(draft.pending) : undefined,
+          revenueReceivedDate: draft.receivedDate !== '' ? draft.receivedDate : undefined,
+        })
       });
       const data = await res.json();
       if (res.ok) {
         await fetchLeads();
-        setRevenueDrafts(prev => ({ ...prev, [lead.id]: '' }));
+        setRevenueDrafts(prev => {
+          const next = { ...prev };
+          delete next[lead.id];
+          return next;
+        });
         setError('');
       } else {
         setError(data.error || 'Failed to save revenue');
@@ -107,10 +147,7 @@ export default function RevenuePage() {
   const monthlyBreakdown = useMemo(() => {
     const monthMap = {};
 
-    allLeads.forEach(l => {
-      const key = getPeriodKey(pickDate(l));
-      if (!key) return;
-
+    const getOrCreateMonth = (key) => {
       if (!monthMap[key]) {
         monthMap[key] = {
           period: key,
@@ -118,6 +155,7 @@ export default function RevenuePage() {
           month: key.split('-')[1],
           label: '',
           totalRevenue: 0,
+          totalRevenuePending: 0,
           disbursedCount: 0,
           partiallyDisbursedCount: 0,
           sanctionedCount: 0,
@@ -129,31 +167,48 @@ export default function RevenuePage() {
           totalExpected: 0,
         };
       }
+      return monthMap[key];
+    };
 
-      const m = monthMap[key];
+    allLeads.forEach(l => {
+      const key = getPeriodKey(pickDate(l));
       const status = l.status || '';
-      const expected = parseFloat(l.expectedAmount) || 0;
-      const sanctioned = parseFloat(l.sanctionedAmount) || 0;
-      const disbursed = parseFloat(l.disbursedAmount) || 0;
 
-      m.totalExpected += expected;
-      m.totalSanctioned += sanctioned;
-      m.totalDisbursed += disbursed;
+      if (key) {
+        const m = getOrCreateMonth(key);
+        const expected = parseFloat(l.expectedAmount) || 0;
+        const sanctioned = parseFloat(l.sanctionedAmount) || 0;
+        const disbursed = parseFloat(l.disbursedAmount) || 0;
 
-      if (status === 'Disbursed') {
-        m.disbursedCount++;
-        m.totalRevenue += calcLeadRevenue(l);
-      } else if (status === 'Partially Disbursed') {
-        m.partiallyDisbursedCount++;
-        m.totalRevenue += calcLeadRevenue(l);
-      } else if (status === 'Sanctioned') {
-        m.sanctionedCount++;
-      } else if (status === 'New') {
-        m.newCount++;
-      } else if (status === 'Assigned') {
-        m.assignedCount++;
-      } else if (status === 'Processing') {
-        m.processingCount++;
+        m.totalExpected += expected;
+        m.totalSanctioned += sanctioned;
+        m.totalDisbursed += disbursed;
+
+        if (status === 'Disbursed') {
+          m.disbursedCount++;
+        } else if (status === 'Partially Disbursed') {
+          m.partiallyDisbursedCount++;
+        } else if (status === 'Sanctioned') {
+          m.sanctionedCount++;
+        } else if (status === 'New') {
+          m.newCount++;
+        } else if (status === 'Assigned') {
+          m.assignedCount++;
+        } else if (status === 'Processing') {
+          m.processingCount++;
+        }
+      }
+
+      // Revenue is bucketed by its own received date (falls back to the lead's
+      // entry date), which can land in a different month than the counts above.
+      if (status === 'Disbursed' || status === 'Partially Disbursed') {
+        const revenueKey = getPeriodKey(pickRevenueDate(l));
+        if (revenueKey) {
+          const rm = getOrCreateMonth(revenueKey);
+          const pending = parseFloat(l.revenuePending);
+          rm.totalRevenue += calcLeadRevenue(l) - (isNaN(pending) ? 0 : pending);
+          rm.totalRevenuePending += isNaN(pending) ? 0 : pending;
+        }
       }
     });
 
@@ -173,6 +228,7 @@ export default function RevenuePage() {
       period: key,
       label: `${MONTH_NAMES[parseInt(selectedMonth, 10) - 1]} ${selectedYear}`,
       totalRevenue: 0,
+      totalRevenuePending: 0,
       disbursedCount: 0,
       partiallyDisbursedCount: 0,
       sanctionedCount: 0,
@@ -189,6 +245,7 @@ export default function RevenuePage() {
   const overall = useMemo(() => {
     return monthlyBreakdown.reduce((acc, m) => ({
       totalRevenue: acc.totalRevenue + m.totalRevenue,
+      totalRevenuePending: acc.totalRevenuePending + m.totalRevenuePending,
       totalDisbursed: acc.totalDisbursed + m.totalDisbursed,
       totalSanctioned: acc.totalSanctioned + m.totalSanctioned,
       totalExpected: acc.totalExpected + m.totalExpected,
@@ -198,7 +255,7 @@ export default function RevenuePage() {
       completedPayouts: acc.completedPayouts + m.disbursedCount,
       pendingPayouts: acc.pendingPayouts + m.partiallyDisbursedCount + m.sanctionedCount,
     }), {
-      totalRevenue: 0, totalDisbursed: 0, totalSanctioned: 0, totalExpected: 0,
+      totalRevenue: 0, totalRevenuePending: 0, totalDisbursed: 0, totalSanctioned: 0, totalExpected: 0,
       disbursedCount: 0, partiallyDisbursedCount: 0, sanctionedCount: 0,
       completedPayouts: 0, pendingPayouts: 0,
     });
@@ -285,9 +342,9 @@ export default function RevenuePage() {
           {/* ===== Current Month Overview Cards ===== */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <div className="bg-gradient-to-br from-emerald-400 to-teal-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
-              <p className="text-white/80 text-xs sm:text-sm font-medium">{currentMonthData.label} Revenue</p>
+              <p className="text-white/80 text-xs sm:text-sm font-medium">{currentMonthData.label} Revenue Received</p>
               <h3 className="text-xl sm:text-3xl font-bold text-white mt-1 sm:mt-2">{formatCurrency(currentMonthData.totalRevenue)}</h3>
-              <p className="text-white/60 text-xs mt-1">Starts at ₹0 at month beginning</p>
+              <p className="text-white/60 text-xs mt-1">{formatCurrency(currentMonthData.totalRevenuePending)} pending</p>
             </div>
             <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg">
               <p className="text-white/80 text-xs sm:text-sm font-medium">{currentMonthData.label} Disbursed</p>
@@ -318,7 +375,7 @@ export default function RevenuePage() {
                   </div>
                   <div>
                     <h2 className="text-lg sm:text-xl font-bold text-gray-900">Manual Revenue Entry</h2>
-                    <p className="text-xs text-gray-500">Enter the actual revenue earned for each lead — the dashboard uses these values instead of the auto-calculated 1%.</p>
+                    <p className="text-xs text-gray-500">Set the revenue % (default 1%), and track how much has been received vs is still pending. The date received determines which month the revenue counts toward.</p>
                   </div>
                 </div>
                 <button
@@ -338,15 +395,20 @@ export default function RevenuePage() {
                         <th className="text-left py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Mobile</th>
                         <th className="text-left py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Disbursed</th>
-                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Current Revenue</th>
-                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Enter Revenue (₹)</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Total Revenue</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Revenue %</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Revenue Received (₹)</th>
+                        <th className="text-right py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Revenue Pending (₹)</th>
+                        <th className="text-center py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Date Received</th>
                         <th className="text-center py-2.5 px-2 font-semibold text-gray-500 uppercase tracking-wider">Save</th>
                       </tr>
                     </thead>
                     <tbody>
                       {revenueEligibleLeads.map(l => {
                         const current = calcLeadRevenue(l);
-                        const manual = l.revenue !== null && l.revenue !== undefined && l.revenue !== '';
+                        const draft = getRevenueDraft(l);
+                        const hasManualSplit = (l.revenueReceived !== null && l.revenueReceived !== undefined && l.revenueReceived !== '')
+                          || (l.revenuePending !== null && l.revenuePending !== undefined && l.revenuePending !== '');
                         return (
                           <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
                             <td className="py-2.5 px-2 font-semibold text-gray-800 whitespace-nowrap">{l.customerName || '—'}</td>
@@ -362,18 +424,45 @@ export default function RevenuePage() {
                               {formatCurrency(parseFloat(l.disbursedAmount || l.sanctionedAmount || 0))}
                             </td>
                             <td className="py-2.5 px-2 text-right font-bold whitespace-nowrap">
-                              <span className={manual ? 'text-emerald-600' : 'text-gray-400'}>
+                              <span className={hasManualSplit ? 'text-emerald-600' : 'text-gray-400'}>
                                 {formatCurrency(current)}
-                                {manual && <span className="ml-1 text-[9px] text-emerald-500 uppercase">manual</span>}
+                                {hasManualSplit && <span className="ml-1 text-[9px] text-emerald-500 uppercase">manual</span>}
                               </span>
                             </td>
                             <td className="py-2.5 px-2 text-right">
                               <input
                                 type="number"
-                                value={revenueDrafts[l.id] !== undefined ? revenueDrafts[l.id] : (manual ? l.revenue : '')}
-                                onChange={(e) => setRevenueDrafts(prev => ({ ...prev, [l.id]: e.target.value }))}
+                                value={draft.percent}
+                                onChange={(e) => setRevenueDraftField(l.id, l, 'percent', e.target.value)}
+                                placeholder="1"
+                                step="0.1"
+                                className="w-16 text-right border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2 text-right">
+                              <input
+                                type="number"
+                                value={draft.received}
+                                onChange={(e) => setRevenueDraftField(l.id, l, 'received', e.target.value)}
                                 placeholder="0"
-                                className="w-32 text-right border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                                className="w-28 text-right border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2 text-right">
+                              <input
+                                type="number"
+                                value={draft.pending}
+                                onChange={(e) => setRevenueDraftField(l.id, l, 'pending', e.target.value)}
+                                placeholder="0"
+                                className="w-28 text-right border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <input
+                                type="date"
+                                value={draft.receivedDate}
+                                onChange={(e) => setRevenueDraftField(l.id, l, 'receivedDate', e.target.value)}
+                                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                               />
                             </td>
                             <td className="py-2.5 px-2 text-center">
@@ -391,7 +480,7 @@ export default function RevenuePage() {
                     </tbody>
                   </table>
                   <p className="text-[10px] text-gray-400 mt-3">
-                    Enter the actual revenue amount and click Save. Saved values are used in all dashboard totals. Leave blank to fall back to the auto-calculated 1%.
+                    Revenue % defaults to 1% of the disbursed amount when Revenue Received/Pending are left blank. The Date Received determines which month the received amount is counted toward in the breakdown below — leave it blank to use the lead's entry month.
                   </p>
                 </div>
               )}
@@ -478,10 +567,14 @@ export default function RevenuePage() {
           {/* ===== Overall Summary ===== */}
           <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl text-white">
             <h2 className="text-lg sm:text-xl font-bold mb-4">Overall Revenue Summary (All Time)</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 sm:gap-6">
               <div className="sm:border-r sm:border-gray-700 sm:pr-6">
-                <p className="text-gray-400 text-xs sm:text-sm">Total Revenue</p>
+                <p className="text-gray-400 text-xs sm:text-sm">Total Revenue Received</p>
                 <p className="text-xl sm:text-2xl font-bold mt-1 text-emerald-400">{formatCurrency(overall.totalRevenue)}</p>
+              </div>
+              <div className="sm:border-r sm:border-gray-700 sm:pr-6">
+                <p className="text-gray-400 text-xs sm:text-sm">Total Revenue Pending</p>
+                <p className="text-xl sm:text-2xl font-bold mt-1 text-orange-400">{formatCurrency(overall.totalRevenuePending)}</p>
               </div>
               <div className="sm:border-r sm:border-gray-700 sm:pr-6">
                 <p className="text-gray-400 text-xs sm:text-sm">Total Disbursed</p>
