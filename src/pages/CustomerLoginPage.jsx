@@ -170,8 +170,6 @@ export default function CustomerLoginPage() {
     setSummary(null);
     setExtractedProfile(null);
     setSectionAnalysis({});
-    setAppForm(lead.applicationForm || null);
-    setAppFormLoaded(true);
 
     // Clear memoization cache to ensure fresh checklist data
     clearChecklistCache();
@@ -202,8 +200,6 @@ export default function CustomerLoginPage() {
     setSummary(null);
     setExtractedProfile(null);
     setSectionAnalysis({});
-    setAppForm(null);
-    setAppFormLoaded(false);
     setError('');
     setSuccess('');
     setDocCompletionStatus({});
