@@ -3010,7 +3010,7 @@ export default function CustomerLoginPage() {
               <button
                 onClick={handleDownloadPDF}
                 disabled={checklistItems.length === 0 || isDownloading}
-                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
+                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
                   checklistItems.length === 0
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-purple-700 text-white hover:bg-purple-800 shadow-sm hover:shadow-md'
@@ -3038,7 +3038,7 @@ export default function CustomerLoginPage() {
               <button
                 onClick={handleShareAllWhatsApp}
                 disabled={checklistItems.length === 0 || isSharing}
-                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
+                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
                   checklistItems.length === 0
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md'
@@ -3066,7 +3066,7 @@ export default function CustomerLoginPage() {
               <button
                 onClick={handleShareEmail}
                 disabled={checklistItems.length === 0 || pendingCount === 0}
-                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
+                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
                   checklistItems.length === 0 || pendingCount === 0
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
@@ -3082,7 +3082,7 @@ export default function CustomerLoginPage() {
               <button
                 onClick={handleSharePendingWhatsApp}
                 disabled={checklistItems.length === 0 || isSharing || pendingCount === 0}
-                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all $
+                className={`inline-flex items-center px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
                   checklistItems.length === 0 || pendingCount === 0
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-2 border-gray-300'
                     : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm hover:shadow-md'
