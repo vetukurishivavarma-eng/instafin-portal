@@ -8,7 +8,11 @@
  * (pdf-lib field.setText()) handles it deterministically, and the same PDF
  * can also be opened and filled by hand in any PDF reader.
  */
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFName, PDFString } from 'pdf-lib';
+
+// Resource name the baked fields' /DA strings refer to, registered once in
+// the AcroForm's /DR (default resources) font dictionary.
+const FONT_RESOURCE_NAME = 'Helv';
 
 /**
  * @param {object} opts
@@ -22,6 +26,7 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
 
   let createdCount = 0;
+  const fontSizeByKey = {};
   for (const [key, pos] of Object.entries(fieldMap)) {
     if (!pos || typeof pos !== 'object') continue;
 
@@ -53,8 +58,13 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
         font,
         textColor: rgb(0, 0, 0),
         borderWidth: 0,
+        // Explicitly undefined (not omitted) so pdf-lib's "fill in a default
+        // if the key is missing" logic doesn't paint a white rectangle over
+        // the original scanned label/lines underneath the field.
+        backgroundColor: undefined,
       });
       field.setFontSize(fontSize);
+      fontSizeByKey[key] = fontSize;
       createdCount++;
     } catch (err) {
       console.warn(`Failed to bake AcroForm field "${key}":`, err.message);
@@ -64,6 +74,24 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
   // Generate appearance streams so the fields render correctly (blank, but
   // properly boxed) in every PDF viewer, not just ones that support NeedAppearances.
   form.updateFieldAppearances(font);
+
+  // pdf-lib doesn't set the AcroForm-level /DR (default resources) or /DA
+  // (default appearance) when fields are created programmatically. Without
+  // those, several PDF viewers — Adobe Acrobat/Reader in particular — have
+  // no font to fall back on when the user actually types into a field, and
+  // the field ends up present in the file but not truly editable. Set both
+  // explicitly, plus a per-field /DA carrying that field's own font size.
+  const acroFormDict = form.acroForm.dict;
+  acroFormDict.set(
+    PDFName.of('DR'),
+    pdf.context.obj({ Font: pdf.context.obj({ [FONT_RESOURCE_NAME]: font.ref }) })
+  );
+  acroFormDict.set(PDFName.of('DA'), PDFString.of(`/${FONT_RESOURCE_NAME} 10 Tf 0 g`));
+
+  for (const field of form.getFields()) {
+    const size = fontSizeByKey[field.getName()] || 10;
+    field.acroField.dict.set(PDFName.of('DA'), PDFString.of(`/${FONT_RESOURCE_NAME} ${size} Tf 0 g`));
+  }
 
   const bytes = await pdf.save();
   return { buffer: Buffer.from(bytes), createdCount };
