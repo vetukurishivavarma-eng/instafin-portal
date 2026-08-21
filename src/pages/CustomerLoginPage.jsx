@@ -39,6 +39,28 @@ const formatCurrency = (amount) => {
   return `₹${num.toLocaleString('en-IN')}`;
 };
 
+// Human-readable labels for the field keys a calibrated bank form can have
+// (matches backend/src/data/formSources.js FORM_FIELD_KEYS)
+const MANUAL_FILL_FIELD_LABELS = {
+  full_name: 'Full Name',
+  dob: 'Date of Birth',
+  gender: 'Gender',
+  aadhaar_number: 'Aadhaar Number',
+  pan_number: 'PAN Number',
+  address: 'Address',
+  mobile: 'Mobile Number',
+  email: 'Email',
+  loan_amount: 'Loan Amount',
+  loan_type: 'Loan Type',
+  gross_income: 'Gross Income',
+  monthly_income: 'Monthly Income',
+  rental_income: 'Rental Income',
+  co_applicant_name: 'Co-applicant Name',
+  co_applicant_dob: 'Co-applicant Date of Birth',
+  employer_name: 'Employer / Business Name',
+  application_date: 'Application Date',
+};
+
 export default function CustomerLoginPage() {
   const { accessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
   const [leads, setLeads] = useState([]);
@@ -92,6 +114,10 @@ export default function CustomerLoginPage() {
   // Auto-filled bank forms (saved per lead)
   const [filledForms, setFilledForms] = useState([]);
   const [fillingFormId, setFillingFormId] = useState(null);
+  const [manualFillForm, setManualFillForm] = useState(null); // application_forms row being filled
+  const [manualFillBankLabel, setManualFillBankLabel] = useState('');
+  const [manualFillValues, setManualFillValues] = useState({});
+  const [manualFillSubmitting, setManualFillSubmitting] = useState(false);
   const [downloadingFilledId, setDownloadingFilledId] = useState(null);
   const [editingExpectedAmount, setEditingExpectedAmount] = useState(false);
   const [editExpectedAmountValue, setEditExpectedAmountValue] = useState('');
@@ -839,6 +865,92 @@ export default function CustomerLoginPage() {
       setError('Failed to fill form');
     } finally {
       setFillingFormId(null);
+    }
+  };
+
+  // Open the manual-fill modal: shows one input per field the admin calibrated
+  // on this form, pre-filled with whatever the lead record already knows.
+  const handleOpenManualFill = async (bankName, label) => {
+    if (!selectedLead) return;
+    setError('');
+    try {
+      const form = await findFormForBank(bankName);
+      if (!form) {
+        setError(`No application form found for ${bankName}. Please add one in the Download Forms page.`);
+        return;
+      }
+      const fieldKeys = Object.keys(form.field_map?.fields || {});
+      if (fieldKeys.length === 0) {
+        setError(`"${form.form_name}" hasn't been calibrated yet — ask an admin to run Calibrate on it in the Download Forms page before it can be filled.`);
+        return;
+      }
+
+      const leadDefaults = {
+        full_name: selectedLead.customerName || '',
+        mobile: selectedLead.mobile || '',
+        email: selectedLead.email || '',
+        loan_amount: selectedLead.expectedAmount ? formatCurrency(selectedLead.expectedAmount) : '',
+        loan_type: (selectedLead.loanType || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        application_date: new Date().toLocaleDateString('en-IN'),
+      };
+
+      const initialValues = {};
+      fieldKeys.forEach(key => { initialValues[key] = leadDefaults[key] || ''; });
+
+      setManualFillForm(form);
+      setManualFillBankLabel(label || bankName);
+      setManualFillValues(initialValues);
+    } catch (err) {
+      setError('Failed to load form fields for manual fill');
+    }
+  };
+
+  const handleSubmitManualFill = async () => {
+    if (!selectedLead || !manualFillForm) return;
+    setManualFillSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ formId: manualFillForm.id, manualValues: manualFillValues })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to fill form');
+        return;
+      }
+
+      setSuccess(data.message || `${data.formName} filled successfully!`);
+      setTimeout(() => setSuccess(''), 8000);
+      fetchFilledForms(selectedLead.id);
+
+      if (data.id) {
+        const dlRes = await fetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${data.id}/download`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (dlRes.ok) {
+          const blob = await dlRes.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(data.formName || 'filled-form').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }
+      }
+
+      setManualFillForm(null);
+      setManualFillValues({});
+    } catch (err) {
+      setError('Failed to fill form');
+    } finally {
+      setManualFillSubmitting(false);
     }
   };
 
@@ -2213,6 +2325,16 @@ export default function CustomerLoginPage() {
                           </>
                         )}
                       </button>
+                      <button
+                        onClick={() => handleOpenManualFill(bankName, label)}
+                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-semibold text-xs hover:bg-gray-50 transition-all shadow-sm"
+                        title={`Type in the ${label} form's fields yourself and save it — no document analysis`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Fill Manually
+                      </button>
                     </div>
                   );
                 })
@@ -3449,6 +3571,67 @@ export default function CustomerLoginPage() {
           </svg>
           <h3 className="text-xl font-bold text-gray-400 mb-2">Select a Lead</h3>
           <p className="text-gray-400 text-sm">Use the dropdown above to search and select a lead to view application forms, manage documents, and download bank forms.</p>
+        </div>
+      )}
+
+      {/* Manual Fill Modal — type in the calibrated fields yourself, no document analysis */}
+      {manualFillForm && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn p-4"
+          onClick={() => { if (!manualFillSubmitting) { setManualFillForm(null); setManualFillValues({}); } }}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden animate-slideUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Fill {manualFillForm.form_name}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{manualFillBankLabel} — fill in the detected fields, then save</p>
+              </div>
+              <button
+                onClick={() => { setManualFillForm(null); setManualFillValues({}); }}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3 overflow-y-auto">
+              {Object.keys(manualFillValues).map(key => (
+                <div key={key}>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                    {MANUAL_FILL_FIELD_LABELS[key] || key}
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-100 outline-none"
+                    value={manualFillValues[key]}
+                    onChange={e => setManualFillValues(prev => ({ ...prev, [key]: e.target.value }))}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={handleSubmitManualFill}
+                disabled={manualFillSubmitting}
+                className="flex-1 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-sm shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50"
+              >
+                {manualFillSubmitting ? 'Filling...' : 'Fill & Save'}
+              </button>
+              <button
+                onClick={() => { setManualFillForm(null); setManualFillValues({}); }}
+                disabled={manualFillSubmitting}
+                className="px-6 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

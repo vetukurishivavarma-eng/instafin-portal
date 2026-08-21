@@ -1911,7 +1911,7 @@ function buildFormValues(lead, details) {
 router.post('/:id/fill-form', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
   try {
     const leadId = req.params.id;
-    const { formId } = req.body || {};
+    const { formId, manualValues } = req.body || {};
     if (!formId) {
       return res.status(400).json({ error: 'formId is required. Pass the id of the application form to fill.' });
     }
@@ -1943,21 +1943,30 @@ router.post('/:id/fill-form', authorize('admin', 'operations_head', 'executive',
       return res.status(410).json({ error: 'The requested form is currently unavailable.' });
     }
 
-    // 2. Get extracted details — use the saved application_form if present, otherwise analyze documents
-    let details = (lead.application_form && typeof lead.application_form === 'object') ? lead.application_form : null;
-    if (!details || Object.keys(details).length === 0) {
-      const { data: uploads } = await supabase
-        .from('lead_checklist_status')
-        .select('*')
-        .eq('lead_id', leadId)
-        .eq('status', 'uploaded');
+    // 2. Get field values.
+    //    - manualValues provided (from the "fill in the detected fields yourself"
+    //      UI): use those directly, no document analysis, no LLM call at all.
+    //    - otherwise: fall back to the saved application_form details, or
+    //      analyze the lead's uploaded documents to extract them.
+    let details;
+    if (manualValues && typeof manualValues === 'object' && Object.keys(manualValues).length > 0) {
+      details = manualValues;
+    } else {
+      details = (lead.application_form && typeof lead.application_form === 'object') ? lead.application_form : null;
+      if (!details || Object.keys(details).length === 0) {
+        const { data: uploads } = await supabase
+          .from('lead_checklist_status')
+          .select('*')
+          .eq('lead_id', leadId)
+          .eq('status', 'uploaded');
 
-      if (!uploads || uploads.length === 0) {
-        return res.status(400).json({ error: 'No documents uploaded for this lead. Please upload documents first.' });
+        if (!uploads || uploads.length === 0) {
+          return res.status(400).json({ error: 'No documents uploaded for this lead. Please upload documents first, or use "Fill Manually" to type in the values yourself.' });
+        }
+
+        const summaryText = await analyzeLeadDocuments({ lead, uploads });
+        details = extractDetailsFromSummary(summaryText) || {};
       }
-
-      const summaryText = await analyzeLeadDocuments({ lead, uploads });
-      details = extractDetailsFromSummary(summaryText) || {};
     }
 
     // 3. Load the blank form PDF
@@ -1968,8 +1977,11 @@ router.post('/:id/fill-form', authorize('admin', 'operations_head', 'executive',
       return res.status(404).json({ error: 'The requested form file is currently unavailable. Please contact administrator.' });
     }
 
-    // 4. Fill the PDF (AcroForm fields first, then AI-calibrated overlay)
-    const values = buildFormValues(lead, details);
+    // 4. Fill the PDF (AcroForm fields first, then AI-calibrated overlay).
+    //    manualValues (if given) override the lead/document-derived defaults
+    //    for the same key — e.g. a manually typed full_name wins over the
+    //    lead's customer_name.
+    const values = { ...buildFormValues(lead, details), ...(manualValues || {}) };
     const { buffer: filledBuffer, filledAcroCount, overlayCount } = await fillPdfForm({
       fileBuffer,
       fieldMap: form.field_map?.fields || {},
