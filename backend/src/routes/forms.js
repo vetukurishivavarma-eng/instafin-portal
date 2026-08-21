@@ -8,6 +8,26 @@ import { syncFormsFromInternet } from '../services/formFetcher.js';
 import { calibrateFormFields } from '../services/formCalibrator.js';
 import { loadFormPdf, saveFormPdf } from '../services/formStorage.js';
 import { bakeAcroFormFields } from '../services/formAcroBaker.js';
+import { FORM_FIELD_KEYS } from '../data/formSources.js';
+
+// Validate/sanitize a manually-drawn field map from the visual calibration
+// editor: { full_name: { page, xPct, yPct, widthPct, heightPct }, ... }
+function sanitizeManualFieldMap(rawFields) {
+  const fields = {};
+  for (const [key, pos] of Object.entries(rawFields || {})) {
+    if (!FORM_FIELD_KEYS.includes(key)) continue;
+    if (!pos || typeof pos !== 'object') continue;
+    const page = Math.max(1, parseInt(pos.page, 10) || 1);
+    const xPct = Math.min(100, Math.max(0, parseFloat(pos.xPct)));
+    const yPct = Math.min(100, Math.max(0, parseFloat(pos.yPct)));
+    const widthPct = Math.min(100, Math.max(0, parseFloat(pos.widthPct)));
+    const heightPct = Math.min(100, Math.max(0, parseFloat(pos.heightPct)));
+    if (![xPct, yPct, widthPct, heightPct].every(Number.isFinite)) continue;
+    if (widthPct <= 0 || heightPct <= 0) continue;
+    fields[key] = { page, xPct, yPct, widthPct, heightPct };
+  }
+  return fields;
+}
 
 const router = express.Router();
 
@@ -361,7 +381,11 @@ router.post('/sync', authorize('admin'), async (req, res) => {
   }
 });
 
-// POST /api/forms/:id/calibrate — Detect field positions on a blank form using Gemini Vision (admin only)
+// POST /api/forms/:id/calibrate — Detect field positions on a blank form (admin only)
+// Body: {} or omitted -> auto-detect via Gemini Vision (works well for simple, single-column forms).
+// Body: { fields: {...} } -> use these exact, manually-drawn boxes from the visual calibration
+// editor instead (pixel-accurate — the right choice for dense/multi-column forms Gemini can't
+// place precisely). Either way the result is baked into real AcroForm fields on the stored PDF.
 router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -377,7 +401,17 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
     }
 
     const fileBuffer = await loadFormPdf(form);
-    const fieldMap = await calibrateFormFields(fileBuffer);
+
+    let fieldMap;
+    if (req.body && req.body.fields && typeof req.body.fields === 'object') {
+      const fields = sanitizeManualFieldMap(req.body.fields);
+      if (Object.keys(fields).length === 0) {
+        return res.status(400).json({ error: 'No valid fields were submitted. Draw at least one box.' });
+      }
+      fieldMap = { fields, calibrated_at: new Date().toISOString(), source: 'manual' };
+    } else {
+      fieldMap = await calibrateFormFields(fileBuffer);
+    }
 
     // Bake the detected positions into real AcroForm text fields and overwrite
     // the stored PDF with the now-fillable version. From here on, filling this

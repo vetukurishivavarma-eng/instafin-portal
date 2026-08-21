@@ -17,7 +17,14 @@ const FONT_RESOURCE_NAME = 'Helv';
 /**
  * @param {object} opts
  * @param {Buffer} opts.fileBuffer - blank form PDF bytes (the original scan)
- * @param {object} opts.fieldMap   - { full_name: { page, xPct, yPct, fontSize }, ... }
+ * @param {object} opts.fieldMap   - { full_name: { page, xPct, yPct, fontSize, widthPct?, heightPct? }, ... }
+ *   xPct/yPct are always the box's TOP-LEFT corner, as a percentage of page
+ *   width/height (0-100, origin top-left — matches how the page is normally
+ *   viewed, not PDF's native bottom-left coordinate space).
+ *   widthPct/heightPct (also page-relative percentages) give the box's exact
+ *   drawn size — pass these when a human traced the real field on the
+ *   rendered page (pixel-accurate). Omit them for the older AI-estimated
+ *   single-point calibration, which falls back to a heuristic box size.
  * @returns {Promise<{ buffer: Buffer, createdCount: number }>}
  */
 export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
@@ -35,13 +42,20 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
     const page = pdf.getPage(pageIndex);
     const { width, height } = page.getSize();
 
-    const fontSize = Math.min(12, Math.max(7, pos.fontSize || 10));
-    const boxHeight = fontSize + 6;
+    const hasExplicitBox = Number.isFinite(pos.widthPct) && Number.isFinite(pos.heightPct);
+    const boxWidth = hasExplicitBox
+      ? Math.max(4, (pos.widthPct / 100) * width)
+      : Math.min(width - (pos.xPct / 100) * width - 8, Math.max(80, width * 0.38));
+    const boxHeight = hasExplicitBox
+      ? Math.max(4, (pos.heightPct / 100) * height)
+      : Math.min(12, Math.max(7, pos.fontSize || 10)) + 6;
+    const fontSize = hasExplicitBox
+      ? Math.min(14, Math.max(6, boxHeight - 4))
+      : Math.min(12, Math.max(7, pos.fontSize || 10));
     const x = (pos.xPct / 100) * width;
-    // Calibration is top-left origin; pdf-lib page coordinates are bottom-left.
-    // Sit the box just under the calibrated point so it lines up with the label.
+    // Calibration/drawing is top-left origin; pdf-lib page coordinates are
+    // bottom-left. Sit the box's top edge at the calibrated/drawn point.
     const y = Math.max(0, height - (pos.yPct / 100) * height - boxHeight);
-    const boxWidth = Math.min(width - x - 8, Math.max(80, width * 0.38));
     if (boxWidth <= 0) continue;
 
     // Re-baking (recalibration) must not collide with a previously baked field.

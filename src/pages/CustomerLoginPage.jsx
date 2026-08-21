@@ -6,6 +6,7 @@ import { getChecklistWithFallback, getCoapplicantChecklist, clearChecklistCache 
 import { downloadEligibilityPDF, downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
+import { FORM_FIELD_LABELS } from '../data/formFieldKeys';
 
 // Normalize field values for checklist matching
 const normalizeValue = (val) => {
@@ -39,27 +40,6 @@ const formatCurrency = (amount) => {
   return `₹${num.toLocaleString('en-IN')}`;
 };
 
-// Human-readable labels for the field keys a calibrated bank form can have
-// (matches backend/src/data/formSources.js FORM_FIELD_KEYS)
-const MANUAL_FILL_FIELD_LABELS = {
-  full_name: 'Full Name',
-  dob: 'Date of Birth',
-  gender: 'Gender',
-  aadhaar_number: 'Aadhaar Number',
-  pan_number: 'PAN Number',
-  address: 'Address',
-  mobile: 'Mobile Number',
-  email: 'Email',
-  loan_amount: 'Loan Amount',
-  loan_type: 'Loan Type',
-  gross_income: 'Gross Income',
-  monthly_income: 'Monthly Income',
-  rental_income: 'Rental Income',
-  co_applicant_name: 'Co-applicant Name',
-  co_applicant_dob: 'Co-applicant Date of Birth',
-  employer_name: 'Employer / Business Name',
-  application_date: 'Application Date',
-};
 
 export default function CustomerLoginPage() {
   const { accessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
@@ -3603,7 +3583,7 @@ export default function CustomerLoginPage() {
               {Object.keys(manualFillValues).map(key => (
                 <div key={key}>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                    {MANUAL_FILL_FIELD_LABELS[key] || key}
+                    {FORM_FIELD_LABELS[key] || key}
                   </label>
                   <input
                     type="text"

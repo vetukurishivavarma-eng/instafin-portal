@@ -20,6 +20,7 @@ import {
   resetAllCustomKeywords
 } from '../utils/bulkDocMatcher';
 import KeywordConfigPanel from '../components/KeywordConfigPanel';
+import FormFieldEditor from '../components/FormFieldEditor';
 import API_BASE from '../config/api';
 
 const loanTypeLabels = {
@@ -139,6 +140,7 @@ export default function DownloadFormsPage() {
   const [syncingForms, setSyncingForms] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
   const [calibratingId, setCalibratingId] = useState(null);
+  const [editingFieldsForm, setEditingFieldsForm] = useState(null); // form row being visually calibrated
 
   // ──────────────────────────────────────────────
   // ELIGIBILITY FORMULAS STATE
@@ -1961,6 +1963,13 @@ export default function DownloadFormsPage() {
                             )}
                           </button>
                           <button
+                            onClick={() => setEditingFieldsForm(form)}
+                            className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-purple-600 hover:bg-purple-50 transition-colors"
+                            title="Draw each field's exact box by hand on the real form — pixel-accurate, best for dense/multi-column forms"
+                          >
+                            ✏️ Draw Fields
+                          </button>
+                          <button
                             onClick={() => { setEditingForm(form); setShowAddFormPanel(false); setFormFile(null); }}
                             className="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors"
                             title="Edit"
@@ -2195,6 +2204,19 @@ export default function DownloadFormsPage() {
             )}
           </div>
         </>
+      )}
+
+      {editingFieldsForm && (
+        <FormFieldEditor
+          form={editingFieldsForm}
+          accessToken={accessToken}
+          onClose={() => setEditingFieldsForm(null)}
+          onSaved={(message) => {
+            setSuccess(message);
+            setTimeout(() => setSuccess(''), 6000);
+            fetchBankForms();
+          }}
+        />
       )}
     </div>
   );
