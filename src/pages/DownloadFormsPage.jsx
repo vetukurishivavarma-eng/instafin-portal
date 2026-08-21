@@ -81,7 +81,12 @@ const BANK_LOAN_TYPES = [
   'Working Capital Loan',
 ];
 
-const FILE_TYPE_OPTIONS = ['pdf', 'docx', 'doc'];
+const FILE_TYPE_OPTIONS = ['pdf', 'docx', 'doc', 'xlsx', 'xls'];
+
+const fileTypeFromName = (fileName) => {
+  const ext = fileName.split('.').pop().toLowerCase();
+  return FILE_TYPE_OPTIONS.includes(ext) ? ext : 'pdf';
+};
 
 export default function DownloadFormsPage() {
   const { user, accessToken, effectiveRole } = useAuth();
@@ -559,8 +564,7 @@ export default function DownloadFormsPage() {
     setFormsError('');
     try {
       const fileData = await readFileAsBase64(formFile);
-      const ext = formFile.name.split('.').pop().toLowerCase();
-      const fileType = ext === 'docx' ? 'docx' : ext === 'doc' ? 'doc' : 'pdf';
+      const fileType = fileTypeFromName(formFile.name);
 
       const res = await fetch(`${API_BASE}/forms`, {
         method: 'POST',
@@ -610,6 +614,11 @@ export default function DownloadFormsPage() {
       if (formFile) {
         const fileData = await readFileAsBase64(formFile);
         body.file_data = fileData;
+        // Derive file_type from the newly selected file's real extension so it
+        // can't drift out of sync with a stale "File Type" dropdown value —
+        // the download route trusts file_path's extension for Content-Type,
+        // so a mismatch here produces an unopenable download.
+        body.file_type = fileTypeFromName(formFile.name);
       }
 
       const res = await fetch(`${API_BASE}/forms/${editingForm.id}`, {
@@ -1874,7 +1883,7 @@ export default function DownloadFormsPage() {
                       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">File *</label>
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx"
                         className="w-full text-xs border rounded-xl px-3 py-2 bg-white file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                         onChange={e => setFormFile(e.target.files[0])}
                         required={!editingForm}

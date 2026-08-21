@@ -27,6 +27,16 @@ const sanitizeFileName = (fileName) => {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase();
 };
 
+// file_type -> { extension, contentType } for application form uploads/downloads
+const FILE_TYPE_INFO = {
+  pdf: { ext: '.pdf', contentType: 'application/pdf' },
+  doc: { ext: '.doc', contentType: 'application/msword' },
+  docx: { ext: '.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  xls: { ext: '.xls', contentType: 'application/vnd.ms-excel' },
+  xlsx: { ext: '.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+};
+const getFileTypeInfo = (fileType) => FILE_TYPE_INFO[fileType] || FILE_TYPE_INFO.pdf;
+
 // All /api/forms routes require authentication
 router.use(authenticate);
 
@@ -135,21 +145,10 @@ router.get('/:id/download', authorize('admin', 'operations_head', 'executive', '
       fileBuffer = fs.readFileSync(filePath);
     }
 
-    // Set content type based on file type
+    // Set content type based on the stored file's extension
     const ext = path.extname(form.file_path).toLowerCase();
-    switch (ext) {
-      case '.pdf':
-        contentType = 'application/pdf';
-        break;
-      case '.doc':
-        contentType = 'application/msword';
-        break;
-      case '.docx':
-        contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        break;
-      default:
-        contentType = 'application/octet-stream';
-    }
+    const knownExt = Object.values(FILE_TYPE_INFO).find(info => info.ext === ext);
+    contentType = knownExt ? knownExt.contentType : 'application/octet-stream';
 
     // Set headers for download
     res.setHeader('Content-Type', contentType);
@@ -201,7 +200,7 @@ router.post('/', authorize('admin'), async (req, res) => {
 
     if (req.body.file_data) {
       // File provided as base64 data
-      const ext = finalFileType === 'docx' ? '.docx' : finalFileType === 'doc' ? '.doc' : '.pdf';
+      const { ext, contentType: uploadContentType } = getFileTypeInfo(finalFileType);
       const fileName = `${sanitizeFileName(form_name)}_${Date.now()}${ext}`;
       const fileBuffer = Buffer.from(req.body.file_data, 'base64');
 
@@ -211,7 +210,7 @@ router.post('/', authorize('admin'), async (req, res) => {
         const { error: uploadError } = await supabase.storage
           .from('lead-documents')
           .upload(storagePath, fileBuffer, {
-            contentType: finalFileType === 'pdf' ? 'application/pdf' : 'application/msword',
+            contentType: uploadContentType,
             upsert: true
           });
 
@@ -272,7 +271,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
 
     // Handle file replacement if new file data is provided
     if (req.body.file_data) {
-      const ext = (file_type || 'pdf') === 'docx' ? '.docx' : (file_type || 'pdf') === 'doc' ? '.doc' : '.pdf';
+      const { ext, contentType: uploadContentType } = getFileTypeInfo(file_type || 'pdf');
       const fileName = `${sanitizeFileName(form_name || 'form')}_${Date.now()}${ext}`;
       const fileBuffer = Buffer.from(req.body.file_data, 'base64');
 
@@ -281,7 +280,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
         const { error: uploadError } = await supabase.storage
           .from('lead-documents')
           .upload(storagePath, fileBuffer, {
-            contentType: (file_type || 'pdf') === 'pdf' ? 'application/pdf' : 'application/msword',
+            contentType: uploadContentType,
             upsert: true
           });
         if (uploadError) throw uploadError;
