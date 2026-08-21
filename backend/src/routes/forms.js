@@ -6,7 +6,8 @@ import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { syncFormsFromInternet } from '../services/formFetcher.js';
 import { calibrateFormFields } from '../services/formCalibrator.js';
-import { loadFormPdf } from '../services/formStorage.js';
+import { loadFormPdf, saveFormPdf } from '../services/formStorage.js';
+import { bakeAcroFormFields } from '../services/formAcroBaker.js';
 
 const router = express.Router();
 
@@ -378,6 +379,16 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
     const fileBuffer = await loadFormPdf(form);
     const fieldMap = await calibrateFormFields(fileBuffer);
 
+    // Bake the detected positions into real AcroForm text fields and overwrite
+    // the stored PDF with the now-fillable version. From here on, filling this
+    // form goes through formFiller.js's deterministic AcroForm path — no LLM
+    // call and no coordinate-overlay guessing needed at fill time.
+    const { buffer: bakedBuffer, createdCount } = await bakeAcroFormFields({
+      fileBuffer,
+      fieldMap: fieldMap.fields || {},
+    });
+    await saveFormPdf(form, bakedBuffer);
+
     const { data: updatedForm, error: updateError } = await supabase
       .from('application_forms')
       .update({ field_map: fieldMap, updated_at: new Date().toISOString() })
@@ -387,9 +398,8 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
 
     if (updateError) throw updateError;
 
-    const fieldCount = Object.keys(fieldMap.fields || {}).length;
     res.json({
-      message: `Calibration complete — ${fieldCount} fields detected on ${form.form_name}`,
+      message: `Calibration complete — ${createdCount} fillable fields created on ${form.form_name}`,
       form: updatedForm,
       fieldMap,
     });

@@ -19,6 +19,10 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
   const pdf = await PDFDocument.load(fileBuffer, { updateMetadata: false });
 
   let filledAcroCount = 0;
+  // Keys already satisfied by a real AcroForm field must not also get an
+  // overlay draw below — that would double-fill (interactive value + static
+  // text stacked on top of it), which baking made possible for the first time.
+  const filledAcroKeys = new Set();
 
   // ── 1. AcroForm fields (if the PDF is a fillable form) ──
   try {
@@ -54,6 +58,8 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
             field.setText(value);
           }
           filledAcroCount++;
+          filledAcroKeys.add(lookupKey);
+          filledAcroKeys.add(name);
         } catch (err) {
           // Some fields are read-only or incompatible — skip silently
         }
@@ -63,11 +69,13 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
     console.warn('AcroForm fill skipped:', err.message);
   }
 
-  // ── 2. Coordinate overlay from the AI-calibrated field map ──
+  // ── 2. Coordinate overlay from the AI-calibrated field map (skip anything
+  //      already filled as a real AcroForm field above) ──
   const font = await pdf.embedFont(StandardFonts.Helvetica);
 
   let overlayCount = 0;
   for (const [key, pos] of Object.entries(fieldMap || {})) {
+    if (filledAcroKeys.has(key)) continue;
     let value = values[key];
     if (value === undefined || value === null || value === '') continue;
     value = String(value);

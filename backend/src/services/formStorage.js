@@ -76,3 +76,32 @@ export async function loadFormPdf(form) {
   }
   throw new Error('Form file not found on server');
 }
+
+/**
+ * Overwrite an application form's stored PDF in place (e.g. after baking
+ * AcroForm fields onto it during calibration). Writes to the same location
+ * loadFormPdf would read from.
+ */
+export async function saveFormPdf(form, buffer) {
+  if (isProduction()) {
+    const { error } = await supabase.storage
+      .from('lead-documents')
+      .upload(form.file_path, buffer, { contentType: 'application/pdf', upsert: true });
+    if (error) throw new Error(`Storage upload failed: ${error.message}`);
+    return;
+  }
+  const candidateDirs = [
+    path.join(cwdUploads, 'forms'),
+    path.join(rootUploads, 'forms'),
+  ];
+  for (const dir of candidateDirs) {
+    const localPath = resolveLocalFormPath(form.form_name, form.file_path, dir);
+    if (localPath) {
+      fs.writeFileSync(localPath, buffer);
+      return;
+    }
+  }
+  // No existing local file matched — write fresh under the primary uploads dir.
+  const fallbackPath = path.join(cwdUploads, 'forms', path.basename(form.file_path));
+  fs.writeFileSync(fallbackPath, buffer);
+}
