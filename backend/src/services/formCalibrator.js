@@ -54,7 +54,7 @@ You are an expert at reading bank loan application forms (PDFs).
 
 I will attach a BLANK bank loan application form PDF (it may be a scanned image with multiple pages).
 
-Your ONLY job: locate where the answer/value for each of the following fields should be typed or written on the form, and return their page number and position.
+Your ONLY job: locate the exact bounding box of the blank input area (box/line/comb-cell run) where each field's value should be typed, and return that box's page number and position.
 
 Available fields (keys) and what they mean:
 {
@@ -62,23 +62,26 @@ ${fieldList}
 }
 
 INSTRUCTIONS:
-1. Look at every page of the attached PDF.
-2. For each field key that has a visible input slot/box/line/label on the form, find the exact spot where the applicant's value would be written (the blank area next to/under the field label).
-3. Return positions as PERCENTAGES of the page size:
-   - "xPct": distance from the LEFT edge of the page as a percentage of page width (0-100).
-   - "yPct": distance from the TOP edge of the page as a percentage of page height (0-100).
-4. Return the 1-based page number ("page") where the field appears.
-5. Only include fields that actually exist on the form. Omit fields that are not present.
-6. For check-box fields (gender, etc.), return the position of the checkbox or the label area.
+1. Look at every page of the attached PDF, including dense multi-column layouts (e.g. side-by-side Applicant/Co-applicant blocks) — read column headers carefully and place each field in the correct column.
+2. For each field key that has a visible input slot/box/line/label on the form, find the TIGHT bounding box of the blank writable area itself (not the label text, not the whole row) — the box the applicant's handwriting would go inside.
+3. Return the box as PERCENTAGES of the page size, all relative to the page's top-left corner:
+   - "xPct": the box's LEFT edge, as a percentage of page width (0-100).
+   - "yPct": the box's TOP edge, as a percentage of page height (0-100).
+   - "widthPct": the box's width, as a percentage of page width.
+   - "heightPct": the box's height, as a percentage of page height.
+4. Keep the box tight — err on the side of a smaller box fully inside the writable area rather than a large one that overlaps neighboring cells, gridlines, or labels. For a single-line field, heightPct should be roughly 1.5-2.5% of page height; do not span multiple grid rows.
+5. Return the 1-based page number ("page") where the field appears.
+6. Only include fields that actually exist on the form. Omit fields that are not present.
+7. For check-box fields (gender, etc.), return the bounding box of the checkbox itself.
 
 Respond with ONLY a JSON object, no markdown code fence, no commentary, in exactly this shape:
 {
   "fields": {
-    "full_name": { "page": 1, "xPct": 12.5, "yPct": 8.3, "fontSize": 10 },
-    "dob": { "page": 1, "xPct": 60.0, "yPct": 8.3, "fontSize": 10 }
+    "full_name": { "page": 1, "xPct": 12.5, "yPct": 8.3, "widthPct": 30.0, "heightPct": 1.8, "fontSize": 10 },
+    "dob": { "page": 1, "xPct": 60.0, "yPct": 8.3, "widthPct": 15.0, "heightPct": 1.8, "fontSize": 10 }
   }
 }
-Set fontSize to a sensible value between 8 and 12 (use the approximate height of the blank input area).
+Set fontSize to a sensible value between 8 and 12 that will comfortably fit within heightPct.
 `;
 
   const parts = [
@@ -114,7 +117,18 @@ Set fontSize to a sensible value between 8 and 12 (use the approximate height of
     const yPct = Math.min(100, Math.max(0, parseFloat(pos.yPct)));
     const fontSize = Math.min(12, Math.max(7, parseFloat(pos.fontSize) || 10));
     if (!Number.isFinite(xPct) || !Number.isFinite(yPct)) continue;
-    fields[key] = { page, xPct, yPct, fontSize };
+
+    // Gemini is expected to return a tight bounding box now (widthPct/heightPct),
+    // matching the shape bakeAcroFormFields already renders pixel-accurately for
+    // manually-drawn boxes. Fall back to the old heuristic single-point sizing
+    // only if the model omits them (older prompt behavior / malformed response).
+    const widthPct = Math.min(100, Math.max(0, parseFloat(pos.widthPct)));
+    const heightPct = Math.min(100, Math.max(0, parseFloat(pos.heightPct)));
+    if (Number.isFinite(widthPct) && Number.isFinite(heightPct) && widthPct > 0 && heightPct > 0) {
+      fields[key] = { page, xPct, yPct, widthPct, heightPct, fontSize };
+    } else {
+      fields[key] = { page, xPct, yPct, fontSize };
+    }
   }
 
   if (Object.keys(fields).length === 0) {

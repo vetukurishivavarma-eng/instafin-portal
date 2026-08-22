@@ -42,7 +42,28 @@ const formatCurrency = (amount) => {
 
 
 export default function CustomerLoginPage() {
-  const { accessToken, user, impersonating, isImpersonating, effectiveRole } = useAuth();
+  const { accessToken, user, impersonating, isImpersonating, effectiveRole, refreshAccessToken } = useAuth();
+
+  // fetch() wrapper that transparently refreshes an expired (15min) access
+  // token and retries once on a 401 — this page's fill/calibrate actions are
+  // long enough (multi-step, sometimes minutes with document analysis) that
+  // hitting expiry mid-flow previously failed silently with no visible error
+  // scrolled into view, looking like the button did nothing.
+  const authedFetch = async (url, opts = {}) => {
+    const withAuth = (token) => ({
+      ...opts,
+      headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+    });
+    let res = await fetch(url, withAuth(accessToken));
+    if (res.status === 401) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        const freshToken = localStorage.getItem('instafin_token');
+        res = await fetch(url, withAuth(freshToken));
+      }
+    }
+    return res;
+  };
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -768,16 +789,12 @@ export default function CustomerLoginPage() {
   const findFormForBank = async (bankName) => {
     const loanTypeLabel = (selectedLead.loanType || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const params = new URLSearchParams({ bank: bankName, loan_type: loanTypeLabel });
-    const searchRes = await fetch(`${API_BASE}/forms?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
+    const searchRes = await authedFetch(`${API_BASE}/forms?${params.toString()}`);
     const searchData = await searchRes.json();
     const forms = searchData.data || [];
     if (forms.length > 0) return forms[0];
 
-    const fallbackRes = await fetch(`${API_BASE}/forms?bank=${encodeURIComponent(bankName)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
+    const fallbackRes = await authedFetch(`${API_BASE}/forms?bank=${encodeURIComponent(bankName)}`);
     const fallbackData = await fallbackRes.json();
     return (fallbackData.data || [])[0] || null;
   };
@@ -806,12 +823,9 @@ export default function CustomerLoginPage() {
         return;
       }
 
-      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
+      const res = await authedFetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ formId: form.id })
       });
       const data = await res.json();
@@ -826,9 +840,7 @@ export default function CustomerLoginPage() {
 
       // Download the freshly filled PDF immediately
       if (data.id) {
-        const dlRes = await fetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${data.id}/download`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
+        const dlRes = await authedFetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${data.id}/download`);
         if (dlRes.ok) {
           const blob = await dlRes.blob();
           const url = window.URL.createObjectURL(blob);
@@ -890,12 +902,9 @@ export default function CustomerLoginPage() {
     setManualFillSubmitting(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
+      const res = await authedFetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ formId: manualFillForm.id, manualValues: manualFillValues })
       });
       const data = await res.json();
@@ -909,9 +918,7 @@ export default function CustomerLoginPage() {
       fetchFilledForms(selectedLead.id);
 
       if (data.id) {
-        const dlRes = await fetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${data.id}/download`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
+        const dlRes = await authedFetch(`${API_BASE}/leads/${selectedLead.id}/filled-forms/${data.id}/download`);
         if (dlRes.ok) {
           const blob = await dlRes.blob();
           const url = window.URL.createObjectURL(blob);
