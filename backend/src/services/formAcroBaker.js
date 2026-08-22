@@ -63,23 +63,32 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
     if (existing) form.removeField(existing);
 
     try {
-      const field = form.createTextField(key);
-      field.addToPage(page, {
-        x,
-        y,
-        width: boxWidth,
-        height: boxHeight,
-        font,
-        textColor: rgb(0, 0, 0),
-        borderWidth: 0,
-        // Explicitly undefined (not omitted) so pdf-lib's "fill in a default
-        // if the key is missing" logic doesn't paint a white rectangle over
-        // the original scanned label/lines underneath the field.
-        backgroundColor: undefined,
-      });
-      field.setFontSize(fontSize);
-      fontSizeByKey[key] = fontSize;
-      createdCount++;
+      if (pos.fieldType === 'checkbox') {
+        // Option checkboxes (gender M/F/T, yes/no, etc.) — a real PDFCheckBox
+        // so the fill step ticks it, rather than a text field the filler
+        // would otherwise draw a word into.
+        const field = form.createCheckBox(key);
+        field.addToPage(page, { x, y, width: boxWidth, height: boxHeight, borderWidth: 0 });
+        createdCount++;
+      } else {
+        const field = form.createTextField(key);
+        field.addToPage(page, {
+          x,
+          y,
+          width: boxWidth,
+          height: boxHeight,
+          font,
+          textColor: rgb(0, 0, 0),
+          borderWidth: 0,
+          // Explicitly undefined (not omitted) so pdf-lib's "fill in a default
+          // if the key is missing" logic doesn't paint a white rectangle over
+          // the original scanned label/lines underneath the field.
+          backgroundColor: undefined,
+        });
+        field.setFontSize(fontSize);
+        fontSizeByKey[key] = fontSize;
+        createdCount++;
+      }
     } catch (err) {
       console.warn(`Failed to bake AcroForm field "${key}":`, err.message);
     }

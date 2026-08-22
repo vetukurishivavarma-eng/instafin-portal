@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { syncFormsFromInternet } from '../services/formFetcher.js';
 import { calibrateFormFields } from '../services/formCalibrator.js';
+import { anchorFieldsFromTextLayer } from '../services/formTextAnchor.js';
 import { loadFormPdf, saveFormPdf } from '../services/formStorage.js';
 import { bakeAcroFormFields } from '../services/formAcroBaker.js';
 import { FORM_FIELD_KEYS } from '../data/formSources.js';
@@ -410,7 +411,15 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
       }
       fieldMap = { fields, calibrated_at: new Date().toISOString(), source: 'manual' };
     } else {
-      fieldMap = await calibrateFormFields(fileBuffer);
+      // Primary path: derive field boxes deterministically from the PDF's
+      // real text layer (label position + layout), not a vision guess — the
+      // same bytes always produce the same field map. Only fall back to
+      // Gemini vision when there's no usable text layer (a fully rasterized
+      // scan), where there's nothing for the text layer to anchor to.
+      fieldMap = await anchorFieldsFromTextLayer(fileBuffer);
+      if (!fieldMap) {
+        fieldMap = await calibrateFormFields(fileBuffer);
+      }
     }
 
     // Bake the detected positions into real AcroForm text fields and overwrite

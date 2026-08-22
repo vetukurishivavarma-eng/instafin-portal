@@ -8,6 +8,19 @@
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
+// Letter -> word a checkbox-group option token might represent, for matching
+// against a plain value like "Male" against a baked field named "gender__M".
+const CHECKBOX_OPTION_WORDS = { M: 'male', F: 'female', T: 'third', O: 'other', Y: 'yes', N: 'no' };
+
+function checkboxOptionMatchesValue(optionToken, value) {
+  const v = String(value).trim().toLowerCase();
+  if (!v) return false;
+  const token = optionToken.toLowerCase();
+  if (v === token) return true;
+  const word = CHECKBOX_OPTION_WORDS[optionToken.toUpperCase()];
+  return word ? v === word || v.startsWith(word) || v[0] === token : v[0] === token;
+}
+
 // The standard 14 fonts (Helvetica etc.) can only encode WinAnsi — a value
 // containing ₹ (or any other character outside that codepage, e.g. from a
 // Gemini-extracted document) throws and aborts the whole fill request.
@@ -51,6 +64,25 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
       }
       for (const field of acroFields) {
         const name = String(field.getName() || '').trim();
+
+        // Checkbox-group option field, e.g. "gender__M" — baked by
+        // formTextAnchor's gender M/F/T detection. Resolve against the
+        // plain base key's value ("gender": "Male"), not a field named
+        // "gender__M" directly (the incoming values never use that name).
+        const groupMatch = name.match(/^(.+)__([A-Za-z]+)$/);
+        if (groupMatch && field.constructor.name === 'PDFCheckBox') {
+          const [, baseKey, optionToken] = groupMatch;
+          const baseValue = values[baseKey] ?? normalizedValues[baseKey.toLowerCase()];
+          if (baseValue && checkboxOptionMatchesValue(optionToken, baseValue)) {
+            try {
+              field.check();
+              filledAcroCount++;
+              filledAcroKeys.add(baseKey);
+            } catch { /* read-only or incompatible — skip */ }
+          }
+          continue;
+        }
+
         const lookupKey = name.toLowerCase().replace(/[\s-]+/g, '_');
         let value =
           values[lookupKey] ??
