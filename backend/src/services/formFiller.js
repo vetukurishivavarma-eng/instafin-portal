@@ -8,6 +8,22 @@
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
+// The standard 14 fonts (Helvetica etc.) can only encode WinAnsi — a value
+// containing ₹ (or any other character outside that codepage, e.g. from a
+// Gemini-extracted document) throws and aborts the whole fill request.
+// Replacing the handful of characters Indian financial documents actually
+// produce keeps fill deterministic instead of failing form-wide on one field.
+function sanitizeForWinAnsi(value) {
+  return String(value)
+    .replace(/₹/g, 'Rs. ')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/…/g, '...')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[^\x00-\xFF]/g, '?');
+}
+
 /**
  * @param {object} opts
  * @param {Buffer} opts.fileBuffer - blank form PDF bytes
@@ -42,7 +58,7 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
           normalizedValues[lookupKey] ??
           normalizedValues[name];
         if (value === undefined || value === null) value = '';
-        value = String(value);
+        value = sanitizeForWinAnsi(value);
         if (!value) continue;
         try {
           if (field.constructor.name === 'PDFCheckBox') {
@@ -78,7 +94,8 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
     if (filledAcroKeys.has(key)) continue;
     let value = values[key];
     if (value === undefined || value === null || value === '') continue;
-    value = String(value);
+    value = sanitizeForWinAnsi(value);
+    if (!value) continue;
 
     const pageIndex = (pos.page || 1) - 1;
     if (pageIndex < 0 || pageIndex >= pdf.getPageCount()) continue;
@@ -90,15 +107,21 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
     // pdf-lib origin is bottom-left; calibration is top-left
     const y = height - (pos.yPct / 100) * height - fontSize;
 
-    page.drawText(value, {
-      x,
-      y,
-      size: fontSize,
-      font,
-      color: rgb(0, 0, 0),
-      maxWidth: Math.max(40, width * 0.45),
-    });
-    overlayCount++;
+    try {
+      page.drawText(value, {
+        x,
+        y,
+        size: fontSize,
+        font,
+        color: rgb(0, 0, 0),
+        maxWidth: Math.max(40, width * 0.45),
+      });
+      overlayCount++;
+    } catch (err) {
+      // A single bad value (still-unencodable char, corrupt page, etc.) must
+      // not abort the whole fill — one skipped field beats a hard 500.
+      console.warn(`Failed to draw overlay value for "${key}":`, err.message);
+    }
   }
 
   const bytes = await pdf.save();
