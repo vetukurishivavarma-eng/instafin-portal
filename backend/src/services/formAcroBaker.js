@@ -47,6 +47,19 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
   const form = pdf.getForm();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
 
+  // Recalibration bakes onto the previously baked file (the pristine
+  // original isn't kept), so a field the NEW map no longer emits — a key
+  // dropped or renamed since last time — would silently survive at its old,
+  // possibly wrong position. Baking always expresses the full current
+  // calibration, so start from zero fields, not just replace-by-key.
+  for (const field of [...form.getFields()]) {
+    try {
+      form.removeField(field);
+    } catch (err) {
+      console.warn(`Could not remove stale field "${field.getName()}":`, err.message);
+    }
+  }
+
   let createdCount = 0;
   const fontSizeByKey = {};
   for (const [key, pos] of Object.entries(fieldMap)) {

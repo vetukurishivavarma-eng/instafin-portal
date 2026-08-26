@@ -25,7 +25,7 @@
  * option WORDS are the only text-layer signal a checkbox group exists.
  */
 import pdfjsLibModule from 'pdfjs-dist/legacy/build/pdf.js';
-import { extractPages, pageHasCoApplicantColumn, findRowColumnGapX, findNearestColumnGapX } from './formTextAnchor.js';
+import { extractPages, pageHasCoApplicantColumn, findRowColumnGapX, findNearestColumnGapX, extractCellRects, findCellRunBox, applyCellRun } from './formTextAnchor.js';
 import { classifyLine } from './formFieldInventory.js';
 
 const pdfjsLib = pdfjsLibModule.getDocument ? pdfjsLibModule : pdfjsLibModule.default;
@@ -263,6 +263,9 @@ export async function anchorFieldsGenerically(fileBuffer) {
   if (totalTextItems < 10) return null;
 
   const dashedByPage = await findDashedRegions(fileBuffer);
+  // Ground truth for where writable areas actually sit — same snapping the
+  // whitelist anchor uses (see formTextAnchor's extractCellRects).
+  const cellRectsByPage = await extractCellRects(fileBuffer);
 
   const fields = {};
   const usedKeys = new Set();
@@ -392,6 +395,13 @@ export async function anchorFieldsGenerically(fileBuffer) {
         const endX = Math.min(...bounds);
         const box = makeBox(page, line, startX, endX, fontHeight, maxHeightPts);
         if (box) {
+          const run = findCellRunBox(cellRectsByPage[page.pageNum], line, fontHeight, {
+            startXMin: labelEndX,
+            rightBoundX: endX + 6,
+            pageWidth: page.width,
+            labelStartX: trimmedWords[0].x,
+          });
+          if (run) applyCellRun(box, run, page);
           const key = uniqueKey(usedKeys, slugify(text), { rightOfColumn: startX > page.width / 2 });
           fields[key] = box;
         }
@@ -406,7 +416,15 @@ export async function anchorFieldsGenerically(fileBuffer) {
           const first = seg.words[0];
           const last = seg.words[seg.words.length - 1];
           const box = makeBox(page, line, first.x, last.x + last.width, fontHeight, maxHeightPts);
-          if (box) fields[uniqueKey(usedKeys, base, { rightOfColumn })] = box;
+          if (box) {
+            const run = findCellRunBox(cellRectsByPage[page.pageNum], line, fontHeight, {
+              startXMin: first.x - 3,
+              rightBoundX: last.x + last.width + 8,
+              pageWidth: page.width,
+            });
+            if (run) applyCellRun(box, run, page);
+            fields[uniqueKey(usedKeys, base, { rightOfColumn })] = box;
+          }
           return;
         }
 

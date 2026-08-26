@@ -260,7 +260,258 @@ const CONNECTOR_TOKEN = /^[:\-/`₹.,()]+$/;
 
 export function skipConnectorTokens(line, idx) {
   while (idx < line.items.length && CONNECTOR_TOKEN.test(line.items[idx].str.trim())) idx++;
+  // A parenthesized aside straight after the label — "CKYC Number (If
+  // available)", "Amount (in words)" — is part of the label, not the first
+  // value item; left unskipped it becomes "the next item" and collapses
+  // the box to zero width.
+  if (idx < line.items.length && line.items[idx].str.trim().startsWith('(')) {
+    let j = idx;
+    while (j < line.items.length && !line.items[j].str.includes(')')) j++;
+    if (j < line.items.length) idx = j + 1;
+  }
   return idx;
+}
+
+// ── Vector-cell snapping ────────────────────────────────────────────────
+//
+// The writable areas on real bank forms are DRAWN — HDFC paints each comb
+// cell as a filled white rectangle on a lavender background, SBI strokes
+// each cell's outline — and that geometry, not the label text, is the
+// ground truth for where a field's box belongs. Text-only placement
+// (boxFromLine's "1.6x the label's font height, starting just past the
+// label") reliably lands a few points high and short of the printed cells,
+// which is exactly the misalignment visible when the baked fields are
+// opened over the form. So: harvest every plausible input-cell rectangle
+// from each page's operator list, and when a field's row has such cells,
+// snap the box to the actual cell run instead of trusting the estimate.
+
+// pdfjs constructPath sub-operator coordinate counts, needed to walk the
+// packed coords array in step with the ops array.
+const PATH_OP_COORD_COUNTS = {
+  13: 2, // moveTo
+  14: 2, // lineTo
+  15: 6, // curveTo
+  16: 4, // curveTo2
+  17: 4, // curveTo3
+  18: 0, // closePath
+  19: 4, // rectangle (x, y, w, h)
+};
+
+/**
+ * All individual rectangles of plausible input-cell size drawn on each
+ * page, in PDF space (origin bottom-left), as {x1, y1, x2, y2}.
+ * @returns {Promise<Record<number, Array<{x1:number,y1:number,x2:number,y2:number}>>>}
+ */
+export async function extractCellRects(fileBuffer) {
+  const { OPS } = pdfjsLib;
+  const pdfDoc = await pdfjsLib.getDocument({
+    data: new Uint8Array(fileBuffer),
+    isEvalSupported: false,
+    disableFontFace: true,
+  }).promise;
+
+  // Paint ops that mean "this path is actually drawn on the page" (vs. a
+  // clip path or text-positioning artifact).
+  const FILL_OPS = new Set([OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+  const STROKE_OPS = new Set([OPS.stroke, OPS.closeStroke]);
+
+  // A closed 4-point polygon whose points all sit on the corners of its own
+  // bounding box IS a rectangle — HDFC draws every comb cell this way
+  // (moveTo + lineTo×3 + closePath + eoFill) rather than with `re`.
+  const polyToRect = (pts) => {
+    if (pts.length !== 4) return null;
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const x1 = Math.min(...xs);
+    const x2 = Math.max(...xs);
+    const y1 = Math.min(...ys);
+    const y2 = Math.max(...ys);
+    const tol = 0.6;
+    for (const [px, py] of pts) {
+      const onX = Math.abs(px - x1) < tol || Math.abs(px - x2) < tol;
+      const onY = Math.abs(py - y1) < tol || Math.abs(py - y2) < tol;
+      if (!onX || !onY) return null;
+    }
+    return { x1, y1, x2, y2 };
+  };
+
+  const rectsByPage = {};
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const opList = await page.getOperatorList();
+    const rects = [];
+
+    // Track fill color so dark decorative bars (section header banners are
+    // cell-sized!) don't register as writable cells. Stroked outlines
+    // (SBI-style comb squares) count regardless of fill color.
+    let fillIsLight = true;
+
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      if (fn === OPS.setFillRGBColor) {
+        const [r, g, b] = opList.argsArray[i];
+        fillIsLight = r >= 190 && g >= 190 && b >= 190;
+        continue;
+      }
+      if (fn !== OPS.constructPath) continue;
+
+      const paintFn = opList.fnArray[i + 1];
+      const isFill = FILL_OPS.has(paintFn);
+      const isStroke = STROKE_OPS.has(paintFn);
+      if (!isFill && !isStroke) continue; // clip path etc. — not drawn
+
+      const [ops, coords] = opList.argsArray[i];
+      if (!Array.isArray(ops) || !Array.isArray(coords)) continue;
+
+      // One constructPath can contain a whole row of cells as individual
+      // subpaths — walk them out one by one rather than taking the path's
+      // union bbox, so the run can later be split at real gaps (e.g. the
+      // Applicant/Co-applicant gutter).
+      const candidates = [];
+      let subpath = [];
+      const flushSubpath = () => {
+        const rect = polyToRect(subpath);
+        if (rect) candidates.push(rect);
+        subpath = [];
+      };
+      let ci = 0;
+      for (const op of ops) {
+        const count = PATH_OP_COORD_COUNTS[op];
+        if (count === undefined) break; // unknown op — stop before desyncing
+        if (op === 19) {
+          const [x, y, w, h] = coords.slice(ci, ci + 4);
+          candidates.push({ x1: Math.min(x, x + w), y1: Math.min(y, y + h), x2: Math.max(x, x + w), y2: Math.max(y, y + h) });
+        } else if (op === 13) {
+          flushSubpath(); // moveTo starts a new subpath
+          subpath.push(coords.slice(ci, ci + 2));
+        } else if (op === 14) {
+          subpath.push(coords.slice(ci, ci + 2));
+        } else if (op === 18) {
+          flushSubpath();
+        } else {
+          subpath = []; // curves — not a rectangle, discard this subpath
+        }
+        ci += count;
+      }
+      flushSubpath();
+
+      // SBI-style outlined cells: one path holds an outer and an inner
+      // rect wound in opposite directions, so a single nonzero fill paints
+      // just the border ring — the INNER rect is the writable cell. Such
+      // ring pairs are filled with the dark border color, so nesting must
+      // be detected BEFORE the light-fill rule below: an inner-of-a-pair
+      // is a cell whatever its path's fill color; a lone dark filled rect
+      // is a decorative bar (section banner) and is not.
+      const contains = (a, b) =>
+        a !== b && b.x1 >= a.x1 - 0.4 && b.x2 <= a.x2 + 0.4 && b.y1 >= a.y1 - 0.4 && b.y2 <= a.y2 + 0.4 &&
+        (b.x2 - b.x1) < (a.x2 - a.x1);
+      for (const r of candidates) {
+        if (candidates.some((o) => contains(r, o))) continue; // outer of a ring
+        const isInner = candidates.some((o) => contains(o, r));
+        if (isFill && !isStroke && !fillIsLight && !isInner) continue; // colored banner bar
+        const rw = r.x2 - r.x1;
+        const rh = r.y2 - r.y1;
+        // Plausible single input cell / input strip: tall enough to write
+        // in, not a hairline divider, not a page-sized panel.
+        if (rw >= 5 && rw <= 450 && rh >= 6 && rh <= 45) rects.push(r);
+      }
+    }
+
+    rectsByPage[pageNum] = rects;
+    await page.cleanup();
+  }
+  await pdfDoc.destroy();
+  return rectsByPage;
+}
+
+// Cells further apart than this aren't one input's comb run — it's the
+// gutter between columns (Applicant/Co-applicant) or between two fields.
+const CELL_RUN_MAX_GAP = 18;
+
+/**
+ * Find the run of drawn cells belonging to a label's row and return the
+ * snapped box for it in PDF space, or null when the row has no usable
+ * drawn cells (fall back to the text-estimated box).
+ */
+export function findCellRunBox(cellRects, line, fontHeight, { startXMin, rightBoundX = null, pageWidth, labelStartX = null }) {
+  if (!cellRects || cellRects.length === 0) return null;
+
+  // Cells belonging to this row: their vertical span overlaps the label's
+  // glyph band. (Labels sit vertically centered against their cell row on
+  // these forms, so genuine cells always overlap it.)
+  let bandY1 = line.y - 2;
+  let bandY2 = line.y + fontHeight + 2;
+  let effStartXMin = startXMin;
+  const collect = () => cellRects
+    .filter((r) => r.y2 >= bandY1 && r.y1 <= bandY2)
+    .filter((r) => r.x2 > effStartXMin && (rightBoundX == null || r.x1 < rightBoundX))
+    .filter((r) => r.x1 >= effStartXMin - 3)
+    .sort((a, b) => a.x1 - b.x1);
+  let rowCells = collect();
+
+  // Header-above-cells style (SBI's "First Name / Middle Name / Last Name"
+  // headers sitting on their own line directly over one shared comb row):
+  // nothing beside the label, but the writable cells are immediately BELOW
+  // it — and they start under the label's own x, not after its end.
+  if (rowCells.length === 0 && labelStartX != null) {
+    bandY1 = line.y - fontHeight * 4;
+    bandY2 = line.y - 1;
+    effStartXMin = Math.min(startXMin, labelStartX - 2);
+    rowCells = collect();
+  }
+  if (rowCells.length === 0) return null;
+  startXMin = effStartXMin;
+
+  // A light background strip behind TWO stacked rows passes the size
+  // filter too (it's only ~2 cell-heights tall) and, being continuous,
+  // would both double the snapped box's height and let the run sail
+  // through column gutters the real cells stop at. Real cells on one row
+  // share a height; anything much taller than the row's median is such a
+  // strip, not a cell — drop it, unless strips are all this row has.
+  const heights = rowCells.map((r) => r.y2 - r.y1).sort((a, b) => a - b);
+  const median = heights[Math.floor(heights.length / 2)];
+  const tight = rowCells.filter((r) => r.y2 - r.y1 <= median * 1.75);
+  if (tight.length > 0) rowCells = tight;
+
+  // The run must begin near the label, not at some unrelated box far
+  // across the page.
+  if (rowCells[0].x1 - startXMin > pageWidth * 0.35) return null;
+
+  const run = [rowCells[0]];
+  for (let i = 1; i < rowCells.length; i++) {
+    const prev = run[run.length - 1];
+    if (rowCells[i].x1 - prev.x2 > CELL_RUN_MAX_GAP) break;
+    run.push(rowCells[i]);
+  }
+
+  const x1 = run[0].x1;
+  // A single wide strip can begin before the column boundary and extend
+  // past it — the boundary always wins.
+  const x2 = rightBoundX != null
+    ? Math.min(run[run.length - 1].x2, rightBoundX - 2)
+    : run[run.length - 1].x2;
+  let y1 = Math.min(...run.map((r) => r.y1));
+  let y2 = Math.max(...run.map((r) => r.y2));
+  // A writable area drawn as one panel spanning TWO stacked rows (HDFC's
+  // Monthly/Other Income block) makes the run two rows tall; clamp the
+  // box to the label's own row band so it can't cover the row below.
+  if (y2 - y1 > fontHeight * 2.4) {
+    y2 = Math.min(y2, line.y + fontHeight + 2);
+    y1 = Math.max(y1, y2 - fontHeight * 2);
+  }
+  if (x2 - x1 < 6) return null;
+  return { x1, x2, y1, y2 };
+}
+
+// Overwrite a text-estimated box's geometry with a snapped cell run.
+export function applyCellRun(box, run, page) {
+  const inset = 1;
+  box.xPct = ((run.x1 + inset) / page.width) * 100;
+  box.widthPct = ((run.x2 - run.x1 - inset * 2) / page.width) * 100;
+  box.yPct = ((page.height - run.y2 + inset) / page.height) * 100;
+  box.heightPct = ((run.y2 - run.y1 - inset * 2) / page.height) * 100;
+  box.fontSize = Math.min(12, Math.max(7, Math.round((run.y2 - run.y1 - 3) * 0.9)));
+  return box;
 }
 
 export function boxFromLine(page, line, labelEndIdx, { leftBoundX = null, rightBoundX = null } = {}) {
@@ -338,6 +589,10 @@ export async function anchorFieldsFromTextLayer(fileBuffer) {
   const pages = await extractPages(fileBuffer);
   const totalTextItems = pages.reduce((n, p) => n + p.lines.reduce((m, l) => m + l.items.length, 0), 0);
   if (totalTextItems < 10) return null; // no real text layer — caller should fall back
+
+  // Ground truth for where writable areas actually sit — see the comment
+  // block above extractCellRects.
+  const cellRectsByPage = await extractCellRects(fileBuffer);
 
   const fields = {};
   // key -> { page, line, labelStartIdx, labelEndIdx }. Populated in a first
@@ -422,7 +677,20 @@ export async function anchorFieldsFromTextLayer(fileBuffer) {
     }
 
     const box = boxFromLine(match.page, match.line, contentStartIdx, { rightBoundX });
-    if (box) fields[key] = box;
+    if (box) {
+      // The heuristic box's own right edge already accounts for the next
+      // text item on the line (a following label like "Source") — a wide
+      // drawn strip must not carry the snapped box past it.
+      const heuristicRightX = ((box.xPct + box.widthPct) / 100) * match.page.width;
+      const run = findCellRunBox(cellRectsByPage[match.page.pageNum], match.line, lastLabelItem.height || 10, {
+        startXMin: labelEndX,
+        rightBoundX: rightBoundX != null ? Math.min(rightBoundX, heuristicRightX + 6) : heuristicRightX + 6,
+        pageWidth: match.page.width,
+        labelStartX: match.line.items[match.labelStartIdx]?.x ?? null,
+      });
+      if (run) applyCellRun(box, run, match.page);
+      fields[key] = box;
+    }
   }
 
   // Derive co_applicant_name / co_applicant_dob from the same row as their
@@ -438,7 +706,20 @@ export async function anchorFieldsFromTextLayer(fileBuffer) {
     if (rowGapX == null && !pageHasCoApplicantColumn(base.page)) continue;
     const leftBoundX = rowGapX != null ? rowGapX + 5 : base.page.width / 2 + 5;
     const box = boxFromLine(base.page, base.line, base.labelEndIdx, { leftBoundX });
-    if (box) fields[coKey] = box;
+    if (box) {
+      const run = findCellRunBox(cellRectsByPage[base.page.pageNum], base.line, baseLastItem.height || 10, {
+        startXMin: leftBoundX,
+        pageWidth: base.page.width,
+      });
+      // A derived box has no label of its own vouching for it — only real
+      // drawn cells at the derived position do. Without them (a page whose
+      // "Co-applicant" mention is just a checkbox, not a second column),
+      // the heuristic box floats over whatever happens to be there
+      // (SBI's photo frame) — drop it rather than bake a field into that.
+      if (!run) continue;
+      applyCellRun(box, run, base.page);
+      fields[coKey] = box;
+    }
   }
 
   if (Object.keys(fields).length === 0) return null;
