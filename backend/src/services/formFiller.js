@@ -26,7 +26,7 @@ function checkboxOptionMatchesValue(optionToken, value) {
 // Gemini-extracted document) throws and aborts the whole fill request.
 // Replacing the handful of characters Indian financial documents actually
 // produce keeps fill deterministic instead of failing form-wide on one field.
-function sanitizeForWinAnsi(value) {
+export function sanitizeForWinAnsi(value) {
   return String(value)
     .replace(/₹/g, 'Rs. ')
     .replace(/[‘’]/g, "'")

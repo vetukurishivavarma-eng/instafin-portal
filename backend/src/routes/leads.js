@@ -12,7 +12,9 @@ import {
   getSectionFromDocumentId,
   SECTION_LABELS,
 } from '../services/gemini.js';
+import multer from 'multer';
 import { fillPdfForm } from '../services/formFiller.js';
+import { extractFormValues, flattenPdfForm } from '../services/formSubmission.js';
 import { loadFormPdf, loadStoredFile } from '../services/formStorage.js';
 
 // Helper to record status change in status_history
@@ -2046,6 +2048,118 @@ router.post('/:id/fill-form', authorize('admin', 'operations_head', 'executive',
   } catch (error) {
     console.error('Error filling form:', error);
     res.status(500).json({ error: error.message || 'Failed to fill application form' });
+  }
+});
+
+// Filled-PDF uploads stay in memory — they go straight to extraction +
+// flattening + storage, never to a temp file on disk.
+const submittedFormUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Only PDF files are accepted'));
+  },
+});
+
+// POST /api/leads/:id/submit-form — Upload a user-typed fillable PDF back.
+// Multipart: file=<the filled PDF>, formId=<application_forms.id>.
+// Extracts every AcroForm value into submitted_values (queryable JSON),
+// flattens the PDF so it prints exactly as typed and can't be edited
+// further, and stores it as a lead_filled_forms row with source='submitted'.
+router.post('/:id/submit-form', authorize('admin', 'operations_head', 'executive', 'dsa'), submittedFormUpload.single('file'), async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const { formId } = req.body || {};
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'Attach the filled PDF as multipart field "file".' });
+    }
+    if (!formId) {
+      return res.status(400).json({ error: 'formId is required. Pass the id of the application form this submission fills.' });
+    }
+
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .single();
+    if (leadErr || !lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    if (!(await assertLeadAccess(lead, req))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { data: form, error: formErr } = await supabase
+      .from('application_forms')
+      .select('*')
+      .eq('id', formId)
+      .maybeSingle();
+    if (formErr || !form) {
+      return res.status(404).json({ error: 'Application form not found' });
+    }
+
+    // 1. Pull the typed values out while the fields still exist.
+    let extracted;
+    try {
+      extracted = await extractFormValues(req.file.buffer);
+    } catch (err) {
+      return res.status(400).json({ error: 'The uploaded file is not a readable PDF.' });
+    }
+    if (extracted.fieldCount === 0) {
+      return res.status(400).json({ error: 'This PDF has no fillable fields. Download the calibrated (fillable) version of the form, type into it, and upload that.' });
+    }
+
+    // 2. Flatten so the stored/printed copy shows the values permanently.
+    const flattenedBuffer = await flattenPdfForm(req.file.buffer);
+
+    // 3. Persist the flattened PDF (same storage convention as fill-form).
+    const stamp = Date.now();
+    const storagePath = `filled-forms/${leadId}_${form.id}_${stamp}.pdf`;
+    if (process.env.NODE_ENV === 'production') {
+      const { error: upErr } = await supabase.storage
+        .from('lead-documents')
+        .upload(storagePath, flattenedBuffer, { contentType: 'application/pdf', upsert: true });
+      if (upErr) throw upErr;
+    } else {
+      if (!fs.existsSync(filledFormsDir)) {
+        fs.mkdirSync(filledFormsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(filledFormsDir, `${leadId}_${form.id}_${stamp}.pdf`), flattenedBuffer);
+    }
+
+    const { data: record, error: insertErr } = await supabase
+      .from('lead_filled_forms')
+      .insert({
+        lead_id: leadId,
+        form_id: form.id,
+        bank_name: form.bank_name,
+        loan_type: form.loan_type,
+        form_name: form.form_name,
+        file_path: storagePath,
+        submitted_values: extracted.values,
+        source: 'submitted',
+      })
+      .select()
+      .single();
+    if (insertErr) {
+      if (insertErr.message && (insertErr.message.includes('column') || insertErr.message.includes('does not exist'))) {
+        return res.status(500).json({ error: 'Database setup incomplete: run migration 025_add_form_submissions.sql.' });
+      }
+      throw insertErr;
+    }
+
+    res.status(201).json({
+      success: true,
+      id: record.id,
+      formName: form.form_name,
+      values: extracted.values,
+      fieldCount: extracted.fieldCount,
+      message: `${form.form_name} submitted — ${Object.keys(extracted.values).length} filled values captured and the PDF flattened for printing.`,
+    });
+  } catch (error) {
+    console.error('Error submitting filled form:', error);
+    res.status(500).json({ error: error.message || 'Failed to submit filled form' });
   }
 });
 
