@@ -27,6 +27,8 @@ export default function FormFieldEditor({ form, accessToken, onClose, onSaved })
   const [activeKey, setActiveKey] = useState(FORM_FIELD_KEYS[0]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [suggestions, setSuggestions] = useState({}); // slug -> box, from the generic text-layer anchor
+  const [showSuggestions, setShowSuggestions] = useState(true);
 
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
@@ -64,6 +66,28 @@ export default function FormFieldEditor({ form, accessToken, onClose, onSaved })
         setNumPages(doc.numPages);
       } catch (err) {
         if (!cancelled) setLoadError(err.message || 'Failed to load form PDF');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [form.id, accessToken]);
+
+  // Best-effort: ask the whitelist-free generic anchor what it can find on
+  // this form's text layer so the admin has click-to-snap suggestions
+  // instead of freehand-drawing every box. A scanned form with no usable
+  // text layer just yields no suggestions — that's fine, manual drawing
+  // still works exactly as before.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/forms/${form.id}/discover`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setSuggestions(data.suggestions || {});
+      } catch {
+        // Suggestions are a convenience, not a requirement — ignore failures.
       }
     })();
     return () => { cancelled = true; };
@@ -151,6 +175,22 @@ export default function FormFieldEditor({ form, accessToken, onClose, onSaved })
     });
   };
 
+  // Snap a discovered suggestion box onto the currently selected canonical
+  // field instead of requiring a freehand drag — same auto-advance as
+  // finishing a manual drag, so an admin can click through a whole form.
+  const acceptSuggestion = (box) => {
+    if (!activeKey) return;
+    setFields(prev => ({
+      ...prev,
+      [activeKey]: { page: box.page, xPct: box.xPct, yPct: box.yPct, widthPct: box.widthPct, heightPct: box.heightPct },
+    }));
+    const idx = FORM_FIELD_KEYS.indexOf(activeKey);
+    const next = FORM_FIELD_KEYS.slice(idx + 1).find(k => !fields[k]) || FORM_FIELD_KEYS.find(k => !fields[k] && k !== activeKey);
+    if (next) setActiveKey(next);
+  };
+
+  const suggestionLabel = (slug) => slug.replace(/__.*$/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
   const placedCount = Object.keys(fields).length;
 
   const handleSave = async () => {
@@ -184,6 +224,9 @@ export default function FormFieldEditor({ form, accessToken, onClose, onSaved })
   };
 
   const fieldsOnThisPage = Object.entries(fields).filter(([, pos]) => pos.page === pageNum);
+  const suggestionsOnThisPage = showSuggestions
+    ? Object.entries(suggestions).filter(([, pos]) => pos.page === pageNum && pos.fieldType !== 'image')
+    : [];
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
@@ -193,14 +236,23 @@ export default function FormFieldEditor({ form, accessToken, onClose, onSaved })
           <div>
             <h3 className="text-base font-bold text-gray-900">Draw Fields — {form.form_name}</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              Select a field on the right, then click-drag a box directly over its real input area on the page.
+              Select a field on the right, then click-drag a box directly over its real input area on the page
+              {Object.keys(suggestions).length > 0 && ' — or click an amber suggestion to snap it in.'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-3">
+            {Object.keys(suggestions).length > 0 && (
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 select-none cursor-pointer">
+                <input type="checkbox" checked={showSuggestions} onChange={(e) => setShowSuggestions(e.target.checked)} />
+                Show suggestions
+              </label>
+            )}
+            <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
@@ -243,6 +295,21 @@ export default function FormFieldEditor({ form, accessToken, onClose, onSaved })
                     onMouseUp={handleMouseUp}
                     onMouseLeave={() => { if (dragRef.current) handleMouseUp(); }}
                   >
+                    {suggestionsOnThisPage.map(([slug, pos]) => (
+                      <div
+                        key={`sugg-${slug}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); acceptSuggestion(pos); }}
+                        title={`Click to use for ${FORM_FIELD_LABELS[activeKey] || activeKey}: "${suggestionLabel(slug)}"`}
+                        className="absolute border border-dashed border-amber-400 bg-amber-300/10 hover:bg-amber-400/25 hover:border-amber-600 cursor-pointer"
+                        style={{
+                          left: (pos.xPct / 100) * renderedSize.width,
+                          top: (pos.yPct / 100) * renderedSize.height,
+                          width: (pos.widthPct / 100) * renderedSize.width,
+                          height: (pos.heightPct / 100) * renderedSize.height,
+                        }}
+                      />
+                    ))}
                     {fieldsOnThisPage.map(([key, pos]) => (
                       <div
                         key={key}

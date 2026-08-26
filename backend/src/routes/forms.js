@@ -7,6 +7,7 @@ import { authorize } from '../middleware/authorize.js';
 import { syncFormsFromInternet } from '../services/formFetcher.js';
 import { calibrateFormFields } from '../services/formCalibrator.js';
 import { anchorFieldsFromTextLayer } from '../services/formTextAnchor.js';
+import { anchorFieldsGenerically } from '../services/formFieldAnchorGeneric.js';
 import { loadFormPdf, saveFormPdf } from '../services/formStorage.js';
 import { bakeAcroFormFields } from '../services/formAcroBaker.js';
 import { FORM_FIELD_KEYS } from '../data/formSources.js';
@@ -449,6 +450,37 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
   } catch (error) {
     console.error('Error calibrating form:', error);
     res.status(500).json({ error: error.message || 'Failed to calibrate form fields' });
+  }
+});
+
+// GET /api/forms/:id/discover — Suggest field boxes for the visual calibration
+// editor (admin only). Runs the whitelist-free generic anchor over the blank
+// form's text layer and returns every box it finds, keyed by a slug derived
+// from that box's own label text (not a canonical FORM_FIELD_KEYS key) — an
+// admin clicks a suggestion to snap it onto whichever canonical field is
+// currently selected, rather than freehand-drawing every box from scratch.
+// Suggestions are never saved directly: POST /:id/calibrate still only
+// accepts canonical keys via sanitizeManualFieldMap.
+router.get('/:id/discover', authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: form, error } = await supabase
+      .from('application_forms')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !form) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const fileBuffer = await loadFormPdf(form);
+    const result = await anchorFieldsGenerically(fileBuffer);
+    res.json({ suggestions: result?.fields || {} });
+  } catch (error) {
+    console.error('Error discovering form fields:', error);
+    res.status(500).json({ error: error.message || 'Failed to discover form fields' });
   }
 });
 

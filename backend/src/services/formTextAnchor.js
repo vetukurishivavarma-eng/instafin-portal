@@ -23,11 +23,22 @@ const norm = (s) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 // Ordered by specificity — first pattern that matches a line wins for that key.
 const FIELD_LABEL_PATTERNS = {
   full_name: [/^FIRSTNAME/, /^SURNAME/, /^FULLNAME/, /^APPLICANTNAME/, /^NAME$/],
+  first_name: [/^FIRSTNAME$/],
+  middle_name: [/^MIDDLENAME$/],
+  ckyc_number: [/^CKYCNUMBER/],
   dob: [/^DATEOFBIRTH/, /^DOB$/],
   gender: [/GENDER/, /^SEX$/],
   aadhaar_number: [/^UIDAADHAAR/, /AADHAAR/, /AADHAR/],
   pan_number: [/^PANNO/, /PANNUMBER/, /^PAN$/],
   address: [/^FLATDOORBLOCK/, /^CURRENTADDRESS/, /^PERMANENTADDRESS/, /^ADDRESS/],
+  flat_door_block: [/^FLATDOORBLOCK/],
+  premises_name: [/^NAMEOFPREMISESBUILDING/],
+  road_street: [/^ROADSTREET/],
+  area_locality: [/^AREALOCALITY/],
+  town_city_village: [/^TOWNCITYVILLAGE/],
+  district: [/^DISTRICT$/],
+  state: [/^STATEUNIONTERRITORY/],
+  pin_code: [/^PINCODE/],
   mobile: [/^MOBILENO/, /^MOBILE$/],
   email: [/EMAILIDPERSONAL/, /^EMAILID/, /^EMAIL$/],
   loan_amount: [/^AMOUNT/, /LOANAMOUNT/],
@@ -43,7 +54,50 @@ const FIELD_LABEL_PATTERNS = {
 
 const GENDER_OPTION_LABELS = { M: 'Male', F: 'Female', T: 'Third' };
 
-async function extractPages(fileBuffer) {
+// Find the first run of 2-3 consecutive single-letter M/F/T items that are
+// genuinely gender option checkboxes, starting the scan at fromIdx. Requires
+// at least two DISTINCT letters in the run, which is what tells a real
+// "M F T" selector apart from an unrelated run of repeated single-letter
+// placeholder glyphs immediately to its left on the same shared line — e.g.
+// a date-of-birth comb box rendered as "M M M M" (one glyph per month
+// digit) directly precedes the actual gender selector on HDFC's combined
+// "Date of Birth / Gender" row, and a naive "next M/F/T-looking item" scan
+// grabs three of those placeholder M's as if they were Male/Female/Third.
+function findGenderOptionRun(items, fromIdx) {
+  for (let i = fromIdx; i < items.length; i++) {
+    const run = [];
+    for (let j = i; j < items.length && run.length < 3; j++) {
+      const s = items[j].str.trim();
+      if (!/^[MFT]$/.test(s)) break;
+      run.push(items[j]);
+    }
+    if (run.length >= 2 && new Set(run.map((it) => it.str.trim())).size >= 2) {
+      return run;
+    }
+  }
+  return null;
+}
+
+// Join a line's items into readable text, inserting a space only where
+// there's an actual visual gap between glyphs. A naive join (space between
+// every item) turns split label runs — common on these forms, where the
+// first letter of a word is often its own text run at a different font
+// size — into noise like "S URNAME" or "D ATE OF B IRTH". Gap-aware joining
+// reconstructs "SURNAME" / "DATE OF BIRTH" instead.
+function joinLineText(items) {
+  let text = '';
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (i > 0) {
+      const prev = items[i - 1];
+      if (it.x - (prev.x + prev.width) > 1.2) text += ' ';
+    }
+    text += it.str;
+  }
+  return text;
+}
+
+export async function extractPages(fileBuffer) {
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(fileBuffer),
     isEvalSupported: false,
@@ -80,7 +134,7 @@ async function extractPages(fileBuffer) {
     }
     for (const line of lines) {
       line.items.sort((a, b) => a.x - b.x);
-      line.text = line.items.map((i) => i.str).join(' ');
+      line.text = joinLineText(line.items);
     }
     lines.sort((a, b) => b.y - a.y);
 
@@ -98,28 +152,96 @@ async function extractPages(fileBuffer) {
   return pages;
 }
 
-// Find the x-position of a "Co-applicant" column header on this page, if any.
-function findCoApplicantColumnX(page) {
+// Whether this page has a two-column Applicant/Co-applicant layout at all.
+// NOTE: deliberately NOT used as the column boundary's x-position — the
+// "Co-applicant" banner text is centered inside its own column, not
+// left-aligned to the divider, so its x sits well inside co-applicant
+// territory. Using it directly as a right-edge cap lets an applicant-side
+// box run straight through the gutter and into the co-applicant's own
+// cells (confirmed on HDFC's Aadhaar row, whose applicant box otherwise
+// extended past x=418pt on a page whose true column split is ~293pt).
+export function pageHasCoApplicantColumn(page) {
   for (const line of page.lines) {
     for (const item of line.items) {
-      if (norm(item.str) === 'COAPPLICANT') return item.x;
+      if (norm(item.str) === 'COAPPLICANT') return true;
     }
+  }
+  return false;
+}
+
+// Find the actual Applicant/Co-applicant gutter on THIS row: the largest
+// horizontal gap between text items positioned to the right of afterX. On a
+// two-column comb-cell row (Aadhaar, PAN, DOB, ...) this reliably lands on
+// the real divider, unlike any page-wide banner-text position.
+export function findRowColumnGapX(line, afterX) {
+  const rightItems = line.items.filter((it) => it.x > afterX).sort((a, b) => a.x - b.x);
+  let bestGap = 0;
+  let boundaryX = null;
+  for (let i = 0; i < rightItems.length - 1; i++) {
+    const gap = rightItems[i + 1].x - (rightItems[i].x + rightItems[i].width);
+    if (gap > bestGap) {
+      bestGap = gap;
+      boundaryX = rightItems[i + 1].x;
+    }
+  }
+  // Require a gap clearly bigger than normal word/cell spacing so an
+  // ordinary space between two words on a one-column row isn't mistaken
+  // for a column gutter.
+  return bestGap > 25 ? boundaryX : null;
+}
+
+// The NEAREST significant gap to the right of afterX, not the single
+// biggest gap anywhere on the line. findRowColumnGapX's "biggest gap wins"
+// rule is correct for a simple two-column Applicant/Co-applicant row, but
+// wrong on a row with 3+ columns (a numbered "Estimate of Requirement of
+// Funds" line, a multi-column table) — the biggest gap on the whole row
+// might sit two columns further right than the field actually being
+// bounded, letting its box run straight through intermediate columns
+// instead of stopping at its own. A field's writable area must be clipped
+// to the LOCAL boundary immediately to its right, not a global one.
+export function findNearestColumnGapX(line, afterX, minGap = 20) {
+  const rightItems = line.items.filter((it) => it.x > afterX).sort((a, b) => a.x - b.x);
+  for (let i = 0; i < rightItems.length - 1; i++) {
+    const gap = rightItems[i + 1].x - (rightItems[i].x + rightItems[i].width);
+    if (gap > minGap) return rightItems[i + 1].x;
   }
   return null;
 }
 
-// Locate the line + item index whose concatenated text (from some start
-// index) matches one of the given regex patterns, normalized.
+// An unanchored pattern (e.g. /GENDER/, matched against "...Birth/Gender"
+// as one run-on window) can be satisfied by a window that starts further
+// left than the label text actually does — the match is real, but its
+// reported start position isn't where "Gender" itself begins. Shrink the
+// window from the left, keeping only the tightest (rightmost) start index
+// that still satisfies the pattern, so callers that need to know exactly
+// where this label begins (capping a neighboring field's box against it)
+// get an accurate position rather than an early, unrelated item.
+function tightenLabelStart(line, patterns, startIdx, labelEndIdx) {
+  for (let idx = labelEndIdx - 1; idx >= startIdx; idx--) {
+    const windowText = norm(line.items.slice(idx, labelEndIdx).map((i) => i.str).join(''));
+    if (windowText && patterns.some((re) => re.test(windowText))) return idx;
+  }
+  return startIdx;
+}
+
+// Locate the line + item range whose concatenated text matches one of the
+// given regex patterns, normalized.
 function findLabelMatch(pages, patterns) {
   for (const page of pages) {
     for (const line of page.lines) {
-      // Try growing windows of items from the start of the line so a label
-      // split across multiple text runs ("FIRST" "NAME") still matches.
-      for (let endIdx = 1; endIdx <= Math.min(line.items.length, 5); endIdx++) {
-        const windowText = norm(line.items.slice(0, endIdx).map((i) => i.str).join(''));
-        if (!windowText) continue;
-        if (patterns.some((re) => re.test(windowText))) {
-          return { page, line, labelEndIdx: endIdx };
+      // Try growing windows of items starting from EVERY position in the
+      // line, not just the line's first item — dense bank forms routinely
+      // pack multiple labels onto one shared text line (e.g. a single row
+      // reading "Date of Birth / Gender  D D M M Y Y Y Y  Age  M F T"), so a
+      // label a search is looking for is often not the first thing on the
+      // line it lives on.
+      for (let startIdx = 0; startIdx < line.items.length; startIdx++) {
+        for (let endIdx = startIdx + 1; endIdx <= Math.min(line.items.length, startIdx + 10); endIdx++) {
+          const windowText = norm(line.items.slice(startIdx, endIdx).map((i) => i.str).join(''));
+          if (!windowText) continue;
+          if (patterns.some((re) => re.test(windowText))) {
+            return { page, line, labelStartIdx: tightenLabelStart(line, patterns, startIdx, endIdx), labelEndIdx: endIdx };
+          }
         }
       }
     }
@@ -127,19 +249,69 @@ function findLabelMatch(pages, patterns) {
   return null;
 }
 
-function boxFromLine(page, line, labelEndIdx, { leftBoundX = null, rightBoundX = null } = {}) {
+// Short decorative glyphs (currency symbols, colons, dashes/slashes used as
+// "Field ₹ :" separators) that PDF text extraction reports as their own
+// item immediately after a label. They are part of the label's punctuation,
+// not the start of the writable area — treating them as "the next item"
+// (the box's right-edge boundary) collapses the box to zero/negative width
+// or plants it in the gap between the label and its own colon instead of
+// past it, at the real value slot.
+const CONNECTOR_TOKEN = /^[:\-/`₹.,()]+$/;
+
+export function skipConnectorTokens(line, idx) {
+  while (idx < line.items.length && CONNECTOR_TOKEN.test(line.items[idx].str.trim())) idx++;
+  return idx;
+}
+
+export function boxFromLine(page, line, labelEndIdx, { leftBoundX = null, rightBoundX = null } = {}) {
   const labelItems = line.items.slice(0, labelEndIdx);
   const lastLabelItem = labelItems[labelItems.length - 1];
   const startX = leftBoundX != null ? leftBoundX : lastLabelItem.x + lastLabelItem.width + 3;
 
   // Next text item after the label on the same line caps the box, unless a
-  // column boundary is tighter.
-  const nextItem = line.items[labelEndIdx];
+  // column boundary (or another field's own label sharing this line, see
+  // rightBoundX callers) is tighter.
+  //
+  // For a box anchored to its own label (leftBoundX not given), "next item"
+  // means literally the item right after the label — a comb-cell field
+  // (Aadhaar, PAN) may have its own trailing "NO." left unconsumed by the
+  // label match, which sits BEFORE startX and so never wins the `> startX`
+  // check below; that's what lets the box legitimately span the full run
+  // of placeholder cells instead of stopping at the first one.
+  //
+  // For a box DERIVED at a shifted position (leftBoundX given — the
+  // co-applicant side of a shared row), there is no "next item by index"
+  // relative to a label that lives somewhere else on the line entirely, so
+  // the next item must be found by actual position instead. On a dense
+  // comb-cell row this correctly caps (or nulls out) the derived box too,
+  // rather than letting it run unchecked to the end of the line/page —
+  // exactly the class of bug that let a derived co-applicant DOB box run
+  // straight through that row's own gender checkboxes.
+  const nextItem = leftBoundX != null ? line.items.find((it) => it.x > startX) : line.items[labelEndIdx];
   let endX = rightBoundX != null ? rightBoundX : page.width - 20;
   if (nextItem && nextItem.x > startX && nextItem.x < endX) {
     endX = nextItem.x - 3;
   }
   if (endX <= startX) return null;
+
+  // Never let a box swallow a lone M/F/T token — on a row dense enough to
+  // share several fields (comb-cells + a gender selector all in one line),
+  // "biggest gap on the line" can pick a gap that has nothing to do with
+  // the real column boundary (e.g. the Applicant's own Age->Gender gap is
+  // wider than the true Applicant/Co-applicant gutter on HDFC's DOB row) —
+  // if that happens, the safety net here is failing to place a box at all
+  // rather than silently drawing a name/date on top of a checkbox.
+  if (
+    line.items.some((it) => {
+      if (!/^[MFT]$/.test(it.str.trim())) return false;
+      // Full glyph span vs. box span, not just "does it start after
+      // startX" — a checkbox letter sitting just before startX can still
+      // visually overlap the drawn box once its own width is accounted for.
+      return it.x + it.width > startX && it.x < endX;
+    })
+  ) {
+    return null;
+  }
 
   const fontHeight = lastLabelItem.height || 10;
   const boxHeight = Math.max(fontHeight * 1.6, page.height * 0.014);
@@ -168,28 +340,68 @@ export async function anchorFieldsFromTextLayer(fileBuffer) {
   if (totalTextItems < 10) return null; // no real text layer — caller should fall back
 
   const fields = {};
-  const rowMatches = {}; // key -> { page, line, labelEndIdx } for co-applicant derivation
-
+  // key -> { page, line, labelStartIdx, labelEndIdx }. Populated in a first
+  // pass over every key before any box is computed, so that pass 2 can cap
+  // a field's box against the START of any OTHER field's own label sharing
+  // the same text line — dense forms routinely pack more than one label
+  // onto one shared line (e.g. "...Date of Birth /Gender  D D M M Y Y ...
+  // Age  M F T" is one line carrying both the dob and gender labels), and a
+  // field's writable area must never be allowed to run into the next
+  // label/field instead of stopping before it.
+  const rowMatches = {};
   for (const key of FORM_FIELD_KEYS) {
     const patterns = FIELD_LABEL_PATTERNS[key];
     if (!patterns) continue;
-
     const match = findLabelMatch(pages, patterns);
-    if (!match) continue;
-    rowMatches[key] = match;
+    if (match) rowMatches[key] = match;
+  }
 
-    const coApplicantX = findCoApplicantColumnX(match.page);
-    const labelEndX = match.line.items[match.labelEndIdx - 1].x + match.line.items[match.labelEndIdx - 1].width;
-    const rightBoundX = coApplicantX != null && coApplicantX > labelEndX ? coApplicantX - 5 : null;
+  for (const key of FORM_FIELD_KEYS) {
+    const match = rowMatches[key];
+    if (!match) continue;
+
+    // The label may be immediately followed on the same line by decorative
+    // punctuation ("Amount ₹ :", "Monthly Income ₹") rather than the actual
+    // writable area — fold those into the label so they don't get mistaken
+    // for "the next field" and collapse the box.
+    const contentStartIdx = skipConnectorTokens(match.line, match.labelEndIdx);
+
+    const lastLabelItem = match.line.items[contentStartIdx - 1];
+    const labelEndX = lastLabelItem.x + lastLabelItem.width;
+
+    // Column boundary: prefer this row's own actual gutter (the largest gap
+    // among its own items), which is exact. Only fall back to the page's
+    // midline — never to the "Co-applicant" banner text's position, see
+    // pageHasCoApplicantColumn's comment — when this row has no co-applicant
+    // content to find a gap against (e.g. a blank cell with no placeholder
+    // text at all) but the page is confirmed two-column.
+    const rowGapX = findRowColumnGapX(match.line, labelEndX);
+    let rightBoundX = null;
+    if (rowGapX != null) {
+      rightBoundX = rowGapX - 5;
+    } else if (labelEndX < match.page.width / 2 && pageHasCoApplicantColumn(match.page)) {
+      rightBoundX = match.page.width / 2;
+    }
+
+    // If another field's own label starts later on this exact same line,
+    // never let this field's box run past it — take whichever bound is
+    // tighter. ("<= lastLabelItem.x" rather than "<= labelEndX" so a
+    // second label that sits immediately/tightly adjacent, with near-zero
+    // or slightly negative visual gap from font kerning, still counts as
+    // being to our right and gets used as a cap.)
+    for (const [otherKey, otherMatch] of Object.entries(rowMatches)) {
+      if (otherKey === key || otherMatch.line !== match.line) continue;
+      const otherLabelStartItem = otherMatch.line.items[otherMatch.labelStartIdx];
+      if (!otherLabelStartItem || otherLabelStartItem.x <= lastLabelItem.x) continue;
+      const candidate = otherLabelStartItem.x - 3;
+      if (rightBoundX == null || candidate < rightBoundX) rightBoundX = candidate;
+    }
 
     if (key === 'gender') {
       // Look for single-letter option tokens (M/F/T) after the label on the
       // same line — these are checkbox targets, not a single text field.
-      const optionItems = match.line.items
-        .slice(match.labelEndIdx)
-        .filter((it) => /^[MFT]$/.test(it.str.trim()))
-        .slice(0, 3);
-      if (optionItems.length >= 2) {
+      const optionItems = findGenderOptionRun(match.line.items, contentStartIdx);
+      if (optionItems) {
         for (const opt of optionItems) {
           const letter = opt.str.trim();
           const size = Math.max(opt.width, opt.height, 8);
@@ -209,21 +421,23 @@ export async function anchorFieldsFromTextLayer(fileBuffer) {
       // fall through to plain text box if no option tokens found
     }
 
-    const box = boxFromLine(match.page, match.line, match.labelEndIdx, { rightBoundX });
+    const box = boxFromLine(match.page, match.line, contentStartIdx, { rightBoundX });
     if (box) fields[key] = box;
   }
 
   // Derive co_applicant_name / co_applicant_dob from the same row as their
-  // applicant-side counterpart, placed after the detected column boundary.
+  // applicant-side counterpart, placed after that row's own actual column
+  // gutter (not the banner text's position — see findRowColumnGapX).
   const coDerivations = [['full_name', 'co_applicant_name'], ['dob', 'co_applicant_dob']];
   for (const [baseKey, coKey] of coDerivations) {
     const base = rowMatches[baseKey];
     if (!base) continue;
-    const coApplicantX = findCoApplicantColumnX(base.page);
-    if (coApplicantX == null) continue;
-    const box = boxFromLine(base.page, base.line, base.labelEndIdx, {
-      leftBoundX: coApplicantX + 5,
-    });
+    const baseLastItem = base.line.items[base.labelEndIdx - 1];
+    const baseLabelEndX = baseLastItem.x + baseLastItem.width;
+    const rowGapX = findRowColumnGapX(base.line, baseLabelEndX);
+    if (rowGapX == null && !pageHasCoApplicantColumn(base.page)) continue;
+    const leftBoundX = rowGapX != null ? rowGapX + 5 : base.page.width / 2 + 5;
+    const box = boxFromLine(base.page, base.line, base.labelEndIdx, { leftBoundX });
     if (box) fields[coKey] = box;
   }
 

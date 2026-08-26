@@ -120,10 +120,12 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
   // ── 2. Coordinate overlay from the AI-calibrated field map (skip anything
   //      already filled as a real AcroForm field above) ──
   const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const MIN_OVERLAY_FONT_SIZE = 6;
 
   let overlayCount = 0;
   for (const [key, pos] of Object.entries(fieldMap || {})) {
     if (filledAcroKeys.has(key)) continue;
+    if (pos.fieldType === 'image') continue; // a photo/signature box, not text
     let value = values[key];
     if (value === undefined || value === null || value === '') continue;
     value = sanitizeForWinAnsi(value);
@@ -134,10 +136,36 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
     const page = pdf.getPage(pageIndex);
 
     const { width, height } = page.getSize();
-    const fontSize = pos.fontSize || 10;
     const x = (pos.xPct / 100) * width;
-    // pdf-lib origin is bottom-left; calibration is top-left
-    const y = height - (pos.yPct / 100) * height - fontSize;
+
+    const hasBox = Number.isFinite(pos.widthPct) && Number.isFinite(pos.heightPct) && pos.widthPct > 0;
+    let fontSize;
+    let boxWidth;
+    let y;
+
+    if (hasBox) {
+      // A real anchored box (text-layer match or a manually drawn rectangle)
+      // is known, so shrink the font to the value's actual rendered width
+      // instead of guessing a page-relative maxWidth that has no relation to
+      // the box the label actually sits next to.
+      boxWidth = (pos.widthPct / 100) * width;
+      const boxHeight = (pos.heightPct / 100) * height;
+      fontSize = Math.min(pos.fontSize || 10, Math.max(MIN_OVERLAY_FONT_SIZE, boxHeight - 2));
+      while (fontSize > MIN_OVERLAY_FONT_SIZE && font.widthOfTextAtSize(value, fontSize) > boxWidth) {
+        fontSize -= 0.5;
+      }
+      // pdf-lib origin is bottom-left; calibration is top-left. Center the
+      // text vertically within the drawn box rather than assuming the box
+      // height equals the font size.
+      const topY = height - (pos.yPct / 100) * height;
+      y = topY - boxHeight + Math.max(0, (boxHeight - fontSize) / 2);
+    } else {
+      // Older single-point calibration with no known box size — fall back to
+      // the previous generic heuristic (page-relative max width).
+      fontSize = pos.fontSize || 10;
+      boxWidth = Math.max(40, width * 0.45);
+      y = height - (pos.yPct / 100) * height - fontSize;
+    }
 
     try {
       page.drawText(value, {
@@ -146,7 +174,7 @@ export async function fillPdfForm({ fileBuffer, fieldMap = {}, values = {} }) {
         size: fontSize,
         font,
         color: rgb(0, 0, 0),
-        maxWidth: Math.max(40, width * 0.45),
+        maxWidth: boxWidth,
       });
       overlayCount++;
     } catch (err) {

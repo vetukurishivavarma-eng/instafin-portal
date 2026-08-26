@@ -14,6 +14,21 @@ import { PDFDocument, StandardFonts, rgb, PDFName, PDFString } from 'pdf-lib';
 // the AcroForm's /DR (default resources) font dictionary.
 const FONT_RESOURCE_NAME = 'Helv';
 
+// A key like "gender__M" is one option of a checkbox group (baked by
+// formTextAnchor's label + option-token detection: base key, double
+// underscore, option token). Classify from the key shape itself rather than
+// trusting an upstream pos.fieldType, so any authoring path (text-anchor
+// today, a future one tomorrow) that emits this key shape gets baked as a
+// real checkbox without every caller having to remember to set fieldType.
+const CHECKBOX_GROUP_KEY = /^.+__[A-Za-z0-9]+$/;
+
+function classifyFieldType(key, pos) {
+  if (pos.fieldType === 'checkbox') return 'checkbox';
+  if (pos.fieldType === 'image') return 'image';
+  if (CHECKBOX_GROUP_KEY.test(key)) return 'checkbox';
+  return 'text';
+}
+
 /**
  * @param {object} opts
  * @param {Buffer} opts.fileBuffer - blank form PDF bytes (the original scan)
@@ -62,8 +77,17 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
     const existing = form.getFieldMaybe(key);
     if (existing) form.removeField(existing);
 
+    const fieldType = classifyFieldType(key, pos);
+
+    // "Paste a photo/signature here" isn't a text or checkbox value at
+    // all — filling it for real means embedding actual image bytes at
+    // this position (pdf-lib page.drawImage with a supplied photo), a
+    // different operation this module doesn't do. Leave the dashed box as
+    // printed rather than bake a field with nothing meaningful to put in it.
+    if (fieldType === 'image') continue;
+
     try {
-      if (pos.fieldType === 'checkbox') {
+      if (fieldType === 'checkbox') {
         // Option checkboxes (gender M/F/T, yes/no, etc.) — a real PDFCheckBox
         // so the fill step ticks it, rather than a text field the filler
         // would otherwise draw a word into.
