@@ -11,6 +11,7 @@
  */
 import { generateWithGemini } from './gemini.js';
 import { FORM_FIELD_KEYS } from '../data/formSources.js';
+import { detectRasterCellRects, snapFieldMapToRasterCells, getPageSizes } from './formRasterCells.js';
 
 // Fields a customer/lead can provide that the filler should try to place.
 // Presented to Gemini so it only returns keys that actually exist on the form.
@@ -144,6 +145,21 @@ Set fontSize to a sensible value between 8 and 12 that will comfortably fit with
 
   if (Object.keys(fields).length === 0) {
     throw new Error('Calibration found no matching fields on this form. The form may be a non-standard layout.');
+  }
+
+  // Gemini finds the right NEIGHBORHOOD for each field but not the exact
+  // pixels. The printed cells are visible in the scan itself, though —
+  // detect them from the rendered bitmap and snap each guess onto the
+  // actual cells nearest to it, so the baked field sits exactly on the
+  // printed box instead of a few points off it. Best-effort: a failure
+  // here (an odd scan the detector chokes on) keeps the raw Gemini boxes.
+  try {
+    const cellsByPage = await detectRasterCellRects(fileBuffer);
+    const pageSizes = await getPageSizes(fileBuffer);
+    const snapped = snapFieldMapToRasterCells(fields, cellsByPage, pageSizes);
+    console.log(`Raster cell snap: adjusted ${snapped}/${Object.keys(fields).length} Gemini-calibrated fields`);
+  } catch (err) {
+    console.warn('Raster cell snapping failed, keeping raw Gemini boxes:', err.message);
   }
 
   return { fields, calibrated_at: new Date().toISOString() };

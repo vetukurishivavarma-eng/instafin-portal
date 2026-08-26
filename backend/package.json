@@ -9,6 +9,7 @@
     "calibrate:forms": "node scripts/calibrateAllForms.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
     "@supabase/supabase-js": "^2.105.4",
     "archiver": "^8.0.0",
     "bcryptjs": "^3.0.3",

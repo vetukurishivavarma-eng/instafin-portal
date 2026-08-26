@@ -476,8 +476,17 @@ router.get('/:id/discover', authorize('admin'), async (req, res) => {
     }
 
     const fileBuffer = await loadFormPdf(form);
-    const result = await anchorFieldsGenerically(fileBuffer);
-    res.json({ suggestions: result?.fields || {} });
+    let suggestions = (await anchorFieldsGenerically(fileBuffer))?.fields;
+    if (!suggestions || Object.keys(suggestions).length === 0) {
+      // Rasterized scan: no text layer to anchor against, but the printed
+      // cells are visible in the bitmap — offer each detected cell run as
+      // a click-to-snap suggestion instead.
+      const { detectRasterCellRects, getPageSizes, rasterCellRunsAsSuggestions } = await import('../services/formRasterCells.js');
+      const cellsByPage = await detectRasterCellRects(fileBuffer);
+      const pageSizes = await getPageSizes(fileBuffer);
+      suggestions = rasterCellRunsAsSuggestions(cellsByPage, pageSizes);
+    }
+    res.json({ suggestions: suggestions || {} });
   } catch (error) {
     console.error('Error discovering form fields:', error);
     res.status(500).json({ error: error.message || 'Failed to discover form fields' });
