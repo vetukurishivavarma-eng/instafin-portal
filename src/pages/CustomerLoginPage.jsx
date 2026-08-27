@@ -6,7 +6,7 @@ import { getChecklistWithFallback, getCoapplicantChecklist, clearChecklistCache 
 import { downloadEligibilityPDF, downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
-import { FORM_FIELD_LABELS } from '../data/formFieldKeys';
+import FillFormModal from '../components/FillFormModal';
 
 // Normalize field values for checklist matching
 const normalizeValue = (val) => {
@@ -877,6 +877,10 @@ export default function CustomerLoginPage() {
         return;
       }
 
+      // Seed only the fields the lead record already answers. Everything else
+      // the form has — and calibration now finds all of it, including photo
+      // and signature areas — is rendered empty by FillFormModal for the user
+      // to complete, rather than being left off the screen entirely.
       const leadDefaults = {
         full_name: selectedLead.customerName || '',
         mobile: selectedLead.mobile || '',
@@ -887,7 +891,9 @@ export default function CustomerLoginPage() {
       };
 
       const initialValues = {};
-      fieldKeys.forEach(key => { initialValues[key] = leadDefaults[key] || ''; });
+      fieldKeys.forEach(key => {
+        if (leadDefaults[key]) initialValues[key] = leadDefaults[key];
+      });
 
       setManualFillForm(form);
       setManualFillBankLabel(label || bankName);
@@ -897,7 +903,7 @@ export default function CustomerLoginPage() {
     }
   };
 
-  const handleSubmitManualFill = async () => {
+  const handleSubmitManualFill = async (values) => {
     if (!selectedLead || !manualFillForm) return;
     setManualFillSubmitting(true);
     setError('');
@@ -905,7 +911,7 @@ export default function CustomerLoginPage() {
       const res = await authedFetch(`${API_BASE}/leads/${selectedLead.id}/fill-form`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ formId: manualFillForm.id, manualValues: manualFillValues })
+        body: JSON.stringify({ formId: manualFillForm.id, manualValues: values })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -3561,65 +3567,17 @@ export default function CustomerLoginPage() {
         </div>
       )}
 
-      {/* Manual Fill Modal — type in the calibrated fields yourself, no document analysis */}
+      {/* Fill Form Modal — one control per calibrated field: text, options,
+          a photo upload, or a scratch pad to sign on. */}
       {manualFillForm && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn p-4"
-          onClick={() => { if (!manualFillSubmitting) { setManualFillForm(null); setManualFillValues({}); } }}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden animate-slideUp"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Fill {manualFillForm.form_name}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">{manualFillBankLabel} — fill in the detected fields, then save</p>
-              </div>
-              <button
-                onClick={() => { setManualFillForm(null); setManualFillValues({}); }}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="px-5 py-4 space-y-3 overflow-y-auto">
-              {Object.keys(manualFillValues).map(key => (
-                <div key={key}>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                    {FORM_FIELD_LABELS[key] || key}
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-100 outline-none"
-                    value={manualFillValues[key]}
-                    onChange={e => setManualFillValues(prev => ({ ...prev, [key]: e.target.value }))}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
-              <button
-                onClick={handleSubmitManualFill}
-                disabled={manualFillSubmitting}
-                className="flex-1 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-sm shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50"
-              >
-                {manualFillSubmitting ? 'Filling...' : 'Fill & Save'}
-              </button>
-              <button
-                onClick={() => { setManualFillForm(null); setManualFillValues({}); }}
-                disabled={manualFillSubmitting}
-                className="px-6 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-all disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <FillFormModal
+          form={manualFillForm}
+          bankLabel={manualFillBankLabel}
+          initialValues={manualFillValues}
+          submitting={manualFillSubmitting}
+          onSubmit={handleSubmitManualFill}
+          onClose={() => { setManualFillForm(null); setManualFillValues({}); }}
+        />
       )}
 
       {/* View Document Modal */}

@@ -5,19 +5,30 @@ import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { syncFormsFromInternet } from '../services/formFetcher.js';
-import { calibrateFormFields } from '../services/formCalibrator.js';
-import { anchorFieldsFromTextLayer } from '../services/formTextAnchor.js';
 import { anchorFieldsGenerically } from '../services/formFieldAnchorGeneric.js';
+import { planFormFields } from '../services/formFieldPlan.js';
 import { loadFormPdf, saveFormPdf } from '../services/formStorage.js';
 import { bakeAcroFormFields } from '../services/formAcroBaker.js';
 import { FORM_FIELD_KEYS } from '../data/formSources.js';
 
-// Validate/sanitize a manually-drawn field map from the visual calibration
-// editor: { full_name: { page, xPct, yPct, widthPct, heightPct }, ... }
-function sanitizeManualFieldMap(rawFields) {
+// Field keys the editor may submit. Previously this was the 28-key canonical
+// whitelist, which meant an admin could SEE every discovered box in the Draw
+// Fields editor but could only ever save 28 of them — the rest of the form
+// stayed dead no matter what they did. Discovered fields carry a slug derived
+// from the form's own printed label, so accept any slug-shaped key (plus the
+// "<base>__<option>" checkbox-group shape) and keep the canonical set as a
+// role marker rather than a gate.
+const FIELD_KEY_SHAPE = /^[A-Za-z0-9_]{2,80}$/;
+const ALLOWED_FIELD_TYPES = new Set(['text', 'checkbox', 'image']);
+const MAX_SUBMITTED_FIELDS = 600;
+
+// Validate/sanitize a field map from the visual calibration editor:
+// { full_name: { page, xPct, yPct, widthPct, heightPct, fieldType?, ... }, ... }
+export function sanitizeManualFieldMap(rawFields) {
   const fields = {};
   for (const [key, pos] of Object.entries(rawFields || {})) {
-    if (!FORM_FIELD_KEYS.includes(key)) continue;
+    if (Object.keys(fields).length >= MAX_SUBMITTED_FIELDS) break;
+    if (!FIELD_KEY_SHAPE.test(key)) continue;
     if (!pos || typeof pos !== 'object') continue;
     const page = Math.max(1, parseInt(pos.page, 10) || 1);
     const xPct = Math.min(100, Math.max(0, parseFloat(pos.xPct)));
@@ -26,9 +37,36 @@ function sanitizeManualFieldMap(rawFields) {
     const heightPct = Math.min(100, Math.max(0, parseFloat(pos.heightPct)));
     if (![xPct, yPct, widthPct, heightPct].every(Number.isFinite)) continue;
     if (widthPct <= 0 || heightPct <= 0) continue;
-    fields[key] = { page, xPct, yPct, widthPct, heightPct };
+
+    const field = { page, xPct, yPct, widthPct, heightPct };
+    if (ALLOWED_FIELD_TYPES.has(pos.fieldType)) field.fieldType = pos.fieldType;
+    if (field.fieldType === 'image') {
+      field.imageKind = pos.imageKind === 'signature' ? 'signature' : 'photo';
+    }
+    if (typeof pos.label === 'string' && pos.label.trim()) {
+      field.label = pos.label.trim().slice(0, 80);
+    }
+    if (typeof pos.optionValue === 'string' && pos.optionValue.trim()) {
+      field.optionValue = pos.optionValue.trim().slice(0, 40);
+    }
+    const fontSize = parseFloat(pos.fontSize);
+    if (Number.isFinite(fontSize)) field.fontSize = Math.min(14, Math.max(6, fontSize));
+    field.role = FORM_FIELD_KEYS.includes(key.split('__')[0]) ? 'canonical' : 'discovered';
+
+    fields[key] = field;
   }
   return fields;
+}
+
+// One-line summary of what a calibration produced, so the admin sees whether
+// the form actually came out fillable instead of just "done".
+function describeFieldPlan(counts, createdCount, formName) {
+  if (!counts) return `Calibration complete — ${createdCount} fillable fields created on ${formName}`;
+  const parts = [`${counts.text} text`];
+  if (counts.checkbox) parts.push(`${counts.checkbox} checkbox`);
+  if (counts.photo) parts.push(`${counts.photo} photo`);
+  if (counts.signature) parts.push(`${counts.signature} signature`);
+  return `${formName}: ${createdCount} fillable fields created (${parts.join(', ')}).`;
 }
 
 const router = express.Router();
@@ -412,15 +450,11 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
       }
       fieldMap = { fields, calibrated_at: new Date().toISOString(), source: 'manual' };
     } else {
-      // Primary path: derive field boxes deterministically from the PDF's
-      // real text layer (label position + layout), not a vision guess — the
-      // same bytes always produce the same field map. Only fall back to
-      // Gemini vision when there's no usable text layer (a fully rasterized
-      // scan), where there's nothing for the text layer to anchor to.
-      fieldMap = await anchorFieldsFromTextLayer(fileBuffer);
-      if (!fieldMap) {
-        fieldMap = await calibrateFormFields(fileBuffer);
-      }
+      // Primary path: every writable area on the form, not just the 28
+      // canonical keys — see services/formFieldPlan.js. Deterministic from
+      // the PDF's own text layer and vector cells wherever those exist;
+      // vision only for a flat scan, where there is no text to read.
+      fieldMap = await planFormFields(fileBuffer);
     }
 
     // Bake the detected positions into real AcroForm text fields and overwrite
@@ -443,7 +477,7 @@ router.post('/:id/calibrate', authorize('admin'), async (req, res) => {
     if (updateError) throw updateError;
 
     res.json({
-      message: `Calibration complete — ${createdCount} fillable fields created on ${form.form_name}`,
+      message: describeFieldPlan(fieldMap.counts, createdCount, form.form_name),
       form: updatedForm,
       fieldMap,
     });

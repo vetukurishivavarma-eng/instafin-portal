@@ -84,7 +84,7 @@ function findGenderOptionRun(items, fromIdx) {
 // first letter of a word is often its own text run at a different font
 // size — into noise like "S URNAME" or "D ATE OF B IRTH". Gap-aware joining
 // reconstructs "SURNAME" / "DATE OF BIRTH" instead.
-function joinLineText(items) {
+export function joinLineText(items) {
   let text = '';
   for (let i = 0; i < items.length; i++) {
     const it = items[i];

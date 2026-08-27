@@ -10,6 +10,30 @@
  */
 import { PDFDocument, StandardFonts, rgb, PDFName, PDFString } from 'pdf-lib';
 
+/**
+ * Give a widget an EMPTY appearance stream so the field is present, named
+ * and fillable, but paints nothing over the form underneath it.
+ *
+ * pdf-lib always gives a button a background (addToPage falls back to grey
+ * whenever backgroundColor is omitted OR explicitly undefined), which on a
+ * scanned form means a grey slab where the printed "paste photograph here"
+ * frame used to be. An empty appearance keeps the printed frame visible and
+ * the field targetable; formFiller.js replaces this stream with the actual
+ * uploaded photo or drawn signature via setImage().
+ */
+function makeWidgetTransparent(pdf, field) {
+  for (const widget of field.acroField.getWidgets()) {
+    const rect = widget.getRectangle();
+    const empty = pdf.context.formXObject([], {
+      BBox: pdf.context.obj([0, 0, rect.width, rect.height]),
+      Matrix: pdf.context.obj([1, 0, 0, 1, 0, 0]),
+      Resources: pdf.context.obj({}),
+    });
+    widget.setNormalAppearance(pdf.context.register(empty));
+    widget.dict.delete(PDFName.of('MK'));
+  }
+}
+
 // Resource name the baked fields' /DA strings refer to, registered once in
 // the AcroForm's /DR (default resources) font dictionary.
 const FONT_RESOURCE_NAME = 'Helv';
@@ -62,6 +86,7 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
 
   let createdCount = 0;
   const fontSizeByKey = {};
+  const imageFieldKeys = [];
   for (const [key, pos] of Object.entries(fieldMap)) {
     if (!pos || typeof pos !== 'object') continue;
 
@@ -97,9 +122,23 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
     // this position (pdf-lib page.drawImage with a supplied photo), a
     // different operation this module doesn't do. Leave the dashed box as
     // printed rather than bake a field with nothing meaningful to put in it.
-    if (fieldType === 'image') continue;
-
     try {
+      if (fieldType === 'image') {
+        // A photo frame or a signature strip. Baked as a real (transparent)
+        // button field so it has a name, a page and an exact rectangle that
+        // formFiller.js can stamp an uploaded photo or a drawn signature
+        // into, and so the portal's fill UI knows to offer an upload / a
+        // scratch-pad for it. These used to be skipped outright, which is
+        // why photo and signature areas had no input anywhere in the portal.
+        const field = form.createButton(key);
+        field.addToPage('', page, { x, y, width: boxWidth, height: boxHeight, borderWidth: 0, font });
+        makeWidgetTransparent(pdf, field);
+        form.markFieldAsClean(field.ref);
+        imageFieldKeys.push(key);
+        createdCount++;
+        continue;
+      }
+
       if (fieldType === 'checkbox') {
         // Option checkboxes (gender M/F/T, yes/no, etc.) — a real PDFCheckBox
         // so the fill step ticks it, rather than a text field the filler
@@ -149,10 +188,21 @@ export async function bakeAcroFormFields({ fileBuffer, fieldMap = {} }) {
   acroFormDict.set(PDFName.of('DA'), PDFString.of(`/${FONT_RESOURCE_NAME} 10 Tf 0 g`));
 
   for (const field of form.getFields()) {
+    // Image buttons have no text to render, and handing them a text /DA
+    // makes some viewers paint a caption box over the photo.
+    if (imageFieldKeys.includes(field.getName())) continue;
     const size = fontSizeByKey[field.getName()] || 10;
     field.acroField.dict.set(PDFName.of('DA'), PDFString.of(`/${FONT_RESOURCE_NAME} ${size} Tf 0 g`));
   }
 
+  // updateFieldAppearances above can regenerate a button's appearance (and
+  // with it pdf-lib's default grey background). Re-blank them last, so the
+  // printed photo/signature frame stays visible on the downloaded form.
+  for (const key of imageFieldKeys) {
+    const field = form.getFieldMaybe(key);
+    if (field) makeWidgetTransparent(pdf, field);
+  }
+
   const bytes = await pdf.save();
-  return { buffer: Buffer.from(bytes), createdCount };
+  return { buffer: Buffer.from(bytes), createdCount, imageFieldKeys };
 }

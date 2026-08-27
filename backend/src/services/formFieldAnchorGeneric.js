@@ -25,7 +25,7 @@
  * option WORDS are the only text-layer signal a checkbox group exists.
  */
 import pdfjsLibModule from 'pdfjs-dist/legacy/build/pdf.js';
-import { extractPages, pageHasCoApplicantColumn, findRowColumnGapX, findNearestColumnGapX, extractCellRects, findCellRunBox, applyCellRun } from './formTextAnchor.js';
+import { extractPages, pageHasCoApplicantColumn, findRowColumnGapX, findNearestColumnGapX, extractCellRects, findCellRunBox, applyCellRun, joinLineText } from './formTextAnchor.js';
 import { classifyLine } from './formFieldInventory.js';
 
 const pdfjsLib = pdfjsLibModule.getDocument ? pdfjsLibModule : pdfjsLibModule.default;
@@ -37,6 +37,23 @@ const pdfjsLib = pdfjsLibModule.getDocument ? pdfjsLibModule : pdfjsLibModule.de
 // setDash call followed by a rectangular path of plausible size), not
 // guessed from the words — the same mechanism catches a signature box or
 // any other bank's photo placeholder, not just HDFC's.
+// Compose two PDF transformation matrices, [a, b, c, d, e, f] each — the
+// same composition order pdf.js's own canvas backend uses for OPS.transform.
+function mulMatrix(m1, m2) {
+  return [
+    m1[0] * m2[0] + m1[2] * m2[1],
+    m1[1] * m2[0] + m1[3] * m2[1],
+    m1[0] * m2[2] + m1[2] * m2[3],
+    m1[1] * m2[2] + m1[3] * m2[3],
+    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+    m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+  ];
+}
+
+function applyMatrix(m, x, y) {
+  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+}
+
 async function findDashedRegions(fileBuffer) {
   const { OPS } = pdfjsLib;
   const pdfDoc = await pdfjsLib.getDocument({
@@ -53,19 +70,57 @@ async function findDashedRegions(fileBuffer) {
 
     const regions = [];
     let lastDash = null;
+    // A path's bbox is in the CURRENT user space, not page space: PDF
+    // generators routinely emit "q 1 0 0 1 450 660 cm  0 0 105 120 re  S Q",
+    // where the rectangle's own numbers start at the origin and the position
+    // lives entirely in the cm. Without following the transform stack, every
+    // such photo frame was reported at the wrong corner of the page — and the
+    // instruction text printed inside it then failed the "is this item inside
+    // a placeholder box" test, so it also became two junk text fields.
+    let ctm = [1, 0, 0, 1, 0, 0];
+    const ctmStack = [];
     for (let i = 0; i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
       const args = opList.argsArray[i];
-      if (fn === OPS.setDash) {
+      if (fn === OPS.save) {
+        ctmStack.push(ctm.slice());
+      } else if (fn === OPS.restore) {
+        ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
+      } else if (fn === OPS.transform) {
+        ctm = mulMatrix(ctm, args);
+      } else if (OPS.paintFormXObjectBegin != null && fn === OPS.paintFormXObjectBegin) {
+        ctmStack.push(ctm.slice());
+        if (Array.isArray(args[0])) ctm = mulMatrix(ctm, args[0]);
+      } else if (OPS.paintFormXObjectEnd != null && fn === OPS.paintFormXObjectEnd) {
+        ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
+      } else if (fn === OPS.setDash) {
         lastDash = args;
       } else if (fn === OPS.constructPath && lastDash && lastDash[0] && lastDash[0].length > 0) {
-        const bbox = args[2]; // [xmin, xmax, ymin, ymax]
+        const rawBox = args[2]; // [xmin, xmax, ymin, ymax] in current user space
+        let bbox = null;
+        if (rawBox) {
+          const corners = [
+            applyMatrix(ctm, rawBox[0], rawBox[2]),
+            applyMatrix(ctm, rawBox[1], rawBox[2]),
+            applyMatrix(ctm, rawBox[0], rawBox[3]),
+            applyMatrix(ctm, rawBox[1], rawBox[3]),
+          ];
+          const xs = corners.map((c) => c[0]);
+          const ys = corners.map((c) => c[1]);
+          bbox = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+        }
         if (bbox) {
           const w = bbox[1] - bbox[0];
           const h = bbox[3] - bbox[2];
           // Plausible photo/signature box: roughly stamp-to-passport-photo
           // sized, not a full-width divider or a tiny tick mark.
-          if (w > 40 && w < 250 && h > 40 && h < 300) {
+          // A photo frame is roughly square/portrait; a signature strip is
+          // wide and short. Both are "put something here" areas the applicant
+          // must fill, so accept either shape — the earlier photo-only size
+          // window silently dropped every signature box on the form.
+          const isPhotoFrame = w > 40 && w < 260 && h > 40 && h < 300;
+          const isSignatureStrip = w > 70 && w < 340 && h >= 18 && h < 60;
+          if (isPhotoFrame || isSignatureStrip) {
             regions.push({ x1: bbox[0], x2: bbox[1], y1: bbox[2], y2: bbox[3] });
           }
         }
@@ -96,6 +151,17 @@ function isSingleCharToken(s) {
 
 function isShortWord(s) {
   return s.length >= 1 && s.length <= 20 && /[A-Za-z]/.test(s);
+}
+
+// A checkbox option is one word ("Owned", "Rented", "M"). A token carrying a
+// space inside it is a label phrase the PDF happened to draw as a single text
+// item — "Residence Status", "Marital Status" — and mistaking one for an
+// option swallows the whole row: the label joins the option run, the run then
+// has no label in front of it, and the row is dropped without producing any
+// field at all. (mergeIntoWords splits on drawing gaps, not on spaces, so
+// whether a label arrives as one token or several is up to the PDF's author.)
+function isOptionToken(s) {
+  return isShortWord(s) && s.indexOf(' ') === -1;
 }
 
 // Some PDFs draw a glyph twice at (near-)identical coordinates — e.g. a
@@ -150,7 +216,7 @@ function segmentLine(words, gaps) {
       continue;
     }
     const s0 = words[i].str.trim();
-    if (isShortWord(s0)) {
+    if (isOptionToken(s0)) {
       // Real option sets are shape-consistent — all single letters (M F T)
       // or all real words (Self owned / Family / Rented) — never a mix.
       // Without this, a short label immediately preceding an option run at
@@ -164,7 +230,7 @@ function segmentLine(words, gaps) {
         // option words — stop before absorbing an unrelated field's cells.
         if (combRunLengthAt(words, gaps, j) >= MIN_COMB_RUN) break;
         const sj = words[j].str.trim();
-        if (!isShortWord(sj) || gaps[j] <= LABEL_GAP_MAX || gaps[j] > OPTION_GAP_MAX) break;
+        if (!isOptionToken(sj) || gaps[j] <= LABEL_GAP_MAX || gaps[j] > OPTION_GAP_MAX) break;
         if (/^[A-Za-z]$/.test(sj) !== firstIsSingleLetter) break;
         j++;
       }
@@ -181,6 +247,90 @@ function segmentLine(words, gaps) {
     i = j;
   }
   return segments;
+}
+
+// Text printed inside a placeholder box, and the words that name a place to
+// sign. A signature box gets a scratch-pad in the portal's fill UI; a photo
+// box gets a file upload. Both end up as fieldType 'image' — imageKind is
+// what tells the UI (and the filler's aspect handling) which one it is.
+const PHOTO_TEXT = /photo|photograph|passport\s*size|affix|paste/i;
+const SIGNATURE_TEXT = /signature|sign\s*here|thumb\s*impression|specimen/i;
+
+// Label form of the same idea, matched against a field label on its own line
+// ("Signature of Applicant", "Left Thumb Impression"). Deliberately stricter
+// than SIGNATURE_TEXT — "sign" as a bare word only, so "Design of premises"
+// or "Assign" can't drag an unrelated row into being a signature pad.
+const SIGNATURE_LABEL = /\bsignature\b|\bsign\b|thumb\s*impression/i;
+
+function classifyImageRegion(insideText, width, height) {
+  if (SIGNATURE_TEXT.test(insideText || '')) return 'signature';
+  if (PHOTO_TEXT.test(insideText || '')) return 'photo';
+  // No instructional text inside the box — fall back to its shape.
+  return height > 0 && width / height > 1.8 ? 'signature' : 'photo';
+}
+
+// A field label the portal shows a human next to its input. Derived from the
+// form's own printed words, so a generically-discovered field is still
+// recognizable ("Name of Employer") rather than a raw slug.
+function prettyLabel(text) {
+  const t = (text || '').replace(/\s+/g, ' ').replace(/[:\-/]+$/, '').trim();
+  if (!t) return null;
+  return t.length <= 60 ? t : t.slice(0, 57).trim() + '...';
+}
+
+// The next line ABOVE this one (page.lines runs top-to-bottom), used to cap
+// how tall a signature box may grow without covering the row above it.
+function lineAboveY(page, line) {
+  const idx = page.lines.indexOf(line);
+  if (idx <= 0) return null;
+  return page.lines[idx - 1].y;
+}
+
+// Typical text size on the page, used to tell body rows from headings.
+function medianFontHeight(page) {
+  const heights = [];
+  for (const line of page.lines) for (const item of line.items) {
+    if (item.height > 0) heights.push(item.height);
+  }
+  if (heights.length === 0) return null;
+  heights.sort((a, b) => a - b);
+  return heights[Math.floor(heights.length / 2)];
+}
+
+function lineFontHeight(line) {
+  return line.items.reduce((max, it) => Math.max(max, it.height || 0), 0);
+}
+
+// A form's title and its section banners ("PERSONAL LOAN APPLICATION FORM",
+// "DETAILS OF THE APPLICANT") are set noticeably larger than the rows they
+// introduce. They are labels by every structural test — a phrase with blank
+// space after it — so without this they each became a field nobody can fill
+// in, sitting across the middle of the heading.
+const HEADING_FONT_RATIO = 1.35;
+
+const SIGNATURE_BOX_HEIGHT = 34; // pt — comfortable room for a scrawled name
+
+// Indian bank forms print "Signature of Applicant" UNDER the space meant for
+// the signature, so the writable area is above the label, not beside it.
+function signatureBoxAboveLabel(page, line, words, text) {
+  const x1 = words[0].x;
+  const x2 = words[words.length - 1].x + words[words.length - 1].width;
+  const width = Math.max(90, x2 - x1);
+  const labelTop = line.y + (words[0].height || 10);
+  const aboveY = lineAboveY(page, line);
+  const room = aboveY != null ? aboveY - labelTop - 2 : SIGNATURE_BOX_HEIGHT;
+  const height = Math.min(SIGNATURE_BOX_HEIGHT, room);
+  if (height < 10) return null; // packed against the row above — no room to sign
+  return {
+    page: page.pageNum,
+    xPct: (x1 / page.width) * 100,
+    yPct: ((page.height - (labelTop + height)) / page.height) * 100,
+    widthPct: (Math.min(width, page.width - x1) / page.width) * 100,
+    heightPct: (height / page.height) * 100,
+    fieldType: 'image',
+    imageKind: 'signature',
+    label: prettyLabel(text) || 'Signature',
+  };
 }
 
 function labelText(seg) {
@@ -274,6 +424,25 @@ export async function anchorFieldsGenerically(fileBuffer) {
     const hasCoCol = pageHasCoApplicantColumn(page);
     const dashedRegions = dashedByPage[page.pageNum]?.regions || [];
 
+    // Instruction text printed INSIDE a photo/signature frame ("PASTE LATEST
+    // / PASSPORT SIZE / PHOTOGRAPH", set small and tight) is not part of the
+    // form's row rhythm, but it does sit between the real rows on the y axis.
+    // Left in, it makes the gap to "the next line below" a couple of points
+    // on the rows beside the frame, and makeBox then caps those fields to a
+    // sliver of their true height — the mobile-number row came out 7pt tall,
+    // forcing 6pt type into a field printed for 10. Strip it once, here, so
+    // every downstream measurement sees the form's actual rows.
+    if (dashedRegions.length > 0) {
+      page.lines = page.lines
+        .map((line) => {
+          const items = line.items.filter((it) => !dashedRegions.some((r) => itemInRegion(it, r, page.height)));
+          return items.length === line.items.length ? line : { ...line, items, text: joinLineText(items) };
+        })
+        .filter((line) => line.items.length > 0);
+    }
+
+    const bodyFontHeight = medianFontHeight(page);
+
     // Emit one honest "paste a photo/signature here" field per dashed box,
     // named from whatever instructional text sits inside it when that
     // text is short enough to make a sane key, else a positional fallback.
@@ -288,7 +457,15 @@ export async function anchorFieldsGenerically(fileBuffer) {
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
-      const base = insideText && insideText.length <= 60 ? slugify(insideText) : `image_placeholder_${idx + 1}`;
+      const kind = classifyImageRegion(insideText, region.x2 - region.x1, region.y2 - region.y1);
+      // Name it for what it is. The text inside these boxes is an instruction
+      // ("PASTE LATEST PASSPORT SIZE COLOUR PHOTOGRAPH"), which makes a
+      // terrible field key; only fall back to it when the box says something
+      // the shape/keyword test didn't already explain.
+      const named = kind === 'signature' ? SIGNATURE_TEXT.test(insideText) : PHOTO_TEXT.test(insideText);
+      const base = named || !insideText || insideText.length > 60
+        ? `${kind === 'signature' ? 'signature' : 'photograph'}`
+        : slugify(insideText);
       const key = uniqueKey(usedKeys, base, { rightOfColumn: region.x1 > page.width / 2 });
       fields[key] = {
         page: page.pageNum,
@@ -297,6 +474,8 @@ export async function anchorFieldsGenerically(fileBuffer) {
         widthPct: ((region.x2 - region.x1) / page.width) * 100,
         heightPct: ((region.y2 - region.y1) / page.height) * 100,
         fieldType: 'image',
+        imageKind: kind,
+        label: prettyLabel(insideText) || (kind === 'signature' ? 'Signature' : 'Photograph'),
       };
     });
 
@@ -306,6 +485,9 @@ export async function anchorFieldsGenerically(fileBuffer) {
       // this, segmentLine() dutifully chops every sentence in the terms
       // and conditions into "label" runs at each punctuation-sized gap.
       if (classifyLine(line.text) !== 'label') continue;
+
+      // Titles and section banners, not fields — see HEADING_FONT_RATIO.
+      if (bodyFontHeight && lineFontHeight(line) > bodyFontHeight * HEADING_FONT_RATIO) continue;
 
       // Text sitting inside a dashed photo/signature box is instructional
       // ("PASTE LATEST PASSPORT SIZE..."), not a field label — and without
@@ -364,6 +546,20 @@ export async function anchorFieldsGenerically(fileBuffer) {
         openLabelText = text;
         const labelEndX = trimmedWords[trimmedWords.length - 1].x + trimmedWords[trimmedWords.length - 1].width;
 
+        // "Signature of Applicant" / "Left Thumb Impression" names a space to
+        // SIGN, not a value to type — and the label is printed under that
+        // space, so the writable area is above it. Without this the generic
+        // pass gave every signature line a text field to its right, which is
+        // both useless and sits where nobody signs.
+        if (SIGNATURE_LABEL.test(text)) {
+          const sigBox = signatureBoxAboveLabel(page, line, trimmedWords, text);
+          if (sigBox) {
+            fields[uniqueKey(usedKeys, slugify(text), { rightOfColumn: labelEndX > page.width / 2 })] = sigBox;
+            i++;
+            continue;
+          }
+        }
+
         const next = segments[i + 1];
         if (next && next.type === 'comb') {
           placeValueSegment(text, next, i);
@@ -403,7 +599,7 @@ export async function anchorFieldsGenerically(fileBuffer) {
           });
           if (run) applyCellRun(box, run, page);
           const key = uniqueKey(usedKeys, slugify(text), { rightOfColumn: startX > page.width / 2 });
-          fields[key] = box;
+          fields[key] = { ...box, label: prettyLabel(text) };
         }
         i++;
       }
@@ -423,7 +619,7 @@ export async function anchorFieldsGenerically(fileBuffer) {
               pageWidth: page.width,
             });
             if (run) applyCellRun(box, run, page);
-            fields[uniqueKey(usedKeys, base, { rightOfColumn })] = box;
+            fields[uniqueKey(usedKeys, base, { rightOfColumn })] = { ...box, label: prettyLabel(label) };
           }
           return;
         }
@@ -433,7 +629,9 @@ export async function anchorFieldsGenerically(fileBuffer) {
         // handling already bakes as a real PDFCheckBox.
         const groupKey = uniqueKey(usedKeys, base, { rightOfColumn });
         for (const w of seg.words) {
-          const size = Math.max(w.width, w.height, 8);
+          // Square, sized to the text — not to the option WORD's width, which
+          // made a "Parental" checkbox three times taller than a "M" one.
+          const size = Math.max(w.height, 8);
           const optKey = `${groupKey}__${slugify(w.str)}`;
           fields[optKey] = {
             page: page.pageNum,
@@ -444,6 +642,8 @@ export async function anchorFieldsGenerically(fileBuffer) {
             fontSize: 9,
             fieldType: 'checkbox',
             optionValue: w.str.trim(),
+            label: prettyLabel(label),
+            optionLabel: w.str.trim(),
           };
         }
       }

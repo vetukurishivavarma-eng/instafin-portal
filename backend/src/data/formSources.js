@@ -113,3 +113,38 @@ export const FORM_FIELD_KEYS = [
   'employer_name',
   'application_date',
 ];
+
+// Human labels for the canonical keys, shown next to each input in the
+// portal's fill UI. Mirrors src/data/formFieldKeys.js on the frontend;
+// generically-discovered fields carry their own label from the form's own
+// printed text instead, so this map only needs the canonical set.
+export const FORM_FIELD_LABELS = {
+  full_name: 'Full Name',
+  first_name: 'First Name',
+  middle_name: 'Middle Name',
+  ckyc_number: 'CKYC Number',
+  dob: 'Date of Birth',
+  gender: 'Gender',
+  aadhaar_number: 'Aadhaar Number',
+  pan_number: 'PAN Number',
+  address: 'Address',
+  flat_door_block: 'Flat / Door / Block No.',
+  premises_name: 'Name of Premises / Building',
+  road_street: 'Road / Street',
+  area_locality: 'Area / Locality',
+  town_city_village: 'Town / City / Village',
+  district: 'District',
+  state: 'State / Union Territory',
+  pin_code: 'PIN Code',
+  mobile: 'Mobile Number',
+  email: 'Email',
+  loan_amount: 'Loan Amount',
+  loan_type: 'Loan Type',
+  gross_income: 'Gross Income',
+  monthly_income: 'Monthly Income',
+  rental_income: 'Rental Income',
+  co_applicant_name: 'Co-applicant Name',
+  co_applicant_dob: 'Co-applicant Date of Birth',
+  employer_name: 'Employer / Business Name',
+  application_date: 'Application Date',
+};

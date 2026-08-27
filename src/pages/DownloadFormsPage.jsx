@@ -365,7 +365,7 @@ export default function DownloadFormsPage() {
   };
 
   const handleCalibrateForm = async (form) => {
-    if (!window.confirm(`Run AI calibration on \"${form.form_name}\"?\n\nGemini Vision will inspect the blank form once and remember where each field (name, DOB, PAN, address, ...) sits, so every future customer form can be auto-filled instantly.`)) return;
+    if (!window.confirm(`Make "${form.form_name}" fillable?\n\nEvery writable area on the blank form is detected once — text boxes, tick-box options, and photo/signature frames — and baked into the PDF as real form fields. Staff then get an input for each of them, and the fields the portal already knows (name, DOB, PAN, address, ...) fill themselves from the lead.`)) return;
     setCalibratingId(form.id);
     setFormsError('');
     setSuccess('');
@@ -1948,7 +1948,7 @@ export default function DownloadFormsPage() {
                                 ? 'text-indigo-600 hover:bg-indigo-50'
                                 : 'text-amber-600 bg-amber-50 hover:bg-amber-100'
                             }`}
-                            title="Detect field positions with AI — enables auto-filling this form from customer documents"
+                            title="Detect every field on this form and bake them in — text, tick boxes, photo and signature areas"
                           >
                             {calibratingId === form.id ? (
                               <span className="flex items-center gap-1">

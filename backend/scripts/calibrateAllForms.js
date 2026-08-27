@@ -1,19 +1,24 @@
 /**
- * Calibrate AI field positions for every active bank application form.
+ * Make every active bank application form fillable, in bulk.
  *
- * This is the one-time setup that enables auto-filling bank PDFs from
- * customer documents. It uses Gemini Vision to detect where each field
- * (name, DOB, PAN, Aadhaar, address, income, ...) sits on each blank form
- * and stores the coordinate map on the form row.
+ * For each form this runs the same plan-and-bake the portal's Calibrate button
+ * runs (services/formFieldPlan.js): find every writable area on the blank form
+ * — text boxes, tick-box options, photo frames, signature strips — bake them
+ * into the stored PDF as real AcroForm fields, and save the map on the row so
+ * the portal can render an input per field and auto-fill the ones it knows.
  *
  * Usage:
- *   GEMINI_API_KEY=... node scripts/calibrateAllForms.js
- *   GEMINI_API_KEY=... node scripts/calibrateAllForms.js --force   # re-calibrate everything
- *   GEMINI_API_KEY=... node scripts/calibrateAllForms.js --bank="Axis Bank"
+ *   node scripts/calibrateAllForms.js
+ *   node scripts/calibrateAllForms.js --force            # re-do every form
+ *   node scripts/calibrateAllForms.js --bank="Axis Bank"
+ *
+ * GEMINI_API_KEY is only needed for forms that are flat scans with no text
+ * layer; everything else is calibrated deterministically from the PDF itself.
  */
 import { supabase } from '../src/lib/supabase.js';
-import { calibrateFormFields } from '../src/services/formCalibrator.js';
-import { loadFormPdf } from '../src/services/formStorage.js';
+import { planFormFields } from '../src/services/formFieldPlan.js';
+import { bakeAcroFormFields } from '../src/services/formAcroBaker.js';
+import { loadFormPdf, saveFormPdf } from '../src/services/formStorage.js';
 
 // ── parse args ──
 const args = process.argv.slice(2);
@@ -22,12 +27,13 @@ const bankArg = args.find(a => a.startsWith('--bank='));
 const bankFilter = bankArg ? bankArg.split('=')[1] : null;
 
 async function main() {
+  // A form with a text layer is calibrated deterministically and needs no key
+  // at all. Only a fully scanned form — a picture of a form, nothing on it
+  // machine-readable — falls back to vision, so a missing key is a warning
+  // about those forms rather than a reason to refuse the whole run.
   if (!process.env.GEMINI_API_KEY) {
-    console.error('❌ GEMINI_API_KEY is not set.');
-    console.error('   Set it and re-run, e.g.:');
-    console.error('   GEMINI_API_KEY=your_key_here node scripts/calibrateAllForms.js');
-    console.error('   (The key is the same one already used for document analysis.)');
-    process.exit(1);
+    console.warn('⚠️  GEMINI_API_KEY is not set. Forms with a text layer will still be calibrated;');
+    console.warn('   fully scanned forms may find fewer fields, or none.\n');
   }
 
   console.log('Fetching active application forms...\n');
@@ -72,8 +78,17 @@ async function main() {
     try {
       console.log(`🤖 Calibrating: ${label} ...`);
       const fileBuffer = await loadFormPdf(form);
-      const fieldMap = await calibrateFormFields(fileBuffer);
-      const fieldCount = Object.keys(fieldMap.fields || {}).length;
+      const fieldMap = await planFormFields(fileBuffer);
+
+      // Bake the plan into the stored PDF, exactly as POST /:id/calibrate
+      // does. Without this the script left forms with a field map but a flat,
+      // un-fillable file — filling still worked via the coordinate overlay,
+      // but nobody could type into the form itself.
+      const { buffer: bakedBuffer, createdCount } = await bakeAcroFormFields({
+        fileBuffer,
+        fieldMap: fieldMap.fields || {},
+      });
+      await saveFormPdf(form, bakedBuffer);
 
       const { error: updateError } = await supabase
         .from('application_forms')
@@ -82,7 +97,8 @@ async function main() {
 
       if (updateError) throw updateError;
 
-      console.log(`   ✅ Calibrated — ${fieldCount} field(s): ${form.form_name}`);
+      const { text, checkbox, photo, signature } = fieldMap.counts;
+      console.log(`   ✅ ${createdCount} fillable field(s) — ${text} text, ${checkbox} checkbox, ${photo} photo, ${signature} signature: ${form.form_name}`);
       calibrated++;
     } catch (err) {
       console.error(`   ❌ Failed: ${form.form_name} — ${err.message}`);
