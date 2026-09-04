@@ -147,6 +147,26 @@ Duplicates are a separate `status = 'duplicate'`, not a failure — two cases:
   session; Meta could break or block it without notice. It's the correct
   choice for a *free* POC, not for the long-term production channel — that's
   the entire reason §7 exists.
+- **Memory: this is the real cost of "free."** `whatsapp-web.js` runs a
+  genuine headless Chromium session via Puppeteer. On Render's free tier
+  (512MB RAM total, shared with the Node process itself), a default launch
+  was enough to OOM-kill the whole service (observed 2026-09-04). The
+  adapter now launches Chromium with a reduced-footprint flag set
+  (`--single-process`, `--no-zygote`, `--disable-dev-shm-usage`, disabled
+  background features — see `adapters/whatsappWebAdapter.js`), which helps
+  but is not guaranteed to fit: a real WhatsApp Web session commonly needs
+  300-500MB on its own. If it still OOMs after that change, the real options
+  are, in order of effort:
+  1. **Upgrade the Render plan for this service** to at least 1GB RAM. Costs
+     money, but nothing else in this design does — it's paying for compute,
+     not for a WhatsApp API.
+  2. **Run the WhatsApp-web adapter somewhere with more free RAM** than
+     Render's free tier gives (a spare machine, a more generous free tier
+     elsewhere) as a small bridge process that calls this backend's intake
+     logic — the `InboundAdapter` boundary (§2) was built exactly so the
+     transport can move independently of where `intakeService.js` runs.
+  3. **Skip ahead to the Cloud API (§10).** It has no Chromium to run at
+     all — the tradeoff is trading free-but-heavy for cheap-but-official.
 
 ## 7. Folder structure
 
