@@ -33,7 +33,28 @@ export class WhatsAppWebAdapter extends InboundAdapter {
       authStrategy: new LocalAuth({ dataPath: sessionPath }),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          // Trims Chromium's memory footprint for low-RAM hosts (Render's
+          // free tier is 512MB total, shared with Node itself) - this alone
+          // does not guarantee it fits; see docs/WHATSAPP_INTAKE.md.
+          '--disable-dev-shm-usage', // /dev/shm is tiny on most containers; use disk instead
+          '--disable-gpu',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-breakpad',
+          '--disable-component-update',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--mute-audio',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process', // one process instead of Chromium's usual multi-process model - saves RAM, costs some stability
+        ],
       },
     });
 
