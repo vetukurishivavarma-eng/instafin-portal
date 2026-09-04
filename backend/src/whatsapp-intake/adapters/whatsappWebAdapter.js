@@ -26,34 +26,46 @@ export class WhatsAppWebAdapter extends InboundAdapter {
   #client;
   #status = 'disconnected';
 
-  constructor({ sessionPath = '.wwebjs_auth' } = {}) {
+  /**
+   * @param {Object} [opts]
+   * @param {string} [opts.sessionPath]
+   * @param {boolean} [opts.lowMemory] - trims Chromium's footprint for
+   *   low-RAM hosts (Render's free tier is 512MB total, shared with Node
+   *   itself). Includes `--single-process`/`--no-zygote`, which save real
+   *   memory but trade away some of Chromium's normal process isolation and
+   *   have been observed producing terse, unhelpful crashes (a bare "r" as
+   *   the error message) more readily than a standard launch. Default true
+   *   to preserve the hosted behavior; the local runner
+   *   (scripts/run-whatsapp-intake-local.js) passes `false` since a spare
+   *   machine doesn't need to fight for every MB, trading a bit of memory
+   *   for a more stable session.
+   */
+  constructor({ sessionPath = '.wwebjs_auth', lowMemory = true } = {}) {
     super();
+    const baseArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
+    const lowMemoryArgs = [
+      '--disable-dev-shm-usage', // /dev/shm is tiny on most containers; use disk instead
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-breakpad',
+      '--disable-component-update',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process', // one process instead of Chromium's usual multi-process model - saves RAM, costs some stability
+    ];
+
     this.#client = new Client({
       authStrategy: new LocalAuth({ dataPath: sessionPath }),
       puppeteer: {
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          // Trims Chromium's memory footprint for low-RAM hosts (Render's
-          // free tier is 512MB total, shared with Node itself) - this alone
-          // does not guarantee it fits; see docs/WHATSAPP_INTAKE.md.
-          '--disable-dev-shm-usage', // /dev/shm is tiny on most containers; use disk instead
-          '--disable-gpu',
-          '--disable-extensions',
-          '--disable-background-networking',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-breakpad',
-          '--disable-component-update',
-          '--disable-default-apps',
-          '--disable-sync',
-          '--metrics-recording-only',
-          '--mute-audio',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process', // one process instead of Chromium's usual multi-process model - saves RAM, costs some stability
-        ],
+        args: lowMemory ? [...baseArgs, ...lowMemoryArgs] : baseArgs,
       },
     });
 

@@ -40,7 +40,11 @@ import { supabase } from '../src/lib/supabase.js';
 import { WhatsAppWebAdapter } from '../src/whatsapp-intake/adapters/whatsappWebAdapter.js';
 import { processInboundDocument } from '../src/whatsapp-intake/intakeService.js';
 
-const adapter = new WhatsAppWebAdapter();
+// lowMemory: false — a spare machine doesn't need to fight Render's 512MB
+// ceiling, and the memory-saving flags (--single-process especially) have
+// been observed producing terse, unhelpful crashes more readily than a
+// standard Chromium launch.
+const adapter = new WhatsAppWebAdapter({ lowMemory: false });
 
 adapter.on('qr', async (rawQr) => {
   console.log('\n[WHATSAPP-INTAKE] Scan this QR with the business WhatsApp phone (Linked Devices -> Link a Device):\n');
@@ -60,7 +64,9 @@ adapter.on('disconnected', (reason) => {
 });
 
 adapter.on('error', (err) => {
-  console.error('[WHATSAPP-INTAKE] Adapter error:', err.message);
+  // Full stack, not just .message — whatsapp-web.js/Puppeteer errors are
+  // sometimes a bare one-letter message with the real detail only in the stack.
+  console.error('[WHATSAPP-INTAKE] Adapter error:', err?.stack || err);
 });
 
 adapter.on('document', async (message) => {

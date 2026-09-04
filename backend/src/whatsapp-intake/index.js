@@ -51,7 +51,7 @@ export async function startWhatsAppIntake() {
 
   adapter.on('error', (err) => {
     lastError = err.message;
-    console.error('[WHATSAPP-INTAKE] Adapter error:', err.message);
+    console.error('[WHATSAPP-INTAKE] Adapter error:', err?.stack || err);
   });
 
   adapter.on('document', async (message) => {
