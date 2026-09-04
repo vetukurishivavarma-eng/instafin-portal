@@ -11,5 +11,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.js'],
+    // intakeService defaults to Supabase Storage (correct for real use, see
+    // its comment on why) — tests use the local-disk path instead so they
+    // don't need a storage mock, matching the fake Supabase client's scope.
+    env: { WHATSAPP_INTAKE_STORAGE: 'local' },
   },
 });

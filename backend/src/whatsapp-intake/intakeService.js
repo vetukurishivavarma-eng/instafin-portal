@@ -132,10 +132,17 @@ export async function processInboundDocument(message, { supabase }) {
     return { status: 'duplicate', message: 'Identical file already uploaded for this document type', leadId: lead.id, documentId: match.documentId };
   }
 
-  // 7. Persist the file (same local/dev vs Supabase Storage/prod split as
-  // the manual checklist upload in routes/checklistStatus.js).
+  // 7. Persist the file. Unlike the manual checklist upload (routes/
+  // checklistStatus.js), this can NOT key off NODE_ENV === 'production':
+  // the whole point of scripts/run-whatsapp-intake-local.js is running the
+  // intake process on a different machine than the one serving the portal
+  // (Render). "Save locally" there means the customer's PC, invisible to
+  // the deployed API's own local disk — the portal's file-download route
+  // would 404/error trying to find it (observed 2026-09-05). Always use
+  // Supabase Storage so the file is visible regardless of where intake ran,
+  // unless explicitly opted out for same-machine local dev.
   let storedFilePath;
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.WHATSAPP_INTAKE_STORAGE !== 'local') {
     const storagePath = `${lead.id}/${uuidv4()}-${message.originalFilename}`;
     const { error: storageError } = await supabase.storage
       .from('lead-documents')

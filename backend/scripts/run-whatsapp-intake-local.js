@@ -12,10 +12,24 @@
  * uploads processed on Render. Only the WhatsApp session itself moves; the
  * portal (frontend + API) stays deployed on Render as-is.
  *
+ * Files are always uploaded to Supabase Storage (never this machine's local
+ * disk) regardless of NODE_ENV — this process runs on a different machine
+ * than the deployed portal, so "save locally" would mean a file only this
+ * PC can see, invisible to the API that serves downloads. (Override with
+ * WHATSAPP_INTAKE_STORAGE=local only if you're running the full backend,
+ * intake included, on one machine for local dev.)
+ *
  * Usage:
  *   1. Optionally create backend/.env with:
- *        SUPABASE_SERVICE_ROLE_KEY=...   (or leave unset to use the anon-key
- *                                          fallback baked into lib/supabase.js)
+ *        SUPABASE_SERVICE_ROLE_KEY=...   (the Supabase API service_role key,
+ *                                          from Project Settings -> API -
+ *                                          NOT the database password. Needed
+ *                                          if the anon-key fallback in
+ *                                          lib/supabase.js can't write to
+ *                                          the "lead-documents" Storage
+ *                                          bucket under its policies; the
+ *                                          anon key is enough for everything
+ *                                          else this script does.)
  *        SMTP_HOST / SMTP_USER / SMTP_PASS   (optional - for the "notify the
  *                                          assigned executive" email step;
  *                                          skipped gracefully if unset)
