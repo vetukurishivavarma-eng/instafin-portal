@@ -40,8 +40,19 @@ SET lead_code = 'L' || numbered.n
 FROM numbered
 WHERE leads.id = numbered.id;
 
--- Keep the sequence ahead of any backfilled values.
-SELECT setval('lead_code_seq', GREATEST(10001, (SELECT COALESCE(MAX(substring(lead_code from 2)::int), 10000) FROM leads) + 1));
+-- Keep the sequence ahead of any backfilled values. Split into a DO block
+-- (short lines) rather than one long nested SELECT — the single-line form
+-- has been observed getting mangled when pasted into a web SQL editor.
+DO $$
+DECLARE
+  max_num INTEGER;
+BEGIN
+  SELECT COALESCE(MAX(substring(lead_code from 2)::int), 10000)
+    INTO max_num
+    FROM leads;
+
+  PERFORM setval('lead_code_seq', GREATEST(10001, max_num + 1));
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS leads_lead_code_key ON leads (lead_code);
 
