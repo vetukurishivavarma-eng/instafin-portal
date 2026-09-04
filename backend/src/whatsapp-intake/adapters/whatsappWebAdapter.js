@@ -67,23 +67,16 @@ export class WhatsAppWebAdapter extends InboundAdapter {
         headless: true,
         args: lowMemory ? [...baseArgs, ...lowMemoryArgs] : baseArgs,
       },
-      // whatsapp-web.js 1.34.7's bundled/local WhatsApp Web version can drift
-      // out of sync with what WhatsApp's servers currently serve - when it
-      // does, the library's injected in-page script for downloading media
-      // breaks against the live client JS (observed: msg.downloadMedia()
-      // throwing a bare "r" from inside page.evaluate, 2026-09-05, while
-      // messaging and QR-linking kept working fine). Pinning to a
-      // community-maintained, actively-updated known-good version sidesteps
-      // this - see wppconnect-team/wa-version, an open-source mirror built
-      // specifically because WhatsApp Web updates regularly break automation
-      // tools like this one. strict:false means it still falls back to the
-      // library's own default behavior if this particular version can't be
-      // fetched, rather than hard-failing.
-      webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html',
-        strict: false,
-      },
+      // Tried pinning webVersionCache to a remote community version mirror
+      // here (wppconnect-team/wa-version) to fix a downloadMedia() crash —
+      // reverted 2026-09-05 because it broke QR generation itself, which is
+      // strictly worse (QR/connect was confirmed working before this).
+      // Fetching a WA Web version at startup adds a new failure mode
+      // (network reachability, stale/404'd version files) that the default
+      // LocalWebCache doesn't have. If the downloadMedia crash recurs,
+      // investigate more surgically (e.g. retry-on-failure around
+      // msg.downloadMedia(), or a library version bump) rather than
+      // reaching for this again without a way to verify it end-to-end.
     });
 
     this.#client.on('qr', (qr) => {
