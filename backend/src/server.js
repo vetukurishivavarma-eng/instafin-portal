@@ -16,7 +16,9 @@ import archivesRouter from './routes/archives.js';
 import cibilRouter from './routes/cibil.js';
 import hurdlesRouter from './routes/hurdles.js';
 import eligibilityFormulasRouter from './routes/eligibilityFormulas.js';
+import whatsappIntakeRouter from './routes/whatsappIntake.js';
 import { hurdleGuard } from './middleware/hurdleGuard.js';
+import { startWhatsAppIntake } from './whatsapp-intake/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,7 +30,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '50mb' }));
+// `verify` stashes the raw request bytes on req.rawBody — needed by the
+// WhatsApp Cloud API webhook to check Meta's X-Hub-Signature-256 against
+// the exact bytes it sent (a re-serialized JSON body would not match).
+app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Daily Hurdle access guard — blocks executives with unresolved overdue tasks
@@ -53,6 +58,7 @@ app.use('/api/archives', archivesRouter);
 app.use('/api/cibil', cibilRouter);
 app.use('/api/hurdles', hurdlesRouter);
 app.use('/api/eligibility-formulas', eligibilityFormulasRouter);
+app.use('/api/whatsapp-intake', whatsappIntakeRouter);
 
 // Health check
 app.get('/', (req, res) => {
@@ -61,4 +67,5 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  startWhatsAppIntake().catch((err) => console.error('[WHATSAPP-INTAKE] Startup failed:', err));
 });

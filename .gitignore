@@ -5,3 +5,5 @@ dist/
 .DS_Store
 uploads/
 nul
+backend/.wwebjs_auth/
+backend/.wwebjs_cache/

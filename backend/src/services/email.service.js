@@ -97,6 +97,24 @@ export async function testEmailConnection({ email }) {
 }
 
 /**
+ * Generic email send, for callers that build their own HTML (e.g. WhatsApp
+ * intake notifications) instead of using one of the templated senders below.
+ */
+export async function sendEmail({ to, subject, html }) {
+  if (!SMTP_USER || !SMTP_PASS) {
+    console.warn('[EMAIL] SMTP not configured, skipping send:', subject);
+    return { success: false, error: 'SMTP not configured' };
+  }
+  try {
+    const info = await transporter.sendMail({ from: `"${APP_NAME}" <${FROM_EMAIL}>`, to, subject, html });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error(`[EMAIL] Failed to send "${subject}" to ${to}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Send approval notification email to an executive
  */
 export async function sendApprovalEmail({ name, email, password }) {
