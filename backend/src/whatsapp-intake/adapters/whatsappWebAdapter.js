@@ -1,5 +1,6 @@
 import pkg from 'whatsapp-web.js';
 import { InboundAdapter } from '../inboundAdapter.js';
+import { decryptMediaDirect } from './mediaDecrypt.js';
 
 const { Client, LocalAuth } = pkg;
 
@@ -21,6 +22,14 @@ const { Client, LocalAuth } = pkg;
  *  - Photos sent via the "Photo" picker lose their original filename (WhatsApp
  *    recompresses and renames them); customers must send documents via the
  *    paperclip's "Document" option to preserve "<LeadID>_<DocName>.<ext>".
+ *  - `Message.downloadMedia()` reaches into WhatsApp Web's internal JS via
+ *    page.evaluate() and has broken repeatedly here against the live
+ *    WhatsApp Web build (a bare "r" thrown from inside WhatsApp's own
+ *    minified code, 2026-09-04/05, group and individual chats both). See
+ *    `#downloadMedia()` below: it tries the library's method first, then
+ *    falls back to `mediaDecrypt.js`, which fetches and decrypts the media
+ *    directly from WhatsApp's CDN using the message's own keys — the same
+ *    fix already proven in this account's whatsapp-expense-cloud project.
  */
 export class WhatsAppWebAdapter extends InboundAdapter {
   #client;
@@ -126,8 +135,8 @@ export class WhatsAppWebAdapter extends InboundAdapter {
       const providerMessageId = msg.id?._serialized || `${msg.id?.id || 'unknown'}-${msg.timestamp}`;
       const senderNumber = (msg.from || '').replace('@c.us', '');
 
-      const media = await msg.downloadMedia();
-      if (!media || !media.data) {
+      const media = await this.#downloadMedia(msg);
+      if (!media) {
         this.emit('error', new Error(`Failed to download media for message ${msg.id?.id ?? '(unknown)'}`));
         return;
       }
@@ -149,7 +158,7 @@ export class WhatsAppWebAdapter extends InboundAdapter {
         senderNumber,
         originalFilename: media.filename,
         mimeType: media.mimetype,
-        buffer: Buffer.from(media.data, 'base64'),
+        buffer: media.buffer,
         timestamp: new Date((msg.timestamp || Date.now() / 1000) * 1000),
       };
 
@@ -157,5 +166,28 @@ export class WhatsAppWebAdapter extends InboundAdapter {
     } catch (err) {
       this.emit('error', err);
     }
+  }
+
+  /**
+   * Tries whatsapp-web.js's own downloadMedia() first; on failure (its
+   * in-browser call into WhatsApp Web's internals has repeatedly broken
+   * here — see mediaDecrypt.js), falls back to fetching and decrypting the
+   * media directly from WhatsApp's CDN using the message's own keys, which
+   * doesn't depend on WhatsApp Web's internal module layout at all.
+   * @returns {Promise<{ buffer: Buffer, mimetype: string, filename: string|null }|null>}
+   */
+  async #downloadMedia(msg) {
+    try {
+      const media = await msg.downloadMedia();
+      if (media?.data) {
+        return { buffer: Buffer.from(media.data, 'base64'), mimetype: media.mimetype, filename: media.filename || null };
+      }
+    } catch (err) {
+      console.warn(`[WHATSAPP-INTAKE] downloadMedia() failed (${err.message}), falling back to direct decryption`);
+    }
+
+    const direct = await decryptMediaDirect(msg);
+    if (!direct) return null;
+    return { buffer: direct.data, mimetype: direct.mimetype, filename: direct.filename };
   }
 }
