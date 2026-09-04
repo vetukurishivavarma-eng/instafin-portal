@@ -1,5 +1,4 @@
 import pkg from 'whatsapp-web.js';
-import qrcode from 'qrcode';
 import { InboundAdapter } from '../inboundAdapter.js';
 
 const { Client, LocalAuth } = pkg;
@@ -58,14 +57,12 @@ export class WhatsAppWebAdapter extends InboundAdapter {
       },
     });
 
-    this.#client.on('qr', async (qr) => {
+    this.#client.on('qr', (qr) => {
       this.#status = 'connecting';
-      try {
-        const dataUrl = await qrcode.toDataURL(qr);
-        this.emit('qr', dataUrl);
-      } catch (err) {
-        this.emit('error', err);
-      }
+      // Emit the raw QR payload, not a rendered image - the web admin page
+      // renders it as a data URL, a terminal runner renders it as ASCII;
+      // rendering is a presentation concern, not the adapter's.
+      this.emit('qr', qr);
     });
 
     this.#client.on('ready', () => {

@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "smoke:archives": "node scripts/smoke-test-archives.js",
     "calibrate:forms": "node scripts/calibrateAllForms.js",
+    "whatsapp:local": "node --env-file-if-exists=.env scripts/run-whatsapp-intake-local.js",
     "test": "vitest run"
   },
   "dependencies": {

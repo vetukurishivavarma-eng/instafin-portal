@@ -9,7 +9,9 @@ import { EventEmitter } from 'events';
  *
  * Events:
  *   'ready'                          — adapter connected and listening
- *   'qr' (dataUrl)                   — (whatsapp-web only) scan this to link a device
+ *   'qr' (rawPayload)                 — (whatsapp-web only) the raw QR string to link a
+ *                                        device; render it (data URL for the web page,
+ *                                        ASCII for a terminal) at the point of use
  *   'disconnected' (reason)
  *   'document' (NormalizedInboundMessage)
  *   'error' (Error)

@@ -1,3 +1,4 @@
+import qrcode from 'qrcode';
 import { supabase } from '../lib/supabase.js';
 import { WhatsAppWebAdapter } from './adapters/whatsappWebAdapter.js';
 import { CloudApiAdapter } from './adapters/cloudApiAdapter.js';
@@ -28,9 +29,14 @@ export async function startWhatsAppIntake() {
 
   adapter = createAdapter();
 
-  adapter.on('qr', (dataUrl) => {
-    lastQrDataUrl = dataUrl;
-    console.log('[WHATSAPP-INTAKE] Scan the QR code at GET /api/whatsapp-intake/qr to link a device.');
+  adapter.on('qr', async (rawQr) => {
+    try {
+      lastQrDataUrl = await qrcode.toDataURL(rawQr);
+      console.log('[WHATSAPP-INTAKE] Scan the QR code at GET /api/whatsapp-intake/qr to link a device.');
+    } catch (err) {
+      lastError = err.message;
+      console.error('[WHATSAPP-INTAKE] Failed to render QR code:', err.message);
+    }
   });
 
   adapter.on('ready', () => {

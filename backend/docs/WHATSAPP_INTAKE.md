@@ -161,10 +161,10 @@ Duplicates are a separate `status = 'duplicate'`, not a failure — two cases:
      money, but nothing else in this design does — it's paying for compute,
      not for a WhatsApp API.
   2. **Run the WhatsApp-web adapter somewhere with more free RAM** than
-     Render's free tier gives (a spare machine, a more generous free tier
-     elsewhere) as a small bridge process that calls this backend's intake
-     logic — the `InboundAdapter` boundary (§2) was built exactly so the
-     transport can move independently of where `intakeService.js` runs.
+     Render's free tier gives — a spare machine works fine (**this is what
+     `npm run whatsapp:local` does, see §9b**), talking to the same Supabase
+     database directly. The `InboundAdapter` boundary (§2) is exactly what
+     makes this possible without touching `intakeService.js`.
   3. **Skip ahead to the Cloud API (§10).** It has no Chromium to run at
      all — the tradeoff is trading free-but-heavy for cheap-but-official.
 
@@ -174,6 +174,8 @@ Duplicates are a separate `status = 'duplicate'`, not a failure — two cases:
 backend/
 ├── migrations/
 │   └── 025_whatsapp_intake.sql
+├── scripts/
+│   └── run-whatsapp-intake-local.js  # runs the session on a spare machine instead of the host — §9b
 ├── src/
 │   ├── whatsapp-intake/
 │   │   ├── inboundAdapter.js        # provider-agnostic contract + NormalizedInboundMessage
@@ -250,25 +252,57 @@ sequenceDiagram
     end
 ```
 
-## 9. Setup (local POC)
+## 9. Setup
+
+Two ways to run the `whatsapp-web` provider, depending on where it's hosted.
+
+### 9a. Hosted alongside the API (needs real RAM)
 
 ```bash
 cd backend
 npm install                       # pulls whatsapp-web.js + puppeteer (bundled Chromium) — free, no API keys
-SUPABASE_SERVICE_ROLE_KEY=... node scripts/apply-migration.js migrations/025_whatsapp_intake.sql
-WHATSAPP_INTAKE_ENABLED=true npm run dev
+SUPABASE_SERVICE_ROLE_KEY=... node scripts/apply-migration.js 25
+WHATSAPP_INTAKE_ENABLED=true npm run dev    # or however the host starts the server
 ```
 
 On boot, the server logs a prompt to fetch `GET /api/whatsapp-intake/qr`
-(as an admin) and scan it with the business's WhatsApp phone
-(**Linked Devices → Link a Device**). The session persists to
-`backend/.wwebjs_auth/` (already gitignored alongside `uploads/`), so this is
-a one-time step. Env flags:
+(as an admin, via the portal's WhatsApp Intake page) and scan it with the
+business's WhatsApp phone (**Linked Devices → Link a Device**). The session
+persists to `backend/.wwebjs_auth/` (gitignored, alongside `uploads/`), so
+this is a one-time step.
+
+**Only viable with enough RAM.** A real WhatsApp Web session under Puppeteer
+commonly needs 300-500MB on its own. Confirmed OOM-killing Render's free
+512MB tier twice (2026-09-04, 2026-09-05) even after trimming Chromium's
+flags — see §6. If your host can't spare that, use 9b instead.
 
 | Var | Default | Purpose |
 |---|---|---|
 | `WHATSAPP_INTAKE_ENABLED` | `false` | Master on/off switch |
 | `WHATSAPP_INTAKE_PROVIDER` | `whatsapp-web` | `whatsapp-web` \| `whatsapp-cloud` |
+
+### 9b. Run the WhatsApp session locally instead (free, works on any host tier)
+
+Keeps the portal (frontend + API) deployed as normal; only the WhatsApp
+session itself runs on a spare machine with real RAM, talking to the same
+Supabase database — an upload processed locally shows up in the live portal
+immediately, same as any other upload.
+
+```bash
+cd backend
+npm install
+npm run whatsapp:local   # node --env-file-if-exists=.env scripts/run-whatsapp-intake-local.js
+```
+
+Renders the QR as ASCII directly in the terminal — scan it the same way.
+Works with zero setup (falls back to the anon key baked into
+`lib/supabase.js`); optionally create a `backend/.env` with
+`SUPABASE_SERVICE_ROLE_KEY` and `SMTP_*` vars for full permissions and
+executive-notification emails. Leave it running (PM2 or similar, same
+pattern as this project's other always-on local bots) whenever WhatsApp
+intake should be live. **Set `WHATSAPP_INTAKE_ENABLED=false` (or leave it
+unset) on the hosted backend when using this path** — only one process
+should hold the WhatsApp session at a time.
 
 ## 10. Migration plan: whatsapp-web.js → WhatsApp Business Cloud API
 
