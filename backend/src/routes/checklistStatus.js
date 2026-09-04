@@ -426,8 +426,8 @@ router.post('/:leadId/completion', authorize('admin', 'operations_head', 'execut
       return res.status(400).json({ error: 'leadId, documentId, and status are required' });
     }
 
-    if (!['complete', 'pending'].includes(status)) {
-      return res.status(400).json({ error: 'Status must be "complete" or "pending"' });
+    if (!['complete', 'pending', 'not_required'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be "complete", "pending", or "not_required"' });
     }
 
     // Upsert: insert or update the completion record

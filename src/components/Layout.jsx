@@ -1,7 +1,110 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
+
+// Everyday screens stay as direct top-level links; less-frequent ones fold
+// into a single "More" dropdown per role, so the nav bar no longer needs
+// horizontal scrolling as more screens (Audit Log, WhatsApp Intake, ...) get added.
+const NAV_LINKS = {
+  admin: {
+    primary: [
+      { to: '/admin/dashboard', label: 'Dashboard' },
+      { to: '/admin/leads', label: 'Leads' },
+      { to: '/admin/customer-login', label: 'Customer Login' },
+      { to: '/admin/credit-query', label: 'Processing & Query' },
+      { to: '/admin/sanction', label: 'Sanction' },
+      { to: '/admin/disburse', label: 'Disburse' },
+    ],
+    more: [
+      { to: '/admin/revenue', label: 'Revenue' },
+      { to: '/admin/executives', label: 'Executives' },
+      { to: '/admin/download-forms', label: 'Download Forms' },
+      { to: '/admin/lead-archives', label: 'Lead Archives' },
+      { to: '/admin/hurdles', label: 'Daily Hurdles' },
+      { to: '/admin/audit-log', label: 'Audit Log' },
+      { to: '/admin/whatsapp-intake', label: 'WhatsApp Intake' },
+    ],
+  },
+  executive: {
+    primary: [
+      { to: '/executive/dashboard', label: 'Dashboard' },
+      { to: '/executive/leads', label: 'Leads' },
+      { to: '/executive/customer-login', label: 'Customer Login' },
+      { to: '/executive/checklists', label: 'Checklist & Upload' },
+      { to: '/executive/credit-query', label: 'Processing & Query' },
+      { to: '/executive/sanction', label: 'Sanction' },
+      { to: '/executive/disburse', label: 'Disburse' },
+    ],
+    more: [
+      { to: '/executive/hurdles', label: 'Daily Hurdles' },
+    ],
+  },
+  operations_head: {
+    primary: [
+      { to: '/operations/dashboard', label: 'Dashboard' },
+      { to: '/operations/leads', label: 'Leads' },
+      { to: '/operations/customer-login', label: 'Customer Login' },
+      { to: '/operations/checklists', label: 'Checklist & Upload' },
+      { to: '/operations/credit-query', label: 'Processing & Query' },
+      { to: '/operations/sanction', label: 'Sanction' },
+      { to: '/operations/disburse', label: 'Disburse' },
+    ],
+    more: [
+      { to: '/operations/download-forms', label: 'Download Forms' },
+      { to: '/operations/lead-archives', label: 'Lead Archives' },
+      { to: '/operations/hurdles', label: 'Daily Hurdles' },
+      { to: '/operations/whatsapp-intake', label: 'WhatsApp Intake' },
+    ],
+  },
+};
+
+// Desktop-only "More" dropdown for the less-frequent links of the current role.
+function NavMoreMenu({ items, location }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const hasActive = items.some(item => item.to === location.pathname);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1 text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${hasActive ? 'text-blue-700 font-bold' : 'text-gray-600 hover:text-blue-700'}`}
+      >
+        More
+        <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-lg border border-gray-150 py-1.5 z-50 animate-fade-in">
+          {items.map(item => {
+            const isActive = location.pathname === item.to;
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setOpen(false)}
+                className={`block px-4 py-2 text-sm font-medium transition-colors ${isActive ? 'text-blue-700 font-bold bg-blue-50' : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Layout({ children }) {
   const { user, effectiveRole, logout, accessToken, isImpersonating } = useAuth();
@@ -247,56 +350,11 @@ export default function Layout({ children }) {
             </button>
 
             {/* Desktop navigation */}
-            <div className="hidden md:flex md:items-center gap-x-4 lg:gap-x-5">
-              {/* Admin Navigation */}
-              {effectiveRole === 'admin' && (
-                <>
-                  <Link to="/admin/dashboard" className={getLinkClass('/admin/dashboard')}>Dashboard</Link>
-                  <Link to="/admin/leads" className={getLinkClass('/admin/leads')}>Leads</Link>
-                  <Link to="/admin/customer-login" className={getLinkClass('/admin/customer-login')}>Customer Login</Link>
-                  <Link to="/admin/credit-query" className={getLinkClass('/admin/credit-query')}>Processing &amp; Query</Link>
-                  <Link to="/admin/sanction" className={getLinkClass('/admin/sanction')}>Sanction</Link>
-                  <Link to="/admin/disburse" className={getLinkClass('/admin/disburse')}>Disburse</Link>
-                  <Link to="/admin/revenue" className={getLinkClass('/admin/revenue')}>Revenue</Link>
-                  <Link to="/admin/executives" className={getLinkClass('/admin/executives')}>Executives</Link>
-                  <Link to="/admin/download-forms" className={getLinkClass('/admin/download-forms')}>Download Forms</Link>
-                  <Link to="/admin/lead-archives" className={getLinkClass('/admin/lead-archives')}>Lead Archives</Link>
-                  <Link to="/admin/hurdles" className={getLinkClass('/admin/hurdles')}>Daily Hurdles</Link>
-                  <Link to="/admin/audit-log" className={getLinkClass('/admin/audit-log')}>Audit Log</Link>
-                  <Link to="/admin/whatsapp-intake" className={getLinkClass('/admin/whatsapp-intake')}>WhatsApp Intake</Link>
-                </>
-              )}
-
-              {/* Executive Navigation */}
-              {effectiveRole === 'executive' && (
-                <>
-                  <Link to="/executive/dashboard" className={getLinkClass('/executive/dashboard')}>Dashboard</Link>
-                  <Link to="/executive/leads" className={getLinkClass('/executive/leads')}>Leads</Link>
-                  <Link to="/executive/customer-login" className={getLinkClass('/executive/customer-login')}>Customer Login</Link>
-                  <Link to="/executive/checklists" className={getLinkClass('/executive/checklists')}>Checklist & Upload</Link>
-                  <Link to="/executive/credit-query" className={getLinkClass('/executive/credit-query')}>Processing &amp; Query</Link>
-                  <Link to="/executive/sanction" className={getLinkClass('/executive/sanction')}>Sanction</Link>
-                  <Link to="/executive/disburse" className={getLinkClass('/executive/disburse')}>Disburse</Link>
-                  <Link to="/executive/hurdles" className={getLinkClass('/executive/hurdles')}>Daily Hurdles</Link>
-                </>
-              )}
-
-              {/* Operations Head Navigation - all features EXCEPT Revenue */}
-              {effectiveRole === 'operations_head' && (
-                <>
-                  <Link to="/operations/dashboard" className={getLinkClass('/operations/dashboard')}>Dashboard</Link>
-                  <Link to="/operations/leads" className={getLinkClass('/operations/leads')}>Leads</Link>
-                  <Link to="/operations/customer-login" className={getLinkClass('/operations/customer-login')}>Customer Login</Link>
-                  <Link to="/operations/checklists" className={getLinkClass('/operations/checklists')}>Checklist & Upload</Link>
-                  <Link to="/operations/credit-query" className={getLinkClass('/operations/credit-query')}>Processing &amp; Query</Link>
-                  <Link to="/operations/sanction" className={getLinkClass('/operations/sanction')}>Sanction</Link>
-                  <Link to="/operations/disburse" className={getLinkClass('/operations/disburse')}>Disburse</Link>
-                  <Link to="/operations/download-forms" className={getLinkClass('/operations/download-forms')}>Download Forms</Link>
-                  <Link to="/operations/lead-archives" className={getLinkClass('/operations/lead-archives')}>Lead Archives</Link>
-                  <Link to="/operations/hurdles" className={getLinkClass('/operations/hurdles')}>Daily Hurdles</Link>
-                  <Link to="/operations/whatsapp-intake" className={getLinkClass('/operations/whatsapp-intake')}>WhatsApp Intake</Link>
-                </>
-              )}
+            <div className="hidden md:flex md:items-center gap-x-3 lg:gap-x-4">
+              {(NAV_LINKS[effectiveRole]?.primary || []).map(item => (
+                <Link key={item.to} to={item.to} className={getLinkClass(item.to)}>{item.label}</Link>
+              ))}
+              <NavMoreMenu items={NAV_LINKS[effectiveRole]?.more || []} location={location} />
 
               <div className="flex items-center space-x-3 ml-2 border-l pl-3 border-gray-200">
                 {/* Bell icon for admin - delete request notifications */}
@@ -327,53 +385,15 @@ export default function Layout({ children }) {
           {/* Mobile navigation dropdown */}
           {mobileMenuOpen && (
             <div className="md:hidden border-t border-gray-200 py-3 space-y-1">
-              {/* Admin Navigation */}
-              {effectiveRole === 'admin' && (
+              {(NAV_LINKS[effectiveRole]?.primary || []).map(item => (
+                <Link key={item.to} to={item.to} className={getMobileLinkClass(item.to)} onClick={() => setMobileMenuOpen(false)}>{item.label}</Link>
+              ))}
+              {(NAV_LINKS[effectiveRole]?.more || []).length > 0 && (
                 <>
-                  <Link to="/admin/dashboard" className={getMobileLinkClass('/admin/dashboard')} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
-                  <Link to="/admin/leads" className={getMobileLinkClass('/admin/leads')} onClick={() => setMobileMenuOpen(false)}>Leads</Link>
-                  <Link to="/admin/customer-login" className={getMobileLinkClass('/admin/customer-login')} onClick={() => setMobileMenuOpen(false)}>Customer Login</Link>
-                  <Link to="/admin/credit-query" className={getMobileLinkClass('/admin/credit-query')} onClick={() => setMobileMenuOpen(false)}>Processing &amp; Query</Link>
-                  <Link to="/admin/sanction" className={getMobileLinkClass('/admin/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
-                  <Link to="/admin/disburse" className={getMobileLinkClass('/admin/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
-                  <Link to="/admin/revenue" className={getMobileLinkClass('/admin/revenue')} onClick={() => setMobileMenuOpen(false)}>Revenue</Link>
-                  <Link to="/admin/executives" className={getMobileLinkClass('/admin/executives')} onClick={() => setMobileMenuOpen(false)}>Executives</Link>
-                  <Link to="/admin/download-forms" className={getMobileLinkClass('/admin/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
-                  <Link to="/admin/lead-archives" className={getMobileLinkClass('/admin/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
-                  <Link to="/admin/hurdles" className={getMobileLinkClass('/admin/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
-                  <Link to="/admin/audit-log" className={getMobileLinkClass('/admin/audit-log')} onClick={() => setMobileMenuOpen(false)}>Audit Log</Link>
-                  <Link to="/admin/whatsapp-intake" className={getMobileLinkClass('/admin/whatsapp-intake')} onClick={() => setMobileMenuOpen(false)}>WhatsApp Intake</Link>
-                </>
-              )}
-
-              {/* Executive Navigation */}
-              {effectiveRole === 'executive' && (
-                <>
-                  <Link to="/executive/dashboard" className={getMobileLinkClass('/executive/dashboard')} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
-                  <Link to="/executive/leads" className={getMobileLinkClass('/executive/leads')} onClick={() => setMobileMenuOpen(false)}>Leads</Link>
-                  <Link to="/executive/customer-login" className={getMobileLinkClass('/executive/customer-login')} onClick={() => setMobileMenuOpen(false)}>Customer Login</Link>
-                  <Link to="/executive/checklists" className={getMobileLinkClass('/executive/checklists')} onClick={() => setMobileMenuOpen(false)}>Checklist & Upload</Link>
-                  <Link to="/executive/credit-query" className={getMobileLinkClass('/executive/credit-query')} onClick={() => setMobileMenuOpen(false)}>Processing &amp; Query</Link>
-                  <Link to="/executive/sanction" className={getMobileLinkClass('/executive/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
-                  <Link to="/executive/disburse" className={getMobileLinkClass('/executive/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
-                  <Link to="/executive/hurdles" className={getMobileLinkClass('/executive/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
-                </>
-              )}
-
-              {/* Operations Head Navigation - all features EXCEPT Revenue */}
-              {effectiveRole === 'operations_head' && (
-                <>
-                  <Link to="/operations/dashboard" className={getMobileLinkClass('/operations/dashboard')} onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
-                  <Link to="/operations/leads" className={getMobileLinkClass('/operations/leads')} onClick={() => setMobileMenuOpen(false)}>Leads</Link>
-                  <Link to="/operations/customer-login" className={getMobileLinkClass('/operations/customer-login')} onClick={() => setMobileMenuOpen(false)}>Customer Login</Link>
-                  <Link to="/operations/checklists" className={getMobileLinkClass('/operations/checklists')} onClick={() => setMobileMenuOpen(false)}>Checklist & Upload</Link>
-                  <Link to="/operations/credit-query" className={getMobileLinkClass('/operations/credit-query')} onClick={() => setMobileMenuOpen(false)}>Processing &amp; Query</Link>
-                  <Link to="/operations/sanction" className={getMobileLinkClass('/operations/sanction')} onClick={() => setMobileMenuOpen(false)}>Sanction</Link>
-                  <Link to="/operations/disburse" className={getMobileLinkClass('/operations/disburse')} onClick={() => setMobileMenuOpen(false)}>Disburse</Link>
-                  <Link to="/operations/download-forms" className={getMobileLinkClass('/operations/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
-                  <Link to="/operations/lead-archives" className={getMobileLinkClass('/operations/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
-                  <Link to="/operations/hurdles" className={getMobileLinkClass('/operations/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
-                  <Link to="/operations/whatsapp-intake" className={getMobileLinkClass('/operations/whatsapp-intake')} onClick={() => setMobileMenuOpen(false)}>WhatsApp Intake</Link>
+                  <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">More</p>
+                  {NAV_LINKS[effectiveRole].more.map(item => (
+                    <Link key={item.to} to={item.to} className={getMobileLinkClass(item.to)} onClick={() => setMobileMenuOpen(false)}>{item.label}</Link>
+                  ))}
                 </>
               )}
 

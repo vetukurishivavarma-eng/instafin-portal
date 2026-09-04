@@ -306,6 +306,27 @@ export default function CustomerLoginPage() {
     }
   };
 
+  const handleMarkNotRequired = async (documentId) => {
+    setDocCompletionStatus(prev => ({ ...prev, [documentId]: 'not_required' }));
+    setShowPendingReasonInput(prev => ({ ...prev, [documentId]: false }));
+    setSuccess('Document marked as not required — it will no longer count toward pending documents.');
+    setTimeout(() => setSuccess(''), 3000);
+    if (selectedLead) {
+      try {
+        await fetch(`${API_BASE}/checklist-status/${selectedLead.id}/completion`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({ documentId, status: 'not_required' })
+        });
+      } catch (err) {
+        console.error('Failed to persist not-required status:', err);
+      }
+    }
+  };
+
   const togglePendingReasonInput = (documentId) => {
     setShowPendingReasonInput(prev => ({ ...prev, [documentId]: !prev[documentId] }));
     if (!showPendingReasonInput[documentId]) {
@@ -378,6 +399,8 @@ export default function CustomerLoginPage() {
             statusMap[docId] = 'complete';
           } else if (info.status === 'pending') {
             statusMap[docId] = `pending: ${info.reason || ''}`;
+          } else if (info.status === 'not_required') {
+            statusMap[docId] = 'not_required';
           }
           if (info.reason) {
             reasonMap[docId] = info.reason;
@@ -1270,6 +1293,7 @@ export default function CustomerLoginPage() {
 
   const handleShareEmail = () => {
     const pendingItems = checklistItems.filter(item => {
+      if (getDocIsNotRequired(item.id)) return false;
       const files = checklistStatuses[item.id];
       const hasUploaded = files && files.length > 0;
       return !hasUploaded && item.required;
@@ -1316,6 +1340,7 @@ export default function CustomerLoginPage() {
 
   const handleSharePendingWhatsApp = async () => {
     const pendingItems = checklistItems.filter(item => {
+      if (getDocIsNotRequired(item.id)) return false;
       const files = checklistStatuses[item.id];
       const hasUploaded = files && files.length > 0;
       return !hasUploaded && item.required;
@@ -1617,6 +1642,8 @@ export default function CustomerLoginPage() {
     return status && status.startsWith('pending:');
   };
 
+  const getDocIsNotRequired = (itemId) => docCompletionStatus[itemId] === 'not_required';
+
   const uploadedCount = checklistItems.filter(item => {
     const files = checklistStatuses[item.id];
     const hasFiles = files && files.length > 0;
@@ -1625,12 +1652,15 @@ export default function CustomerLoginPage() {
     return hasFiles;
   }).length;
   const pendingCount = checklistItems.filter(item => {
+    // Marked "not required" - never counts, regardless of upload state
+    if (getDocIsNotRequired(item.id)) return false;
     const files = checklistStatuses[item.id];
     const hasNoFiles = !files || files.length === 0;
     // Include items marked as pending even if they have files
     if (getDocIsPending(item.id)) return true;
     return item.required && hasNoFiles;
   }).length;
+  const notRequiredCount = checklistItems.filter(item => getDocIsNotRequired(item.id)).length;
 
   return (
     <div className="py-6 sm:py-12 px-3 sm:px-6">
@@ -2405,6 +2435,11 @@ export default function CustomerLoginPage() {
                   <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-medium">
                     {pendingCount} Pending
                   </span>
+                  {notRequiredCount > 0 && (
+                    <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-medium">
+                      {notRequiredCount} Not Required
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -2757,16 +2792,16 @@ export default function CustomerLoginPage() {
                           const showForm = showUploadForm === item.id;
 
                           return (
-                            <li key={item.id} className={`px-4 py-3 ${getDocIsPending(item.id) ? 'bg-orange-50/60 border-l-2 border-orange-400' : uploadedFiles.length > 0 ? 'bg-green-50/50' : item.required ? 'bg-red-50/60' : ''}`}>
+                            <li key={item.id} className={`px-4 py-3 ${getDocIsNotRequired(item.id) ? 'opacity-60' : getDocIsPending(item.id) ? 'bg-orange-50/60 border-l-2 border-orange-400' : uploadedFiles.length > 0 ? 'bg-green-50/50' : item.required ? 'bg-red-50/60' : ''}`}>
                               <div className="flex items-center gap-3">
                                 {/* Status dot */}
                                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  getDocIsPending(item.id) ? 'bg-orange-500' : uploadedFiles.length > 0 ? 'bg-green-500' : item.required ? 'bg-red-400' : 'bg-gray-300'
+                                  getDocIsNotRequired(item.id) ? 'bg-gray-300' : getDocIsPending(item.id) ? 'bg-orange-500' : uploadedFiles.length > 0 ? 'bg-green-500' : item.required ? 'bg-red-400' : 'bg-gray-300'
                                 }`} />
 
                                 {/* Document name */}
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${getDocIsPending(item.id) ? 'text-orange-800' : uploadedFiles.length > 0 ? 'text-green-800' : 'text-gray-800'}`}>
+                                  <p className={`text-sm font-medium ${getDocIsNotRequired(item.id) ? 'text-gray-500 line-through decoration-gray-300' : getDocIsPending(item.id) ? 'text-orange-800' : uploadedFiles.length > 0 ? 'text-green-800' : 'text-gray-800'}`}>
                                     {item.name}
                                     {getDocIsPending(item.id) && (
                                       <span className="ml-2 text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full font-semibold">
@@ -2774,7 +2809,7 @@ export default function CustomerLoginPage() {
                                       </span>
                                     )}
                                   </p>
-                                  {uploadedFiles.length > 0 && !getDocIsPending(item.id) && (
+                                  {uploadedFiles.length > 0 && !getDocIsPending(item.id) && !getDocIsNotRequired(item.id) && (
                                     <p className="text-xs text-green-600 mt-0.5">{uploadedFiles.length} file(s) uploaded</p>
                                   )}
                                   {getDocIsPending(item.id) && (
@@ -2782,59 +2817,72 @@ export default function CustomerLoginPage() {
                                       {uploadedFiles.length > 0 ? `${uploadedFiles.length} file(s) uploaded - ` : ''}Marked pending with reason
                                     </p>
                                   )}
+                                  {getDocIsNotRequired(item.id) && (
+                                    <p className="text-xs text-gray-400 mt-0.5">Not needed for this customer — excluded from pending count</p>
+                                  )}
                                 </div>
 
                                 {/* Required badge */}
-                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                                  item.required ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                  getDocIsNotRequired(item.id) ? 'bg-gray-100 text-gray-400' : item.required ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'
                                 }`}>
-                                  {item.required ? 'Required' : 'Optional'}
+                                  {getDocIsNotRequired(item.id) ? 'Not Required' : item.required ? 'Required' : 'Optional'}
                                 </span>
 
-                                {/* Mark Complete / Pending buttons */}
+                                {/* Status control: one compact dropdown instead of three separate buttons */}
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                  <button
-                                    onClick={() => handleMarkComplete(item.id)}
-                                    className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-all border ${docCompletionStatus[item.id] === 'complete' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'}`}
-                                    title="Mark this document as complete"
-                                  >
-                                    ✓ Done
-                                  </button>
-                                  <div className="relative">
-                                    {showPendingReasonInput[item.id] ? (
-                                      <div className="flex items-center gap-1">
-                                        <input
-                                          type="text"
-                                          value={pendingReasonInput[item.id] || ''}
-                                          onChange={(e) => setPendingReasonInput(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                          placeholder="Pending reason..."
-                                          className="w-24 text-[10px] border border-gray-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
-                                          autoFocus
-                                          onKeyDown={(e) => { if (e.key === 'Enter') handleMarkPending(item.id); if (e.key === 'Escape') togglePendingReasonInput(item.id); }}
-                                        />
-                                        <button
-                                          onClick={() => handleMarkPending(item.id)}
-                                          className="text-[10px] font-semibold px-2 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all"
-                                        >
-                                          Save
-                                        </button>
-                                        <button
-                                          onClick={() => togglePendingReasonInput(item.id)}
-                                          className="text-[10px] font-semibold px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-all"
-                                        >
-                                          ×
-                                        </button>
-                                      </div>
-                                    ) : (
+                                  {showPendingReasonInput[item.id] ? (
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="text"
+                                        value={pendingReasonInput[item.id] || ''}
+                                        onChange={(e) => setPendingReasonInput(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                        placeholder="Pending reason..."
+                                        className="w-24 text-[10px] border border-gray-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
+                                        autoFocus
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleMarkPending(item.id); if (e.key === 'Escape') togglePendingReasonInput(item.id); }}
+                                      />
+                                      <button
+                                        onClick={() => handleMarkPending(item.id)}
+                                        className="text-[10px] font-semibold px-2 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all"
+                                      >
+                                        Save
+                                      </button>
                                       <button
                                         onClick={() => togglePendingReasonInput(item.id)}
-                                        className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-all border ${docCompletionStatus[item.id]?.startsWith('pending') ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'}`}
-                                        title="Mark this document as pending with a reason"
+                                        className="text-[10px] font-semibold px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-all"
                                       >
-                                        {docCompletionStatus[item.id]?.startsWith('pending') ? '⏳ Pending' : 'Mark Pending'}
+                                        ×
                                       </button>
-                                    )}
-                                  </div>
+                                    </div>
+                                  ) : (
+                                    <select
+                                      value={
+                                        docCompletionStatus[item.id] === 'complete' ? 'complete'
+                                        : getDocIsNotRequired(item.id) ? 'not_required'
+                                        : getDocIsPending(item.id) ? 'pending'
+                                        : ''
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === 'complete') handleMarkComplete(item.id);
+                                        else if (val === 'not_required') handleMarkNotRequired(item.id);
+                                        else if (val === 'pending') togglePendingReasonInput(item.id);
+                                      }}
+                                      title="Mark this document's status for this customer"
+                                      className={`text-[10px] font-semibold pl-2 pr-6 py-1.5 rounded-lg border outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer ${
+                                        docCompletionStatus[item.id] === 'complete' ? 'bg-green-50 text-green-700 border-green-200'
+                                        : getDocIsNotRequired(item.id) ? 'bg-gray-50 text-gray-500 border-gray-200'
+                                        : getDocIsPending(item.id) ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      <option value="" disabled>Mark as…</option>
+                                      <option value="complete">✓ Done</option>
+                                      <option value="pending">⏳ Pending (reason)</option>
+                                      <option value="not_required">Not Required</option>
+                                    </select>
+                                  )}
                                 </div>
 
                                 {/* Add File / Cancel button */}
