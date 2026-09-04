@@ -297,6 +297,7 @@ router.get('/', authorize('admin', 'operations_head', 'executive', 'dsa'), async
 
       return {
         id: lead.id,
+        leadCode: lead.lead_code,
         customerName: lead.customer_name,
         mobile: lead.mobile,
         email: lead.email,
@@ -414,6 +415,7 @@ router.get('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), as
 
     res.json({
       id: lead.id,
+      leadCode: lead.lead_code,
       customerName: lead.customer_name,
       mobile: lead.mobile,
       email: lead.email,

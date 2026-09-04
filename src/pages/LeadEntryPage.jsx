@@ -801,7 +801,17 @@ export default function LeadEntryPage() {
                     <td className="p-3 sm:p-4 text-center text-gray-400 font-bold text-xs w-10" data-label="#">{idx + 1}</td>
                     <td className="p-3 sm:p-4" data-label="Customer">
                       <div className="flex flex-col">
-                        <span className="text-gray-900 font-bold text-sm">{lead.customerName}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-gray-900 font-bold text-sm">{lead.customerName}</span>
+                          {lead.leadCode && (
+                            <span
+                              className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-md"
+                              title="Lead ID — used as the prefix in WhatsApp document filenames"
+                            >
+                              {lead.leadCode}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-gray-500 sm:hidden">{lead.mobile}</span>
                         {lead.hasCoapplicant && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full mt-1.5 self-start shadow-sm">
@@ -1333,7 +1343,17 @@ export default function LeadEntryPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                 <p className="text-xs uppercase font-bold text-gray-400">Customer Name</p>
-                <p className="font-extrabold text-gray-900 text-lg mt-1">{viewLead.customerName}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="font-extrabold text-gray-900 text-lg">{viewLead.customerName}</p>
+                  {viewLead.leadCode && (
+                    <span
+                      className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md"
+                      title="Lead ID — used as the prefix in WhatsApp document filenames"
+                    >
+                      {viewLead.leadCode}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                 <p className="text-xs uppercase font-bold text-gray-400">Mobile Number</p>
