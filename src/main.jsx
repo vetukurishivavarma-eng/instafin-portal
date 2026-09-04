@@ -18,6 +18,7 @@ import DisbursementPage from './pages/DisbursementPage'
 import RevenuePage from './pages/RevenuePage'
 import ExecutivePage from './pages/ExecutivePage'
 import AuditLogPage from './pages/AuditLogPage'
+import WhatsAppIntakePage from './pages/WhatsAppIntakePage'
 
 // Executive pages
 import LeadEntryPage from './pages/LeadEntryPage'
@@ -148,6 +149,11 @@ function AppRoutes() {
             <AuditLogPage />
           </ProtectedRoute>
         } />
+        <Route path="/admin/whatsapp-intake" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <WhatsAppIntakePage />
+          </ProtectedRoute>
+        } />
         <Route path="/admin/lead-archives" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <LeadArchivesPage />
@@ -251,6 +257,11 @@ function AppRoutes() {
         <Route path="/operations/hurdles" element={
           <ProtectedRoute allowedRoles={['operations_head']}>
             <HurdlePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/whatsapp-intake" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <WhatsAppIntakePage />
           </ProtectedRoute>
         } />
 

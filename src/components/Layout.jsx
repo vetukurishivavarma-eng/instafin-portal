@@ -263,6 +263,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/lead-archives" className={getLinkClass('/admin/lead-archives')}>Lead Archives</Link>
                   <Link to="/admin/hurdles" className={getLinkClass('/admin/hurdles')}>Daily Hurdles</Link>
                   <Link to="/admin/audit-log" className={getLinkClass('/admin/audit-log')}>Audit Log</Link>
+                  <Link to="/admin/whatsapp-intake" className={getLinkClass('/admin/whatsapp-intake')}>WhatsApp Intake</Link>
                 </>
               )}
 
@@ -293,6 +294,7 @@ export default function Layout({ children }) {
                   <Link to="/operations/download-forms" className={getLinkClass('/operations/download-forms')}>Download Forms</Link>
                   <Link to="/operations/lead-archives" className={getLinkClass('/operations/lead-archives')}>Lead Archives</Link>
                   <Link to="/operations/hurdles" className={getLinkClass('/operations/hurdles')}>Daily Hurdles</Link>
+                  <Link to="/operations/whatsapp-intake" className={getLinkClass('/operations/whatsapp-intake')}>WhatsApp Intake</Link>
                 </>
               )}
 
@@ -340,6 +342,7 @@ export default function Layout({ children }) {
                   <Link to="/admin/lead-archives" className={getMobileLinkClass('/admin/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
                   <Link to="/admin/hurdles" className={getMobileLinkClass('/admin/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
                   <Link to="/admin/audit-log" className={getMobileLinkClass('/admin/audit-log')} onClick={() => setMobileMenuOpen(false)}>Audit Log</Link>
+                  <Link to="/admin/whatsapp-intake" className={getMobileLinkClass('/admin/whatsapp-intake')} onClick={() => setMobileMenuOpen(false)}>WhatsApp Intake</Link>
                 </>
               )}
 
@@ -370,6 +373,7 @@ export default function Layout({ children }) {
                   <Link to="/operations/download-forms" className={getMobileLinkClass('/operations/download-forms')} onClick={() => setMobileMenuOpen(false)}>Download Forms</Link>
                   <Link to="/operations/lead-archives" className={getMobileLinkClass('/operations/lead-archives')} onClick={() => setMobileMenuOpen(false)}>Lead Archives</Link>
                   <Link to="/operations/hurdles" className={getMobileLinkClass('/operations/hurdles')} onClick={() => setMobileMenuOpen(false)}>Daily Hurdles</Link>
+                  <Link to="/operations/whatsapp-intake" className={getMobileLinkClass('/operations/whatsapp-intake')} onClick={() => setMobileMenuOpen(false)}>WhatsApp Intake</Link>
                 </>
               )}
 
