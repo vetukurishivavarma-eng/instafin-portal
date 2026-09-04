@@ -1,14 +1,18 @@
 -- Migration 025: WhatsApp document intake
 --
--- 1. Adds a short, human-typeable "lead_code" to leads (e.g. L10001) — this is
+-- 1. Adds a short, human-typeable "lead_code" to leads (e.g. L10001) - this is
 --    the <LeadID> customers type into WhatsApp filenames. The existing `id`
 --    stays the real primary key (UUID); lead_code is a friendly alias.
 -- 2. Adds an audit table (whatsapp_intake_log) recording every inbound
---    WhatsApp document message and what happened to it — success, duplicate,
+--    WhatsApp document message and what happened to it - success, duplicate,
 --    or a specific failure reason. This is what the admin monitoring screen
 --    and the unit/integration tests read from.
+--
+-- Plain ASCII only in this file (no em-dashes, no box-drawing characters) -
+-- those have been observed getting mangled when pasted into a web SQL editor
+-- and breaking statements several lines later.
 
--- ── 1. Lead code ────────────────────────────────────────────────────────
+-- 1. Lead code
 CREATE SEQUENCE IF NOT EXISTS lead_code_seq START WITH 10001 INCREMENT BY 1;
 
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS lead_code TEXT;
@@ -40,9 +44,7 @@ SET lead_code = 'L' || numbered.n
 FROM numbered
 WHERE leads.id = numbered.id;
 
--- Keep the sequence ahead of any backfilled values. Split into a DO block
--- (short lines) rather than one long nested SELECT — the single-line form
--- has been observed getting mangled when pasted into a web SQL editor.
+-- Keep the sequence ahead of any backfilled values.
 DO $$
 DECLARE
   max_num INTEGER;
@@ -56,18 +58,18 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS leads_lead_code_key ON leads (lead_code);
 
--- ── 2. WhatsApp intake audit log ────────────────────────────────────────
+-- 2. WhatsApp intake audit log
 CREATE TABLE IF NOT EXISTS whatsapp_intake_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-  provider TEXT NOT NULL DEFAULT 'whatsapp-web',       -- 'whatsapp-web' | 'whatsapp-cloud'
-  provider_message_id TEXT NOT NULL,                    -- dedupe key from the provider
+  provider TEXT NOT NULL DEFAULT 'whatsapp-web',
+  provider_message_id TEXT NOT NULL,
   sender_number TEXT NOT NULL,
 
   original_filename TEXT NOT NULL,
   mime_type TEXT,
   file_size_bytes INTEGER,
-  file_hash TEXT,                                       -- sha256 of content, used for duplicate detection
+  file_hash TEXT,
 
   parsed_lead_code TEXT,
   parsed_document_name TEXT,
@@ -76,9 +78,9 @@ CREATE TABLE IF NOT EXISTS whatsapp_intake_log (
   matched_document_id TEXT,
   checklist_status_id UUID REFERENCES lead_checklist_status(id) ON DELETE SET NULL,
 
-  status TEXT NOT NULL DEFAULT 'received',              -- received | processed | duplicate | failed
+  status TEXT NOT NULL DEFAULT 'received',
   failure_reason TEXT,
-  failure_code TEXT,                                    -- machine-readable: INVALID_FILENAME | UNKNOWN_LEAD | ...
+  failure_code TEXT,
 
   notified_executive BOOLEAN NOT NULL DEFAULT false,
 
