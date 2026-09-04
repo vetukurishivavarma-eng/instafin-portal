@@ -2,7 +2,7 @@ import qrcode from 'qrcode';
 import { supabase } from '../lib/supabase.js';
 import { WhatsAppWebAdapter } from './adapters/whatsappWebAdapter.js';
 import { CloudApiAdapter } from './adapters/cloudApiAdapter.js';
-import { processInboundDocument } from './intakeService.js';
+import { processInboundDocument, logIgnoredMessage } from './intakeService.js';
 
 /**
  * Single place that decides which WhatsApp channel is live.
@@ -52,6 +52,15 @@ export async function startWhatsAppIntake() {
   adapter.on('error', (err) => {
     lastError = err.message;
     console.error('[WHATSAPP-INTAKE] Adapter error:', err?.stack || err);
+  });
+
+  adapter.on('ignored', async (info) => {
+    console.warn(`[WHATSAPP-INTAKE] Ignored an attachment from ${info.senderNumber} — no usable filename (sent as "${info.messageType || 'unknown'}").`);
+    try {
+      await logIgnoredMessage(info, { supabase });
+    } catch (err) {
+      console.error('[WHATSAPP-INTAKE] Failed to log ignored message:', err);
+    }
   });
 
   adapter.on('document', async (message) => {

@@ -67,6 +67,23 @@ export class WhatsAppWebAdapter extends InboundAdapter {
         headless: true,
         args: lowMemory ? [...baseArgs, ...lowMemoryArgs] : baseArgs,
       },
+      // whatsapp-web.js 1.34.7's bundled/local WhatsApp Web version can drift
+      // out of sync with what WhatsApp's servers currently serve - when it
+      // does, the library's injected in-page script for downloading media
+      // breaks against the live client JS (observed: msg.downloadMedia()
+      // throwing a bare "r" from inside page.evaluate, 2026-09-05, while
+      // messaging and QR-linking kept working fine). Pinning to a
+      // community-maintained, actively-updated known-good version sidesteps
+      // this - see wppconnect-team/wa-version, an open-source mirror built
+      // specifically because WhatsApp Web updates regularly break automation
+      // tools like this one. strict:false means it still falls back to the
+      // library's own default behavior if this particular version can't be
+      // fetched, rather than hard-failing.
+      webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html',
+        strict: false,
+      },
     });
 
     this.#client.on('qr', (qr) => {
@@ -110,9 +127,11 @@ export class WhatsAppWebAdapter extends InboundAdapter {
 
   async #handleMessage(msg) {
     try {
+      // No attachment at all - ordinary chat noise, nothing to log.
       if (!msg.hasMedia) return;
-      // Only "document"-type attachments reliably keep their original filename.
-      if (msg.type !== 'document') return;
+
+      const providerMessageId = msg.id?._serialized || `${msg.id?.id || 'unknown'}-${msg.timestamp}`;
+      const senderNumber = (msg.from || '').replace('@c.us', '');
 
       const media = await msg.downloadMedia();
       if (!media || !media.data) {
@@ -120,15 +139,22 @@ export class WhatsAppWebAdapter extends InboundAdapter {
         return;
       }
 
-      const providerMessageId = msg.id?._serialized || `${msg.id?.id || 'unknown'}-${msg.timestamp}`;
-      const senderNumber = (msg.from || '').replace('@c.us', '');
+      if (!media.filename) {
+        // WhatsApp only preserves an original filename for attachments sent
+        // via the paperclip's "Document" option; a "Photo" attachment (even
+        // one WhatsApp classifies as msg.type === 'document') arrives with
+        // no usable filename here, so there's no "<LeadID>_<DocName>" to
+        // parse. Surface it instead of dropping it silently.
+        this.emit('ignored', { providerMessageId, senderNumber, messageType: msg.type, mimeType: media.mimetype });
+        return;
+      }
 
       /** @type {import('../inboundAdapter.js').NormalizedInboundMessage} */
       const normalized = {
         provider: 'whatsapp-web',
         providerMessageId,
         senderNumber,
-        originalFilename: media.filename || 'unnamed',
+        originalFilename: media.filename,
         mimeType: media.mimetype,
         buffer: Buffer.from(media.data, 'base64'),
         timestamp: new Date((msg.timestamp || Date.now() / 1000) * 1000),

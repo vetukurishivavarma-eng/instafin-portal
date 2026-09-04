@@ -14,6 +14,10 @@ import { EventEmitter } from 'events';
  *                                        ASCII for a terminal) at the point of use
  *   'disconnected' (reason)
  *   'document' (NormalizedInboundMessage)
+ *   'ignored' ({ providerMessageId, senderNumber, messageType, mimeType }) —
+ *                                        (whatsapp-web only) had an attachment but no
+ *                                        usable filename (sent as a Photo, not a
+ *                                        Document) — nothing to parse a Lead ID from
  *   'error' (Error)
  */
 export class InboundAdapter extends EventEmitter {

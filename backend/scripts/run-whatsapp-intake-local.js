@@ -38,7 +38,7 @@
 import qrcode from 'qrcode';
 import { supabase } from '../src/lib/supabase.js';
 import { WhatsAppWebAdapter } from '../src/whatsapp-intake/adapters/whatsappWebAdapter.js';
-import { processInboundDocument } from '../src/whatsapp-intake/intakeService.js';
+import { processInboundDocument, logIgnoredMessage } from '../src/whatsapp-intake/intakeService.js';
 
 // lowMemory: false — a spare machine doesn't need to fight Render's 512MB
 // ceiling, and the memory-saving flags (--single-process especially) have
@@ -67,6 +67,18 @@ adapter.on('error', (err) => {
   // Full stack, not just .message — whatsapp-web.js/Puppeteer errors are
   // sometimes a bare one-letter message with the real detail only in the stack.
   console.error('[WHATSAPP-INTAKE] Adapter error:', err?.stack || err);
+});
+
+adapter.on('ignored', async (info) => {
+  console.warn(
+    `[WHATSAPP-INTAKE] Ignored an attachment from ${info.senderNumber} — no usable filename ` +
+    `(sent as "${info.messageType || 'unknown'}"). Ask them to resend via the paperclip's "Document" option, not "Photo".`
+  );
+  try {
+    await logIgnoredMessage(info, { supabase });
+  } catch (err) {
+    console.error('[WHATSAPP-INTAKE] Failed to log ignored message:', err);
+  }
 });
 
 adapter.on('document', async (message) => {

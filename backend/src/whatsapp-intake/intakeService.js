@@ -199,3 +199,33 @@ export async function processInboundDocument(message, { supabase }) {
 
   return { status: 'processed', leadId: lead.id, documentId: match.documentId };
 }
+
+/**
+ * Records an inbound WhatsApp attachment that had no usable filename — sent
+ * as a Photo rather than a Document, so there was nothing to parse a Lead ID
+ * from. Kept separate from processInboundDocument() since there is no file
+ * to validate or store; this exists purely so the failure is visible on the
+ * portal's WhatsApp Intake page instead of only in server/terminal logs.
+ *
+ * @param {{ providerMessageId: string, senderNumber: string, messageType?: string, mimeType?: string }} info
+ * @param {{ supabase: import('@supabase/supabase-js').SupabaseClient }} deps
+ */
+export async function logIgnoredMessage({ providerMessageId, senderNumber, messageType, mimeType }, { supabase }) {
+  const { error } = await supabase.from('whatsapp_intake_log').insert({
+    provider: 'whatsapp-web',
+    provider_message_id: providerMessageId,
+    sender_number: senderNumber,
+    original_filename: '(no filename — likely sent as a Photo, not a Document)',
+    mime_type: mimeType || null,
+    status: 'failed',
+    failure_code: 'NO_FILENAME',
+    failure_reason: `WhatsApp did not preserve an original filename for this attachment (message type: ${messageType || 'unknown'}). Ask the sender to resend it using the paperclip's "Document" option, not "Photo".`,
+    received_at: new Date().toISOString(),
+    processed_at: new Date().toISOString(),
+  });
+
+  if (error && error.code !== '23505') {
+    // 23505 = provider redelivered the same message; anything else is worth knowing about.
+    console.error('[WHATSAPP-INTAKE] Failed to log ignored message:', error.message);
+  }
+}
