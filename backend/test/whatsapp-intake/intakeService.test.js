@@ -36,7 +36,7 @@ function trackWrittenFile(store) {
 describe('processInboundDocument', () => {
   it('uploads a document for a known lead and matched document type', async () => {
     const { supabase, store } = createFakeSupabase({
-      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test Customer', assigned_to: null, loan_type: 'home' }],
+      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test Customer', assigned_to: null, loan_type: 'home_loan', loan_status: 'new', income_source: 'salaried', resident_type: 'indian_resident' }],
     });
 
     const result = await processInboundDocument(baseMessage(), { supabase });
@@ -100,6 +100,18 @@ describe('processInboundDocument', () => {
     expect(result.failureCode).toBe('CORRUPTED_FILE');
   });
 
+  it('flags a real document type that is not part of this lead\'s checklist', async () => {
+    const { supabase } = createFakeSupabase({
+      // MSME leads never have a property checklist, so a home-loan-only
+      // document type (Sale Deed) is real but not required here.
+      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null, loan_type: 'msme', loan_status: 'new' }],
+    });
+    const result = await processInboundDocument(baseMessage({ originalFilename: 'L10001_Sale_Deed.pdf' }), { supabase });
+
+    expect(result.status).toBe('failed');
+    expect(result.failureCode).toBe('DOCUMENT_NOT_REQUIRED_FOR_LEAD');
+  });
+
   it('flags an unrecognized document name instead of guessing', async () => {
     const { supabase } = createFakeSupabase({
       leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null }],
@@ -112,7 +124,7 @@ describe('processInboundDocument', () => {
 
   it('treats a provider-redelivered message (same provider_message_id) as a duplicate, not an error', async () => {
     const { supabase, store } = createFakeSupabase({
-      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null }],
+      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null, loan_type: 'home_loan', loan_status: 'new', income_source: 'salaried', resident_type: 'indian_resident' }],
     });
     const message = baseMessage();
 
@@ -128,7 +140,7 @@ describe('processInboundDocument', () => {
 
   it('treats identical file content re-sent under a new message as a duplicate upload', async () => {
     const { supabase, store } = createFakeSupabase({
-      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null }],
+      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null, loan_type: 'home_loan', loan_status: 'new', income_source: 'salaried', resident_type: 'indian_resident' }],
     });
 
     const first = await processInboundDocument(baseMessage({ providerMessageId: 'msg-a' }), { supabase });
@@ -142,7 +154,7 @@ describe('processInboundDocument', () => {
 
   it('allows a genuinely different document for the same lead after a first upload', async () => {
     const { supabase, store } = createFakeSupabase({
-      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null }],
+      leads: [{ id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null, loan_type: 'home_loan', loan_status: 'new', income_source: 'salaried', resident_type: 'indian_resident' }],
     });
 
     await processInboundDocument(baseMessage({ providerMessageId: 'msg-1' }), { supabase });

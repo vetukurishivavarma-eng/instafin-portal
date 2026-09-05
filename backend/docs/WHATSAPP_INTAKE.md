@@ -113,6 +113,7 @@ Every failure path writes a row to `whatsapp_intake_log` with a specific
 | `FILE_TOO_LARGE` | Over 10MB (same limit the manual upload enforces) |
 | `CORRUPTED_FILE` | Empty, or content's magic bytes don't match the claimed extension |
 | `DOCUMENT_TYPE_NOT_RECOGNIZED` | Document name doesn't match the keyword catalog |
+| `DOCUMENT_NOT_REQUIRED_FOR_LEAD` | A real, known document type, but not part of *this* lead's checklist (see §6) |
 | `LEAD_LOOKUP_FAILED` / `STORAGE_WRITE_FAILED` / `CHECKLIST_WRITE_FAILED` / `LOG_WRITE_FAILED` | Network/DB failures — logged with the raw error message |
 
 Duplicates are a separate `status = 'duplicate'`, not a failure — two cases:
@@ -125,18 +126,21 @@ Duplicates are a separate `status = 'duplicate'`, not a failure — two cases:
 
 ## 6. Known scoping limits (read before treating this as done)
 
-- **Checklist requirement matching is catalog-wide, not lead-specific.** The
-  frontend narrows which documents are required for one lead via a
-  client-side decision tree (loan type × status × income source × resident
-  type) plus optional per-browser `localStorage` keyword overrides
-  (`src/utils/resolver.ts`, `src/utils/bulkDocMatcher.ts`). Neither is
-  available server-side today. Intake therefore validates "is this a real,
-  known document type" against the full keyword catalog
-  (`documentCatalog.js`, kept in sync with `bulkDocMatcher.ts`), not "is this
-  specifically required for lead X". The executive still sees the true
-  per-lead checklist in the portal UI. Closing this gap means porting the
-  decision tree server-side (or exposing it via a small internal API) — a
-  good Phase 2 item, not attempted here to keep the POC's surface honest.
+- **Checklist requirement matching is now lead-specific, with one known
+  gap.** `leadChecklistResolver.js` ports the same decision tree the
+  frontend's `src/utils/resolver.ts` uses (loan type × status × income
+  source × resident type) over a mechanically-generated copy of
+  `src/data/checklists.ts` (`leadChecklistData.js` — regenerate it after
+  editing the frontend file; see that file's header for why it's a copy
+  rather than a direct import). A WhatsApp upload is now checked against
+  *this specific lead's* checklist (`DOCUMENT_NOT_REQUIRED_FOR_LEAD` if it
+  doesn't belong there), not just "is this a real document type anywhere in
+  the catalog". **Not ported:** the per-browser `localStorage` checklist
+  overrides (`addChecklistItemToFlow`/`deleteChecklistItemFromFlow` in
+  resolver.ts) — those live only in whichever admin's browser set them and
+  are never synced anywhere the backend could read them, so intake checks
+  against the base decision tree every lead detail page shows before any
+  local override is applied.
 - **Photos vs. Documents.** WhatsApp only preserves the original filename for
   attachments sent via the paperclip's "Document" picker. Anything sent as a
   "Photo" gets recompressed and renamed by WhatsApp client-side, so the
@@ -184,6 +188,8 @@ backend/
 │   │   │   └── cloudApiAdapter.js      # official Cloud API — migration target
 │   │   ├── filenameParser.js
 │   │   ├── documentCatalog.js
+│   │   ├── leadChecklistData.js      # generated copy of src/data/checklists.ts
+│   │   ├── leadChecklistResolver.js  # per-lead required-document lookup
 │   │   ├── fileValidation.js
 │   │   ├── notifyExecutive.js
 │   │   ├── intakeService.js         # processInboundDocument() — the core, provider-agnostic

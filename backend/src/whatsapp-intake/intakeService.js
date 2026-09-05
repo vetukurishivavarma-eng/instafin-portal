@@ -6,6 +6,7 @@ import { parseInboundFilename } from './filenameParser.js';
 import { matchDocumentName } from './documentCatalog.js';
 import { validateInboundFile } from './fileValidation.js';
 import { notifyExecutiveOfUpload } from './notifyExecutive.js';
+import { getRequiredDocumentIdsForLead } from './leadChecklistResolver.js';
 
 const uploadsDir = path.join(process.cwd(), 'uploads');
 
@@ -89,7 +90,7 @@ export async function processInboundDocument(message, { supabase }) {
   // 4. Resolve the lead
   const { data: lead, error: leadLookupError } = await supabase
     .from('leads')
-    .select('id, lead_code, customer_name, assigned_to, loan_type')
+    .select('id, lead_code, customer_name, assigned_to, loan_type, loan_status, income_source, resident_type, business_type')
     .eq('lead_code', parsed.leadCode)
     .maybeSingle();
 
@@ -100,15 +101,25 @@ export async function processInboundDocument(message, { supabase }) {
     return fail('UNKNOWN_LEAD', `No lead found with ID ${parsed.leadCode}`);
   }
 
-  // 5. Resolve the document type against the known catalog. See
-  // documentCatalog.js for the scoping note on why this checks "is this a
-  // real document type" rather than "is this required for this exact lead".
+  // 5. Resolve the document type against the known catalog — "is this a
+  // real document type" — then narrow it to "is this actually required for
+  // THIS lead" using the same decision tree (loan type × status × income
+  // source × resident type) the frontend checklist page computes from.
   const match = matchDocumentName(parsed.documentName);
   if (!match) {
     return fail(
       'DOCUMENT_TYPE_NOT_RECOGNIZED',
       `"${parsed.documentName}" does not match any known document type`,
       { matched_lead_id: lead.id }
+    );
+  }
+
+  const requiredDocIds = getRequiredDocumentIdsForLead(lead);
+  if (!requiredDocIds.has(match.documentId)) {
+    return fail(
+      'DOCUMENT_NOT_REQUIRED_FOR_LEAD',
+      `"${match.documentId}" is not part of lead ${lead.lead_code}'s checklist (loan type: ${lead.loan_type || 'unset'})`,
+      { matched_lead_id: lead.id, matched_document_id: match.documentId }
     );
   }
 
