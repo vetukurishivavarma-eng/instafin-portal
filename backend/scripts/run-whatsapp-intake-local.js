@@ -49,6 +49,7 @@
  *      always-on local bots) whenever you want WhatsApp intake live.
  */
 
+import express from 'express';
 import qrcode from 'qrcode';
 import { supabase } from '../src/lib/supabase.js';
 import { WhatsAppWebAdapter } from '../src/whatsapp-intake/adapters/whatsappWebAdapter.js';
@@ -60,20 +61,45 @@ import { processInboundDocument, logIgnoredMessage } from '../src/whatsapp-intak
 // standard Chromium launch.
 const adapter = new WhatsAppWebAdapter({ lowMemory: false });
 
+// Only relevant when this runs as its own Render web service (PORT is set by
+// Render): a tiny HTTP surface so Render's health check + an external pinger
+// (e.g. UptimeRobot, free) can keep the free-tier service from sleeping —
+// this process holds a live WhatsApp session, not an HTTP one, so nothing
+// else would generate the inbound traffic Render's free tier needs to stay
+// awake. Also serves the QR as a scannable image, since there's no terminal
+// to read the ASCII version from once this isn't running locally.
+let lastQrDataUrl = null;
+let connectionStatus = 'starting';
+
+if (process.env.PORT) {
+  const app = express();
+  app.get('/health', (req, res) => res.json({ status: connectionStatus }));
+  app.get('/qr', (req, res) => {
+    if (!lastQrDataUrl) return res.send(`<p>No QR pending — status: ${connectionStatus}</p>`);
+    res.send(`<img src="${lastQrDataUrl}" alt="Scan with WhatsApp: Linked Devices > Link a Device" />`);
+  });
+  app.listen(process.env.PORT, () => console.log(`[WHATSAPP-INTAKE] Health/QR server on port ${process.env.PORT}`));
+}
+
 adapter.on('qr', async (rawQr) => {
+  connectionStatus = 'qr_pending';
   console.log('\n[WHATSAPP-INTAKE] Scan this QR with the business WhatsApp phone (Linked Devices -> Link a Device):\n');
   try {
     console.log(await qrcode.toString(rawQr, { type: 'terminal', small: true }));
+    lastQrDataUrl = await qrcode.toDataURL(rawQr);
   } catch (err) {
-    console.error('[WHATSAPP-INTAKE] Failed to render QR in terminal:', err.message);
+    console.error('[WHATSAPP-INTAKE] Failed to render QR:', err.message);
   }
 });
 
 adapter.on('ready', () => {
+  connectionStatus = 'ready';
+  lastQrDataUrl = null;
   console.log('[WHATSAPP-INTAKE] Connected and listening for documents. Leave this process running.');
 });
 
 adapter.on('disconnected', (reason) => {
+  connectionStatus = 'disconnected';
   console.warn('[WHATSAPP-INTAKE] Disconnected:', reason);
 });
 
