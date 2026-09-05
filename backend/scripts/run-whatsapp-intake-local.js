@@ -70,13 +70,25 @@ const adapter = new WhatsAppWebAdapter({ lowMemory: false });
 // to read the ASCII version from once this isn't running locally.
 let lastQrDataUrl = null;
 let connectionStatus = 'starting';
+let lastError = null;
 
 if (process.env.PORT) {
   const app = express();
   app.get('/health', (req, res) => res.json({ status: connectionStatus }));
+  // Read by instafin-portal-backend's /api/whatsapp-intake/status + /qr routes
+  // (see routes/whatsappIntake.js) so the portal's existing admin UI can show
+  // this worker's live status/QR even though the session runs in this
+  // separate process, not the main API.
+  app.get('/status.json', (req, res) => res.json({ connectionStatus, qrDataUrl: lastQrDataUrl, lastError }));
   app.get('/qr', (req, res) => {
-    if (!lastQrDataUrl) return res.send(`<p>No QR pending — status: ${connectionStatus}</p>`);
-    res.send(`<img src="${lastQrDataUrl}" alt="Scan with WhatsApp: Linked Devices > Link a Device" />`);
+    // WhatsApp Web QR codes rotate every ~20-30s — auto-refresh the page so
+    // whatever's on screen when you scan is never a stale, already-expired
+    // code (the #1 cause of "Couldn't link a device").
+    res.set('Cache-Control', 'no-store');
+    if (!lastQrDataUrl) {
+      return res.send(`<meta http-equiv="refresh" content="3"><p>No QR pending — status: ${connectionStatus}</p>`);
+    }
+    res.send(`<meta http-equiv="refresh" content="3"><img src="${lastQrDataUrl}" alt="Scan with WhatsApp: Linked Devices > Link a Device" />`);
   });
   app.listen(process.env.PORT, () => console.log(`[WHATSAPP-INTAKE] Health/QR server on port ${process.env.PORT}`));
 }
@@ -100,12 +112,14 @@ adapter.on('ready', () => {
 
 adapter.on('disconnected', (reason) => {
   connectionStatus = 'disconnected';
+  lastError = reason;
   console.warn('[WHATSAPP-INTAKE] Disconnected:', reason);
 });
 
 adapter.on('error', (err) => {
   // Full stack, not just .message — whatsapp-web.js/Puppeteer errors are
   // sometimes a bare one-letter message with the real detail only in the stack.
+  lastError = err?.message || String(err);
   console.error('[WHATSAPP-INTAKE] Adapter error:', err?.stack || err);
 });
 

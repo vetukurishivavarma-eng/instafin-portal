@@ -6,16 +6,52 @@ import { getWhatsAppIntakeStatus, getWhatsAppIntakeQr, getCloudApiAdapter } from
 
 const router = express.Router();
 
+// When the WhatsApp session runs in a separate deployed worker (see
+// scripts/run-whatsapp-intake-local.js) instead of this process — the usual
+// setup, since a real WhatsApp Web session needs more RAM than this API's
+// free-tier instance can spare alongside itself — WHATSAPP_INTAKE_WORKER_URL
+// points at that worker's own /status.json, and these routes proxy it so the
+// portal's admin UI keeps working unmodified either way.
+async function fetchWorkerStatus() {
+  const workerUrl = process.env.WHATSAPP_INTAKE_WORKER_URL;
+  if (!workerUrl) return null;
+  const res = await fetch(`${workerUrl}/status.json`, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`Worker responded ${res.status}`);
+  return res.json();
+}
+
 // GET /api/whatsapp-intake/status — connection state for the admin monitoring screen
-router.get('/status', authenticate, authorize('admin', 'operations_head'), (req, res) => {
-  res.json(getWhatsAppIntakeStatus());
+router.get('/status', authenticate, authorize('admin', 'operations_head'), async (req, res) => {
+  const local = getWhatsAppIntakeStatus();
+  if (local.connectionStatus !== 'not_started') return res.json(local);
+
+  try {
+    const worker = await fetchWorkerStatus();
+    if (!worker) return res.json(local);
+    res.json({
+      enabled: true,
+      provider: 'whatsapp-web',
+      connectionStatus: worker.connectionStatus,
+      lastError: worker.lastError,
+      qrAvailable: !!worker.qrDataUrl,
+    });
+  } catch (err) {
+    res.json({ ...local, lastError: `Worker unreachable: ${err.message}` });
+  }
 });
 
 // GET /api/whatsapp-intake/qr — current QR code (data URL) to link a WhatsApp device
-router.get('/qr', authenticate, authorize('admin', 'operations_head'), (req, res) => {
-  const qr = getWhatsAppIntakeQr();
-  if (!qr) return res.status(404).json({ error: 'No QR code available (already connected, or not started)' });
-  res.json({ qr });
+router.get('/qr', authenticate, authorize('admin', 'operations_head'), async (req, res) => {
+  const localQr = getWhatsAppIntakeQr();
+  if (localQr) return res.json({ qr: localQr });
+
+  try {
+    const worker = await fetchWorkerStatus();
+    if (!worker?.qrDataUrl) return res.status(404).json({ error: 'No QR code available (already connected, or not started)' });
+    res.json({ qr: worker.qrDataUrl });
+  } catch (err) {
+    res.status(502).json({ error: `Worker unreachable: ${err.message}` });
+  }
 });
 
 // GET /api/whatsapp-intake/logs — recent inbound messages and their outcome
