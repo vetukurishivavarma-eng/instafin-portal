@@ -37,6 +37,23 @@ export function mimeTypeForExtension(extension) {
   return EXTENSION_TO_MIME[extension.toLowerCase()] || 'application/octet-stream';
 }
 
+const MIME_TO_EXTENSION = Object.fromEntries(
+  Object.entries(EXTENSION_TO_MIME).map(([ext, mime]) => [mime, ext])
+);
+
+export function extensionForMimeType(mimeType) {
+  return MIME_TO_EXTENSION[mimeType] || 'bin';
+}
+
+/**
+ * WhatsApp strips the original filename off "Photo"/image sends. Give raw
+ * intake something concrete to store and download.
+ */
+export function synthesizeFilename(mimeType, when = new Date()) {
+  const stamp = new Date(when).toISOString().replace(/[:.]/g, '-');
+  return `whatsapp-${stamp}.${extensionForMimeType(mimeType)}`;
+}
+
 /**
  * @param {Buffer} buffer
  * @param {string} extension without the leading dot

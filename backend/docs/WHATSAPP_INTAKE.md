@@ -4,6 +4,35 @@ Automatically pulls customer documents sent over WhatsApp into InstaFin Portal,
 linked to the right lead and checklist item, with zero paid services. This
 doc covers the design as built in `backend/src/whatsapp-intake/`.
 
+## 0. Raw sender-matched intake (current primary flow, added 2026-09-05)
+
+Customers won't reliably name files `L10001_Aadhaar.pdf`. So the primary flow
+is now: **the customer sends whatever documents they have to the business
+WhatsApp number, and the lead is resolved from the sender's phone number**
+(matched against `leads.mobile`, on the last 10 digits). Every attachment —
+PDFs and photos alike, no filename rules — is captured raw against that lead
+as `whatsapp_intake_log.status = 'unassigned'` with the file in Supabase
+Storage under `<leadId>/whatsapp-intake/`.
+
+Those files are downloadable from the portal (WhatsApp Intake page, and a
+"WhatsApp documents" panel on the lead's Checklist page). An executive then
+places each into the checklist using the existing per-item / bulk uploader.
+A future AI step will read these same `unassigned` rows and classify each file
+by content to auto-place it.
+
+Enable with `WHATSAPP_INTAKE_MATCH=sender`. Works on either provider (Cloud
+API or whatsapp-web) since both emit a sender number. Two match failures are
+surfaced in the intake log for manual handling: `UNKNOWN_SENDER` (no lead has
+that number) and `AMBIGUOUS_SENDER` (more than one lead shares it). Migration
+`026_whatsapp_raw_intake.sql` adds the `storage_path` / `download_name`
+columns. Code: `processInboundBySender` in `intakeService.js`; the Cloud API
+adapter now also accepts `image` messages and synthesizes a filename for them
+(`fileValidation.js#synthesizeFilename`).
+
+The `<LeadID>_<DocName>.ext` filename flow below is the default when
+`WHATSAPP_INTAKE_MATCH` is unset, and its per-document checklist matching
+still applies there.
+
 ## 1. Why this shape
 
 The brief asked for Spring Boot; the real InstaFin backend is Node/Express +

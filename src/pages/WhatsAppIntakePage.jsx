@@ -18,6 +18,7 @@ const STATUS_LABELS = {
 
 const OUTCOME_STYLES = {
   processed: 'bg-green-100 text-green-700 border-green-200',
+  unassigned: 'bg-blue-100 text-blue-700 border-blue-200',
   duplicate: 'bg-amber-100 text-amber-700 border-amber-200',
   failed: 'bg-red-100 text-red-700 border-red-200',
   received: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -31,6 +32,22 @@ export default function WhatsAppIntakePage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const downloadFile = useCallback(async (logId, name) => {
+    try {
+      const res = await fetch(`${API_BASE}/whatsapp-intake/file/${logId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name || 'document';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Failed to download file');
+    }
+  }, [accessToken]);
 
   const authedGet = useCallback(async (path) => {
     const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -108,7 +125,7 @@ export default function WhatsAppIntakePage() {
             <div>
               <h1 className="text-2xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">WhatsApp Document Intake</h1>
               <p className="text-xs sm:text-base text-gray-500 font-medium mt-1">
-                Customers send documents to WhatsApp as "LeadID_DocumentName.ext" — they land here, linked to the lead automatically.
+                Customers send documents straight to the business WhatsApp number. Each file is matched to a lead by the sender's phone number and captured against it — shown here and on the lead's checklist page to download and place.
               </p>
             </div>
           </div>
@@ -180,6 +197,7 @@ export default function WhatsAppIntakePage() {
                   className="border border-gray-200 rounded-2xl px-4 py-2 text-sm bg-gray-50/50 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all shadow-sm font-bold w-full sm:w-auto"
                 >
                   <option value="">All outcomes</option>
+                  <option value="unassigned">Awaiting placement</option>
                   <option value="processed">Processed</option>
                   <option value="duplicate">Duplicate</option>
                   <option value="failed">Failed</option>
@@ -212,6 +230,14 @@ export default function WhatsAppIntakePage() {
                           </p>
                           {log.failureReason && (
                             <p className="text-xs text-red-600 mt-1 font-medium">{log.failureReason}</p>
+                          )}
+                          {log.hasFile && (
+                            <button
+                              onClick={() => downloadFile(log.id, log.downloadName || log.originalFilename)}
+                              className="mt-1.5 text-xs font-bold text-green-700 hover:text-green-800 underline"
+                            >
+                              Download
+                            </button>
                           )}
                         </div>
                         <p className="text-[10px] sm:text-xs text-gray-400 font-medium whitespace-nowrap shrink-0">

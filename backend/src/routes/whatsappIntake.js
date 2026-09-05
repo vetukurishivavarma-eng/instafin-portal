@@ -82,6 +82,8 @@ router.get('/logs', authenticate, authorize('admin', 'operations_head', 'executi
       parsedDocumentName: row.parsed_document_name,
       matchedLeadId: row.matched_lead_id,
       matchedDocumentId: row.matched_document_id,
+      downloadName: row.download_name,
+      hasFile: !!row.storage_path,
       notifiedExecutive: row.notified_executive,
       receivedAt: row.received_at,
       processedAt: row.processed_at,
@@ -108,6 +110,68 @@ router.get('/logs/lead/:leadId/summary', authenticate, authorize('admin', 'opera
     res.json(summary);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch summary' });
+  }
+});
+
+// GET /api/whatsapp-intake/documents/lead/:leadId — raw group-intake files
+// captured for a lead and not yet placed into its checklist. Feeds the
+// "WhatsApp documents" panel on the lead's checklist page.
+router.get('/documents/lead/:leadId', authenticate, authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_intake_log')
+      .select('id, original_filename, download_name, mime_type, file_size_bytes, sender_number, received_at, storage_path')
+      .eq('matched_lead_id', req.params.leadId)
+      .eq('status', 'unassigned')
+      .order('received_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json((data || []).map((row) => ({
+      id: row.id,
+      fileName: row.download_name || row.original_filename,
+      mimeType: row.mime_type,
+      fileSizeBytes: row.file_size_bytes,
+      senderNumber: row.sender_number,
+      receivedAt: row.received_at,
+    })));
+  } catch (error) {
+    console.error('WhatsApp intake documents error:', error);
+    res.status(500).json({ error: 'Failed to fetch WhatsApp intake documents' });
+  }
+});
+
+// GET /api/whatsapp-intake/file/:logId — download one captured file.
+router.get('/file/:logId', authenticate, authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+  try {
+    const { data: row, error } = await supabase
+      .from('whatsapp_intake_log')
+      .select('storage_path, download_name, original_filename')
+      .eq('id', req.params.logId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!row?.storage_path) return res.status(404).json({ error: 'File not found' });
+
+    const downloadName = row.download_name || row.original_filename || 'document';
+
+    // The intake session usually runs as its own process writing to Supabase
+    // Storage; only same-machine local dev (WHATSAPP_INTAKE_STORAGE=local)
+    // puts files on this box's disk. Try Storage first, fall back to local.
+    const { data: signed, error: signErr } = await supabase.storage
+      .from('lead-documents')
+      .createSignedUrl(row.storage_path, 3600);
+
+    if (!signErr && signed?.signedUrl) return res.redirect(signed.signedUrl);
+
+    const { default: fs } = await import('fs');
+    const { default: path } = await import('path');
+    const localPath = path.join(process.cwd(), 'uploads', row.storage_path);
+    if (!fs.existsSync(localPath)) return res.status(404).json({ error: 'File not found' });
+    return res.download(localPath, downloadName);
+  } catch (error) {
+    console.error('WhatsApp intake file download error:', error);
+    res.status(500).json({ error: 'Failed to download file' });
   }
 });
 

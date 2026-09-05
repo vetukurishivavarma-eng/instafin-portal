@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { InboundAdapter } from '../inboundAdapter.js';
+import { synthesizeFilename } from '../fileValidation.js';
 
 /**
  * Official WhatsApp Business Cloud API adapter — the migration target.
@@ -99,21 +100,24 @@ export class CloudApiAdapter extends InboundAdapter {
   }
 
   async #handleMessage(message) {
-    if (message.type !== 'document') return;
+    // Documents and photos both — customers send whichever. The lead is
+    // resolved from the sender's phone number downstream, not a filename.
+    const media = message.document || message.image;
+    if (!media) return;
 
-    const doc = message.document;
-    const mediaUrl = await this.#resolveMediaUrl(doc.id);
+    const mediaUrl = await this.#resolveMediaUrl(media.id);
     const buffer = await this.#downloadMedia(mediaUrl);
+    const timestamp = new Date(Number(message.timestamp) * 1000);
 
     /** @type {import('../inboundAdapter.js').NormalizedInboundMessage} */
     const normalized = {
       provider: 'whatsapp-cloud',
       providerMessageId: message.id,
       senderNumber: message.from,
-      originalFilename: doc.filename || 'unnamed',
-      mimeType: doc.mime_type,
+      originalFilename: media.filename || synthesizeFilename(media.mime_type, timestamp),
+      mimeType: media.mime_type,
       buffer,
-      timestamp: new Date(Number(message.timestamp) * 1000),
+      timestamp,
     };
 
     this.emit('document', normalized);

@@ -29,6 +29,15 @@ const uploadsDir = path.join(process.cwd(), 'uploads');
  * @returns {Promise<IntakeResult>}
  */
 export async function processInboundDocument(message, { supabase }) {
+  // Sender-matched raw intake: customers won't format filenames, so resolve
+  // the lead from the sender's phone number and capture every file they send
+  // as 'unassigned' for an executive to place into the checklist later.
+  // Set WHATSAPP_INTAKE_MATCH=sender to use this instead of the
+  // "<LeadID>_<DocName>.ext" filename convention below.
+  if (process.env.WHATSAPP_INTAKE_MATCH === 'sender') {
+    return processInboundBySender(message, { supabase });
+  }
+
   const receivedAt = message.timestamp?.toISOString?.() || new Date().toISOString();
 
   // 1. Record receipt immediately, before any processing — if we crash
@@ -216,6 +225,148 @@ export async function processInboundDocument(message, { supabase }) {
   console.log(`[WHATSAPP-INTAKE] Processed ${message.originalFilename} → lead ${lead.lead_code}, document ${match.documentId}`);
 
   return { status: 'processed', leadId: lead.id, documentId: match.documentId };
+}
+
+/**
+ * Sender-matched raw intake: the lead is resolved from the sender's WhatsApp
+ * phone number (matched against leads.mobile), and every file that sender
+ * sends is captured raw against that lead as status 'unassigned' for an
+ * executive to place into the checklist later (manually for now, an AI
+ * content classifier on top of these rows later). No filename convention,
+ * no document-type matching here.
+ *
+ * @param {import('./inboundAdapter.js').NormalizedInboundMessage} message
+ * @param {{ supabase: import('@supabase/supabase-js').SupabaseClient }} deps
+ * @returns {Promise<IntakeResult>}
+ */
+export async function processInboundBySender(message, { supabase }) {
+  const receivedAt = message.timestamp?.toISOString?.() || new Date().toISOString();
+  const fileHash = message.buffer ? crypto.createHash('sha256').update(message.buffer).digest('hex') : null;
+
+  const { data: logRow, error: logInsertError } = await supabase
+    .from('whatsapp_intake_log')
+    .insert({
+      provider: message.provider,
+      provider_message_id: message.providerMessageId,
+      sender_number: message.senderNumber,
+      original_filename: message.originalFilename,
+      mime_type: message.mimeType,
+      file_size_bytes: message.buffer?.length ?? 0,
+      file_hash: fileHash,
+      status: 'received',
+      received_at: receivedAt,
+    })
+    .select()
+    .single();
+
+  if (logInsertError) {
+    if (logInsertError.code === '23505') {
+      return { status: 'duplicate', message: 'Message already recorded (provider redelivery)' };
+    }
+    console.error('[WHATSAPP-INTAKE] Failed to write intake log:', logInsertError.message);
+    return { status: 'failed', failureCode: 'LOG_WRITE_FAILED', message: logInsertError.message };
+  }
+
+  const fail = async (failureCode, humanMessage, extra = {}) => {
+    console.warn(`[WHATSAPP-INTAKE] ${failureCode}: ${humanMessage} (message ${message.providerMessageId})`);
+    await supabase
+      .from('whatsapp_intake_log')
+      .update({ status: 'failed', failure_code: failureCode, failure_reason: humanMessage, processed_at: new Date().toISOString(), ...extra })
+      .eq('id', logRow.id);
+    return { status: 'failed', failureCode, message: humanMessage };
+  };
+
+  const extension = (message.originalFilename.split('.').pop() || '').toLowerCase();
+  const fileCheck = validateInboundFile({ buffer: message.buffer, extension });
+  if (!fileCheck.valid) {
+    return fail(fileCheck.errorCode, fileCheck.error);
+  }
+
+  // Resolve the lead by the sender's phone number. WhatsApp gives digits with
+  // a country code and no "+"; leads.mobile is entered inconsistently, so
+  // match on the last 10 digits (the Indian subscriber number).
+  // ponytail: ILIKE '%<last10>' on an unindexed text column — fine at this
+  // scale; add a normalized-mobile column + index if the leads table grows large.
+  const senderDigits = (message.senderNumber || '').replace(/\D/g, '');
+  if (senderDigits.length < 10) {
+    return fail('UNKNOWN_SENDER', `Sender number "${message.senderNumber || ''}" is too short to match a lead`);
+  }
+  const last10 = senderDigits.slice(-10);
+
+  const { data: leadMatches, error: leadLookupError } = await supabase
+    .from('leads')
+    .select('id, lead_code, customer_name, assigned_to')
+    .ilike('mobile', `%${last10}`);
+
+  if (leadLookupError) return fail('LEAD_LOOKUP_FAILED', leadLookupError.message);
+  if (!leadMatches || leadMatches.length === 0) {
+    return fail('UNKNOWN_SENDER', `No lead has a phone number ending ${last10}`);
+  }
+  if (leadMatches.length > 1) {
+    return fail(
+      'AMBIGUOUS_SENDER',
+      `${leadMatches.length} leads share the phone number ending ${last10} (${leadMatches.map((l) => l.lead_code).join(', ')}) — assign this file manually`
+    );
+  }
+  const lead = leadMatches[0];
+
+  // Same file content already captured for this lead - don't store it twice.
+  const { data: priorMatch } = await supabase
+    .from('whatsapp_intake_log')
+    .select('id')
+    .eq('matched_lead_id', lead.id)
+    .eq('file_hash', fileHash)
+    .in('status', ['unassigned', 'processed'])
+    .limit(1)
+    .maybeSingle();
+
+  if (priorMatch) {
+    await supabase
+      .from('whatsapp_intake_log')
+      .update({ status: 'duplicate', matched_lead_id: lead.id, processed_at: new Date().toISOString() })
+      .eq('id', logRow.id);
+    return { status: 'duplicate', message: 'Identical file already captured for this lead', leadId: lead.id };
+  }
+
+  let storedFilePath;
+  if (process.env.WHATSAPP_INTAKE_STORAGE !== 'local') {
+    const storagePath = `${lead.id}/whatsapp-intake/${uuidv4()}-${message.originalFilename}`;
+    const { error: storageError } = await supabase.storage
+      .from('lead-documents')
+      .upload(storagePath, message.buffer, { contentType: message.mimeType });
+    if (storageError) return fail('STORAGE_WRITE_FAILED', storageError.message, { matched_lead_id: lead.id });
+    storedFilePath = storagePath;
+  } else {
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    const localName = `${uuidv4()}-${message.originalFilename}`;
+    fs.writeFileSync(path.join(uploadsDir, localName), message.buffer);
+    storedFilePath = localName;
+  }
+
+  await supabase
+    .from('whatsapp_intake_log')
+    .update({
+      status: 'unassigned',
+      matched_lead_id: lead.id,
+      parsed_lead_code: lead.lead_code,
+      storage_path: storedFilePath,
+      download_name: message.originalFilename,
+      processed_at: new Date().toISOString(),
+    })
+    .eq('id', logRow.id);
+
+  const notified = await notifyExecutiveOfUpload({
+    supabase,
+    lead,
+    documentLabel: message.originalFilename,
+    senderNumber: message.senderNumber,
+  });
+  if (notified) {
+    await supabase.from('whatsapp_intake_log').update({ notified_executive: true }).eq('id', logRow.id);
+  }
+
+  console.log(`[WHATSAPP-INTAKE] Captured ${message.originalFilename} -> lead ${lead.lead_code} (unassigned)`);
+  return { status: 'unassigned', leadId: lead.id };
 }
 
 /**

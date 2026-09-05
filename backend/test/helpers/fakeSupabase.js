@@ -21,7 +21,24 @@ export function createFakeSupabase(seed = {}) {
 
     function applyFilters() {
       let rows = store[table];
-      for (const [col, val] of filters) rows = rows.filter((r) => r[col] === val);
+      for (const [op, col, val] of filters) {
+        if (op === 'in') {
+          rows = rows.filter((r) => val.includes(r[col]));
+        } else if (op === 'ilike') {
+          const needle = String(val).replace(/%/g, '').toLowerCase();
+          const starts = !val.startsWith('%');
+          const ends = !val.endsWith('%');
+          rows = rows.filter((r) => {
+            const hay = String(r[col] ?? '').toLowerCase();
+            if (starts && ends) return hay === needle;
+            if (starts) return hay.startsWith(needle);
+            if (ends) return hay.endsWith(needle);
+            return hay.includes(needle);
+          });
+        } else {
+          rows = rows.filter((r) => r[col] === val);
+        }
+      }
       if (limitN) rows = rows.slice(0, limitN);
       return rows;
     }
@@ -30,7 +47,9 @@ export function createFakeSupabase(seed = {}) {
       select() { return builder; },
       insert(data) { insertData = data; return builder; },
       update(data) { updateData = data; return builder; },
-      eq(col, val) { filters.push([col, val]); return builder; },
+      eq(col, val) { filters.push(['eq', col, val]); return builder; },
+      in(col, vals) { filters.push(['in', col, vals]); return builder; },
+      ilike(col, pattern) { filters.push(['ilike', col, pattern]); return builder; },
       limit(n) { limitN = n; return builder; },
       async maybeSingle() {
         const rows = applyFilters();

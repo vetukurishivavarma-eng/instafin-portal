@@ -49,6 +49,8 @@ export default function ChecklistsPage() {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(null);
   const [showBulkArea, setShowBulkArea] = useState(false);
+  const [waDocs, setWaDocs] = useState([]); // raw documents captured from the lead's WhatsApp group, not yet placed
+  const [waDocDownloading, setWaDocDownloading] = useState(null);
 
   // ===== Eligibility Calculator State =====
   const [eligPF, setEligPF] = useState('');
@@ -320,6 +322,7 @@ export default function ChecklistsPage() {
       setSectionAnalysis({});
       loadChecklistForLead(lead);
       fetchChecklistStatuses(lead.id);
+      fetchWaDocs(lead.id);
       fetchSummary(lead.id);
     } else {
       setSelectedLead(null);
@@ -456,6 +459,38 @@ export default function ChecklistsPage() {
       console.error('Failed to load checklist statuses:', err);
       setChecklistStatuses({});
     });
+  };
+
+  // Raw documents captured from this lead's WhatsApp group (status 'unassigned')
+  const fetchWaDocs = (leadId) => {
+    fetch(`${API_BASE}/whatsapp-intake/documents/lead/${leadId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => setWaDocs(Array.isArray(data) ? data : []))
+      .catch(() => setWaDocs([]));
+  };
+
+  const downloadWaDoc = async (id, fileName) => {
+    setWaDocDownloading(id);
+    try {
+      const res = await fetch(`${API_BASE}/whatsapp-intake/file/${id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || 'document';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download WhatsApp document');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setWaDocDownloading(null);
+    }
   };
 
   // Handle file upload for a checklist item
@@ -1068,6 +1103,36 @@ export default function ChecklistsPage() {
                   </span>
                 </div>
               </div>
+
+              {/* WhatsApp group documents awaiting placement */}
+              {waDocs.length > 0 && (
+                <div className="mb-4 border-2 border-dashed border-green-300 rounded-2xl p-4 bg-green-50/40">
+                  <h4 className="text-sm font-bold text-green-800 flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 2.1.55 4.15 1.6 5.96L2 22l4.25-1.68a9.86 9.86 0 004.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z" /></svg>
+                    WhatsApp documents ({waDocs.length})
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-3">Sent by this customer on WhatsApp. Download, then place each into its checklist item below (or via Bulk Upload).</p>
+                  <div className="space-y-2">
+                    {waDocs.map(doc => (
+                      <div key={doc.id} className="flex items-center justify-between gap-3 bg-white rounded-xl border border-green-100 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{doc.fileName}</p>
+                          <p className="text-[11px] text-gray-400">
+                            From {doc.senderNumber} · {new Date(doc.receivedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => downloadWaDoc(doc.id, doc.fileName)}
+                          disabled={waDocDownloading === doc.id}
+                          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {waDocDownloading === doc.id ? 'Downloading…' : 'Download'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Bulk Upload Section */}
               <div className="mb-4">

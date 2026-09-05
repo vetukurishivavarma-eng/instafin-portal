@@ -35,7 +35,7 @@ export async function notifyExecutiveOfUpload({ supabase, lead, documentLabel, s
             <strong>${lead.customer_name}</strong> (Lead ${lead.lead_code}) sent
             <strong>${documentLabel}</strong> over WhatsApp from ${senderNumber}.
           </p>
-          <p style="color:#475569;">It has been uploaded to their checklist and marked as received.</p>
+          <p style="color:#475569;">Open the lead in the portal to review it.</p>
           <p style="color:#94a3b8; font-size:12px;">InstaFin Portal — automated WhatsApp intake</p>
         </div>
       `,

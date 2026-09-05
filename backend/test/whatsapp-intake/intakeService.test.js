@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { processInboundDocument } from '../../src/whatsapp-intake/intakeService.js';
+import { processInboundDocument, processInboundBySender } from '../../src/whatsapp-intake/intakeService.js';
 import { createFakeSupabase } from '../helpers/fakeSupabase.js';
 
 const PDF_BUFFER = Buffer.from('%PDF-1.4 fake but well-formed for testing');
@@ -168,5 +168,123 @@ describe('processInboundDocument', () => {
     expect(second.status).toBe('processed');
     expect(second.documentId).toBe('kyc_pan');
     expect(store.lead_checklist_status).toHaveLength(2);
+  });
+});
+
+function senderMessage(overrides = {}) {
+  return {
+    provider: 'whatsapp-cloud',
+    providerMessageId: `s-${Math.random().toString(36).slice(2)}`,
+    senderNumber: '919812345678',
+    originalFilename: 'whatsapp-2026-01-01.pdf',
+    mimeType: 'application/pdf',
+    buffer: PDF_BUFFER,
+    timestamp: new Date('2026-01-01T10:00:00Z'),
+    ...overrides,
+  };
+}
+
+const LEAD = { id: 'lead-1', lead_code: 'L10001', customer_name: 'Test', assigned_to: null, mobile: '9812345678' };
+
+function trackGroupFile(store) {
+  const row = store.whatsapp_intake_log.at(-1);
+  if (row?.storage_path) writtenFiles.push(path.join(process.cwd(), 'uploads', row.storage_path));
+}
+
+describe('processInboundBySender', () => {
+  it('captures a file, matching the lead by the sender phone number, as unassigned', async () => {
+    const { supabase, store } = createFakeSupabase({ leads: [LEAD] });
+
+    const result = await processInboundBySender(senderMessage(), { supabase });
+    trackGroupFile(store);
+
+    expect(result.status).toBe('unassigned');
+    expect(result.leadId).toBe('lead-1');
+    expect(store.lead_checklist_status).toHaveLength(0); // not placed yet
+    const log = store.whatsapp_intake_log[0];
+    expect(log.status).toBe('unassigned');
+    expect(log.matched_lead_id).toBe('lead-1');
+    expect(log.parsed_lead_code).toBe('L10001');
+    expect(log.storage_path).toBeTruthy();
+    expect(log.download_name).toBe('whatsapp-2026-01-01.pdf');
+  });
+
+  it('matches on the last 10 digits when mobile is stored with a country code', async () => {
+    const { supabase, store } = createFakeSupabase({ leads: [{ ...LEAD, mobile: '919812345678' }] });
+    const result = await processInboundBySender(senderMessage(), { supabase });
+    trackGroupFile(store);
+    expect(result.status).toBe('unassigned');
+  });
+
+  it('captures a photo (synthesized filename, no naming convention needed)', async () => {
+    const { supabase, store } = createFakeSupabase({ leads: [LEAD] });
+    const result = await processInboundBySender(
+      senderMessage({ originalFilename: 'whatsapp-2026-01-01.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0x01]) }),
+      { supabase }
+    );
+    trackGroupFile(store);
+    expect(result.status).toBe('unassigned');
+  });
+
+  it('routes through processInboundDocument when WHATSAPP_INTAKE_MATCH=sender', async () => {
+    const prev = process.env.WHATSAPP_INTAKE_MATCH;
+    process.env.WHATSAPP_INTAKE_MATCH = 'sender';
+    try {
+      const { supabase, store } = createFakeSupabase({ leads: [LEAD] });
+      const result = await processInboundDocument(senderMessage(), { supabase });
+      trackGroupFile(store);
+      expect(result.status).toBe('unassigned');
+    } finally {
+      if (prev === undefined) delete process.env.WHATSAPP_INTAKE_MATCH;
+      else process.env.WHATSAPP_INTAKE_MATCH = prev;
+    }
+  });
+
+  it('fails when no lead has the sender phone number', async () => {
+    const { supabase } = createFakeSupabase({ leads: [] });
+    const result = await processInboundBySender(senderMessage(), { supabase });
+    expect(result.status).toBe('failed');
+    expect(result.failureCode).toBe('UNKNOWN_SENDER');
+  });
+
+  it('fails when more than one lead shares the sender phone number', async () => {
+    const { supabase } = createFakeSupabase({
+      leads: [LEAD, { ...LEAD, id: 'lead-2', lead_code: 'L10002' }],
+    });
+    const result = await processInboundBySender(senderMessage(), { supabase });
+    expect(result.status).toBe('failed');
+    expect(result.failureCode).toBe('AMBIGUOUS_SENDER');
+  });
+
+  it('rejects an unsupported file type', async () => {
+    const { supabase } = createFakeSupabase({ leads: [LEAD] });
+    const result = await processInboundBySender(
+      senderMessage({ originalFilename: 'whatsapp.bin', mimeType: 'application/octet-stream' }),
+      { supabase }
+    );
+    expect(result.status).toBe('failed');
+    expect(result.failureCode).toBe('UNSUPPORTED_FILE_TYPE');
+  });
+
+  it('treats the same file content re-sent by the sender as a duplicate', async () => {
+    const { supabase, store } = createFakeSupabase({ leads: [LEAD] });
+    const first = await processInboundBySender(senderMessage({ providerMessageId: 's-1' }), { supabase });
+    trackGroupFile(store);
+    const second = await processInboundBySender(senderMessage({ providerMessageId: 's-2' }), { supabase });
+
+    expect(first.status).toBe('unassigned');
+    expect(second.status).toBe('duplicate');
+    expect(store.whatsapp_intake_log.filter((r) => r.status === 'unassigned')).toHaveLength(1);
+  });
+
+  it('treats a provider-redelivered message as a duplicate', async () => {
+    const { supabase, store } = createFakeSupabase({ leads: [LEAD] });
+    const msg = senderMessage({ providerMessageId: 's-same' });
+    const first = await processInboundBySender(msg, { supabase });
+    trackGroupFile(store);
+    const second = await processInboundBySender(msg, { supabase });
+    expect(first.status).toBe('unassigned');
+    expect(second.status).toBe('duplicate');
+    expect(store.whatsapp_intake_log).toHaveLength(1);
   });
 });
