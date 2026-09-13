@@ -16,27 +16,7 @@ import multer from 'multer';
 import { fillPdfForm } from '../services/formFiller.js';
 import { extractFormValues, flattenPdfForm } from '../services/formSubmission.js';
 import { loadFormPdf, loadStoredFile } from '../services/formStorage.js';
-
-// Helper to record status change in status_history
-async function recordStatusChange(leadId, previousStatus, newStatus, changedBy, notes) {
-  try {
-    await supabase
-      .from('status_history')
-      .insert({
-        lead_id: leadId,
-        previous_status: previousStatus,
-        new_status: newStatus,
-        changed_by: changedBy || 'system',
-        changed_at: new Date().toISOString(),
-        notes: notes || null
-      });
-  } catch (err) {
-    // Table may not exist yet - silently fail
-    if (!err.message || (!err.message.includes('relation') && !err.message.includes('does not exist'))) {
-      console.error('Failed to record status history:', err);
-    }
-  }
-}
+import { recordStatusChange } from '../services/statusHistory.js';
 
 // Helper to record audit log for admin actions while impersonating
 async function recordAuditLog(leadId, adminId, action, details, adminName) {
@@ -644,7 +624,7 @@ router.put('/:id', authorize('admin', 'operations_head', 'executive', 'dsa'), as
     // Check if lead exists
     const { data: existingLead } = await supabase
       .from('leads')
-      .select('assigned_to, remarks')
+      .select('assigned_to, remarks, status')
       .eq('id', req.params.id)
       .single();
 
@@ -1864,6 +1844,7 @@ router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive',
         .from('leads')
         .update({ status: 'Processing' })
         .eq('id', leadId);
+      await recordStatusChange(leadId, lead.status, 'Processing', req.user?.name || req.user?.email, 'Documents analysed');
     }
 
     res.json({ success: true, summary: summaryText, section: section || null });

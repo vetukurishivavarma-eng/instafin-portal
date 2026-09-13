@@ -2,6 +2,7 @@ import express from 'express';
 import { supabase } from '../lib/supabase.js';
 import { authorize } from '../middleware/authorize.js';
 import { deriveLeadStatus, computeLeadAggregates } from '../utils/statusDerivation.js';
+import { recordStatusChange } from '../services/statusHistory.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -16,6 +17,8 @@ async function updateLeadDerivedStatus(leadId) {
     .eq('lead_id', leadId);
 
   if (error) throw error;
+
+  const { data: current } = await supabase.from('leads').select('status').eq('id', leadId).maybeSingle();
 
   const bankStatuses = banks.map(b => b.status);
   const derivedStatus = deriveLeadStatus(bankStatuses);
@@ -32,6 +35,8 @@ async function updateLeadDerivedStatus(leadId) {
     .eq('id', leadId);
 
   if (updateError) throw updateError;
+
+  await recordStatusChange(leadId, current?.status, derivedStatus, 'system', 'Derived from bank statuses');
 
   return { derivedStatus, totalSanctioned, totalDisbursed };
 }

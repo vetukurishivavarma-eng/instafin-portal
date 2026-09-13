@@ -17,6 +17,7 @@ const NAV_LINKS = {
       { to: '/admin/disburse', label: 'Disburse' },
     ],
     more: [
+      { to: '/admin/insights', label: 'Insights' },
       { to: '/admin/revenue', label: 'Revenue' },
       { to: '/admin/executives', label: 'Executives' },
       { to: '/admin/download-forms', label: 'Download Forms' },
@@ -24,6 +25,7 @@ const NAV_LINKS = {
       { to: '/admin/hurdles', label: 'Daily Hurdles' },
       { to: '/admin/audit-log', label: 'Audit Log' },
       { to: '/admin/whatsapp-intake', label: 'WhatsApp Intake' },
+      { to: '/admin/privacy', label: 'Privacy & Data' },
     ],
   },
   executive: {
@@ -51,6 +53,7 @@ const NAV_LINKS = {
       { to: '/operations/disburse', label: 'Disburse' },
     ],
     more: [
+      { to: '/operations/insights', label: 'Insights' },
       { to: '/operations/download-forms', label: 'Download Forms' },
       { to: '/operations/lead-archives', label: 'Lead Archives' },
       { to: '/operations/hurdles', label: 'Daily Hurdles' },
@@ -239,7 +242,7 @@ export default function Layout({ children }) {
   };
 
   // Public pages - no nav
-  if (location.pathname === '/login' || location.pathname === '/' || location.pathname === '/features' || location.pathname === '/contact') {
+  if (location.pathname === '/login' || location.pathname === '/' || location.pathname === '/features' || location.pathname === '/contact' || location.pathname.startsWith('/track/')) {
     return <>{children}</>;
   }
 

@@ -17,6 +17,10 @@ import cibilRouter from './routes/cibil.js';
 import hurdlesRouter from './routes/hurdles.js';
 import eligibilityFormulasRouter from './routes/eligibilityFormulas.js';
 import whatsappIntakeRouter from './routes/whatsappIntake.js';
+import docIntelRouter from './routes/docIntel.js';
+import insightsRouter from './routes/insights.js';
+import trackingRouter from './routes/tracking.js';
+import privacyRouter from './routes/privacy.js';
 import { hurdleGuard } from './middleware/hurdleGuard.js';
 import { startWhatsAppIntake } from './whatsapp-intake/index.js';
 
@@ -59,6 +63,10 @@ app.use('/api/cibil', cibilRouter);
 app.use('/api/hurdles', hurdlesRouter);
 app.use('/api/eligibility-formulas', eligibilityFormulasRouter);
 app.use('/api/whatsapp-intake', whatsappIntakeRouter);
+app.use('/api/doc-intel', docIntelRouter);
+app.use('/api/insights', insightsRouter);
+app.use('/api/track', trackingRouter);
+app.use('/api/privacy', privacyRouter);
 
 // Health check
 app.get('/', (req, res) => {

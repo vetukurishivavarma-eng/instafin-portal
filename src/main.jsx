@@ -29,6 +29,9 @@ import EligibilityPage from './pages/EligibilityPage'
 import LeadArchivesPage from './pages/LeadArchivesPage'
 
 import HurdlePage from './pages/HurdlePage'
+import InsightsPage from './pages/InsightsPage'
+import PrivacyPage from './pages/PrivacyPage'
+import TrackPage from './pages/TrackPage'
 
 import './index.css'
 
@@ -89,6 +92,7 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/track/:token" element={<TrackPage />} />
 
         {/* Legacy routes - redirect based on role */}
         <Route path="/dashboard" element={<RoleRedirect />} />
@@ -162,6 +166,16 @@ function AppRoutes() {
         <Route path="/admin/hurdles" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <HurdlePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/insights" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <InsightsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/privacy" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <PrivacyPage />
           </ProtectedRoute>
         } />
 
@@ -262,6 +276,11 @@ function AppRoutes() {
         <Route path="/operations/whatsapp-intake" element={
           <ProtectedRoute allowedRoles={['operations_head']}>
             <WhatsAppIntakePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/operations/insights" element={
+          <ProtectedRoute allowedRoles={['operations_head']}>
+            <InsightsPage />
           </ProtectedRoute>
         } />
 
