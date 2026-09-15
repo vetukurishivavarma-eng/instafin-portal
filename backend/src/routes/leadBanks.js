@@ -124,6 +124,7 @@ router.post('/', authorize('admin', 'operations_head', 'executive'), async (req,
           .from('leads')
           .update({ assigned_banks: updatedBanks, status: newStatus })
           .eq('id', leadId);
+        await recordStatusChange(leadId, lead.status, newStatus, req.user?.email || 'system', `Bank added: ${bankName}`);
       }
     }
 

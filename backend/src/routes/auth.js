@@ -6,9 +6,18 @@ import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { sendApprovalEmail, sendRejectionEmail, testEmailConnection } from '../services/email.service.js';
 import { sendApprovalWhatsApp, sendRejectionWhatsApp } from '../services/whatsapp.service.js';
+import { JWT_SECRET } from '../config/secrets.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'instafin-dev-secret-2024';
+
+// Brute-force brake on login: 10 attempts per IP + email per 15 minutes.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  key: (req) => `${req.ip}|${String(req.body?.email || '').toLowerCase()}`,
+  message: 'Too many login attempts. Please wait 15 minutes and try again.',
+});
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
@@ -71,7 +80,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 

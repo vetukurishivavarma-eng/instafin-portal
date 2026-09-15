@@ -22,10 +22,16 @@ import insightsRouter from './routes/insights.js';
 import trackingRouter from './routes/tracking.js';
 import privacyRouter from './routes/privacy.js';
 import { hurdleGuard } from './middleware/hurdleGuard.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
 import { startWhatsAppIntake } from './whatsapp-intake/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Render terminates TLS in front of the app: trust one proxy hop so req.ip (login rate limit)
+// and req.secure (HSTS) reflect the real client, not the load balancer.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
 
 // CORS configuration for production
 const corsOptions = {
@@ -34,6 +40,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(securityHeaders);
 // `verify` stashes the raw request bytes on req.rawBody — needed by the
 // WhatsApp Cloud API webhook to check Meta's X-Hub-Signature-256 against
 // the exact bytes it sent (a re-serialized JSON body would not match).

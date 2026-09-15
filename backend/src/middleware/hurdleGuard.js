@@ -10,8 +10,7 @@
  */
 import jwt from 'jsonwebtoken';
 import { isUserBlocked, BLOCKED_ROLES } from '../services/hurdle.service.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'instafin-dev-secret-2024';
+import { JWT_SECRET } from '../config/secrets.js';
 
 // Whitelisted path prefixes — these remain reachable while blocked.
 const WHITELIST = ['/api/auth', '/api/hurdles'];

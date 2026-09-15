@@ -1,6 +1,5 @@
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'instafin-dev-secret-2024';
+import { JWT_SECRET } from '../config/secrets.js';
 
 export function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;

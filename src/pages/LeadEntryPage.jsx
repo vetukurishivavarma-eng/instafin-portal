@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import BulkUploadModal from '../components/BulkUploadModal';
+import TrackingLinkBar from '../components/TrackingLinkBar';
 import API_BASE from '../config/api';
 import { ALL_BANKS } from '../data/banks';
 import { getChecklistWithFallback } from '../utils/resolver';
@@ -1398,6 +1399,8 @@ export default function LeadEntryPage() {
                 <p className="font-bold text-gray-800 mt-1">{viewLead.entryDate || viewLead.createdAt ? new Date(viewLead.entryDate || viewLead.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
               </div>
             </div>
+
+            <TrackingLinkBar lead={viewLead} />
 
             {docChecklistItems.length > 0 && (() => {
               const uploadedDocCount = docChecklistItems.filter(item => (docStatuses[item.id] || []).length > 0).length;

@@ -21,7 +21,7 @@ export default function DashboardPage() {
     disbursed: 0,
     rejected: 0,
     closed: 0,
-    revenue: '₹0L'
+    revenue: '—'
   });
   const [error, setError] = useState('');
   const [navigatingTo, setNavigatingTo] = useState(null);
@@ -65,8 +65,7 @@ export default function DashboardPage() {
           return;
         }
         setError('');
-        const rev = ((retryData.totalLeads * 10240) / 100000).toFixed(1);
-        setStats({ ...retryData, revenue: `\u20B9${rev}L` });
+        setStats(prev => ({ ...retryData, revenue: prev.revenue }));
         return;
       }
 
@@ -76,8 +75,7 @@ export default function DashboardPage() {
         return;
       }
       setError('');
-      const revenue = ((data.totalLeads * 10240) / 100000).toFixed(1);
-      setStats({ ...data, revenue: `₹${revenue}L` });
+      setStats(prev => ({ ...data, revenue: prev.revenue }));
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     }
@@ -87,6 +85,18 @@ export default function DashboardPage() {
     if (!accessToken) return;
     fetchStats();
   }, [accessToken]);
+
+  // Real earned revenue (admin only, same rule as the Revenue page) — replaces the old
+  // totalLeads × ₹10,240 placeholder that every role saw.
+  useEffect(() => {
+    if (!accessToken || effectiveRole !== 'admin') return;
+    fetch(`${API_BASE}/insights/revenue`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (data) setStats(prev => ({ ...prev, revenue: `₹${(data.earned / 100000).toFixed(1)}L` }));
+      })
+      .catch(() => {});
+  }, [accessToken, effectiveRole]);
 
   const handleNavigate = useCallback((status) => {
     const path = status ? `${basePath}/leads?status=${status}` : `${basePath}/leads`;

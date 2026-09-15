@@ -7,6 +7,7 @@ import { downloadEligibilityPDF, downloadPDF, downloadProfilePDF } from '../expo
 import { shareOnWhatsApp } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
 import { FORM_FIELD_LABELS } from '../data/formFieldKeys';
+import BestBankMatch from '../components/BestBankMatch';
 
 // Normalize field values for checklist matching
 const normalizeValue = (val) => {
@@ -3410,6 +3411,29 @@ export default function CustomerLoginPage() {
                     </div>
                   </div>
                 </div>
+
+                <BestBankMatch
+                  loanType={selectedLead?.loanType}
+                  assignedBanks={selectedLead?.assignedBanks}
+                  income={{
+                    grossSalary: eligNum(eligGrossSalary),
+                    netSalary: eligNetSalary,
+                    coapplicantGross: eligCoapplicantGrossVal,
+                    rentalIncome: eligNum(eligRentalIncome),
+                    pf: eligNum(eligPF),
+                    incomeTax: eligNum(eligIncomeTax),
+                    professionTax: eligNum(eligProfessionTax),
+                    totalDeductions: eligTotalDeductions,
+                    netIncome: eligNetIncome,
+                    totalExistingEmis: eligTotalExistingEmis,
+                  }}
+                  defaults={{ rate: eligNum(eligRate), period: eligNum(eligPeriod), emiNmiPercent: eligNum(eligEmiNmiPercent) }}
+                  onApply={(m) => {
+                    setEligRate(String(m.rate));
+                    setEligPeriod(String(m.period));
+                    setEligEmiNmiPercent(String(m.emiNmiPercent));
+                  }}
+                />
 
                 <div className="flex gap-3">
                   <button
