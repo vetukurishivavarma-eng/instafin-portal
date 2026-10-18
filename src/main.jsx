@@ -8,6 +8,7 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import FeaturesPage from './pages/FeaturesPage'
 import ContactPage from './pages/ContactPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 
 // Admin pages
 import DashboardPage from './pages/DashboardPage'
@@ -89,6 +90,7 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
         {/* Legacy routes - redirect based on role */}
         <Route path="/dashboard" element={<RoleRedirect />} />

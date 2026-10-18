@@ -239,7 +239,7 @@ export default function Layout({ children }) {
   };
 
   // Public pages - no nav
-  if (location.pathname === '/login' || location.pathname === '/' || location.pathname === '/features' || location.pathname === '/contact') {
+  if (location.pathname === '/login' || location.pathname === '/' || location.pathname === '/features' || location.pathname === '/contact' || location.pathname === '/privacy-policy') {
     return <>{children}</>;
   }
 
