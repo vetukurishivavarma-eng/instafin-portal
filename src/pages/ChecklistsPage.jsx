@@ -1275,7 +1275,7 @@ export default function ChecklistsPage() {
                       property_documents: 'Property Documents',
                       financial_documents: 'Financial Documents',
                       legal_documents: 'Legal Documents',
-                      others: 'Other Documents'
+                      others: 'Others'
                     };
 
                     // "Other Documents": same 'other_docs' slot Customer Login uses, so

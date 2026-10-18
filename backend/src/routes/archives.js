@@ -7,6 +7,7 @@ import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { fileStore } from '../lib/fileStore.js';
 import { zipName, contentDisposition } from '../utils/downloadName.js';
+import { categorizer, CATEGORY_LABELS } from '../services/docCategory.js';
 
 const router = express.Router();
 
@@ -185,22 +186,25 @@ router.get('/leads', authorize('admin', 'operations_head', 'executive', 'dsa'), 
 });
 
 // GET /api/archives/leads/:leadId/zip - Download all documents for a lead as a ZIP organized by section folders
-router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executive', 'dsa'), async (req, res) => {
+router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executive', 'dsa', 'ai_bot'), async (req, res) => {
   try {
     const { leadId } = req.params;
 
     const { data: lead } = await supabase
       .from('leads')
-      .select('id, customer_name, assigned_to')
+      .select('id, customer_name, assigned_to, loan_type, loan_status, income_source, resident_type, business_type')
       .eq('id', leadId)
       .single();
 
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
+    const categoryOf = categorizer(lead);
+    // ?category=kyc -> only that category folder
+    const onlyCategory = CATEGORY_LABELS[req.query.category] ? req.query.category : null;
 
-    // Role-based access check for non-admin/ops-head users
-    if (!['admin', 'operations_head'].includes(req.user.role)) {
+    // Role-based access check for non-admin/ops-head users (AI Bot sees all leads)
+    if (!['admin', 'operations_head', 'ai_bot'].includes(req.user.role)) {
       const { data: userData } = await supabase
         .from('users')
         .select('name')
@@ -221,15 +225,16 @@ router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executiv
 
     if (docsErr) throw docsErr;
 
-    if (!docs || docs.length === 0) {
-      return res.status(400).json({ error: 'No uploaded documents for this lead' });
+    const wanted = onlyCategory ? (docs || []).filter(d => categoryOf(d.document_id).key === onlyCategory) : docs;
+    if (!wanted || wanted.length === 0) {
+      return res.status(400).json({ error: onlyCategory ? `No ${CATEGORY_LABELS[onlyCategory]} uploaded for this lead` : 'No uploaded documents for this lead' });
     }
 
     // Stream one file at a time into the zip (fetch -> append -> next) so only
     // one document sits in memory at once; 100+ MB leads would otherwise risk
     // the 512 MB free server. Missing files are skipped and logged.
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', contentDisposition(zipName(lead.customer_name)));
+    res.setHeader('Content-Disposition', contentDisposition(zipName(onlyCategory ? `${lead.customer_name}_${CATEGORY_LABELS[onlyCategory]}` : lead.customer_name)));
     res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
     const archive = new ZipArchive({ zlib: { level: 6 } });
@@ -241,7 +246,7 @@ router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executiv
 
     const usedNames = new Set();
     let added = 0;
-    for (const doc of docs) {
+    for (const doc of wanted) {
       const fileData = await getFileBuffer(doc);
       if (!fileData || !fileData.exists) {
         console.warn(`[ARCHIVES] Skipping missing file for doc ${doc.id} (${doc.file_path})`);
@@ -249,13 +254,13 @@ router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executiv
       }
 
       const parsed = parseDocName(doc.document_name);
-      const cat = getCategoryFromDocumentId(doc.document_id);
+      const cat = categoryOf(doc.document_id);
       const folder = sanitizeName(cat.label, FALLBACK_LABEL);
 
       // Prefer original filename, fall back to document name, ensure uniqueness
       let base = parsed.originalFile || parsed.name || `document-${doc.id}`;
       base = sanitizeName(base, `document-${doc.id}`);
-      let entryName = `${folder}/${base}`;
+      let entryName = onlyCategory ? base : `${folder}/${base}`;
       let counter = 1;
       while (usedNames.has(entryName.toLowerCase())) {
         const ext = path.extname(base);

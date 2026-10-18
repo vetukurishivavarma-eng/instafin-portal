@@ -207,13 +207,35 @@ const driveBucket = {
     return { signedUrl: linkFor(file, expiresIn, opts) };
   }),
 
-  createSignedUrls: (paths, expiresIn) => wrap(async () => {
-    const out = [];
+  // One folder listing per directory instead of one lookup per file.
+  // opts.names: optional save-as name per path (same order as paths).
+  createSignedUrls: (paths, expiresIn, opts = {}) => wrap(async () => {
+    const byDir = new Map();
     for (const p of paths) {
-      const file = await findFile(p);
-      out.push(file ? { path: p, signedUrl: linkFor(file, expiresIn), error: null } : { path: p, signedUrl: null, error: 'Object not found' });
+      const { dir } = split(p);
+      if (!byDir.has(dir)) {
+        const parent = await folderId(dir, false);
+        const files = new Map();
+        if (parent) {
+          let pageToken;
+          do {
+            const params = new URLSearchParams({ q: `'${parent}' in parents and trashed = false`, fields: 'nextPageToken,files(id,name)', pageSize: '1000' });
+            if (pageToken) params.set('pageToken', pageToken);
+            const page = await (await drive(`${API}?${params}`)).json();
+            page.files.forEach((f) => files.set(f.name, f));
+            pageToken = page.nextPageToken;
+          } while (pageToken);
+        }
+        byDir.set(dir, files);
+      }
     }
-    return out;
+    return paths.map((p, i) => {
+      const { dir, name } = split(p);
+      const file = byDir.get(dir).get(name);
+      return file
+        ? { path: p, signedUrl: linkFor(file, expiresIn, { name: opts.names?.[i] }), error: null }
+        : { path: p, signedUrl: null, error: 'Object not found' };
+    });
   }),
 
   // Same shape as Supabase: folders have id null, files carry metadata.size.

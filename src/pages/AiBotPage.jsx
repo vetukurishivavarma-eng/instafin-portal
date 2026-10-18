@@ -3,19 +3,15 @@ import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
 import { downloadWithAuth } from '../utils/download';
 
-// AI Bot login: type a customer's name (+ attach files) to save, or ask for
-// their documents. Folders are per customer, sub-folders per date received.
-const EXAMPLES = ['Ravi Kumar PAN', 'show Ravi Kumar', 'Ravi Kumar 2026-10-18', 'leads'];
-
-function formatSize(bytes) {
-  if (!bytes) return '';
-  return bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
+// AI Bot login: type a customer's name (+ attach files or a zip) to file them
+// into that lead's checklist, or ask for the lead's documents, shown in
+// category folders (KYC, Income Proof, ...) that can each be downloaded.
+const EXAMPLES = ['Ravi Kumar PAN', 'Ravi Kumar 9876543210 PAN', 'show Ravi Kumar', 'L10031', 'leads'];
 
 export default function AiBotPage() {
   const { user, logout, refreshAccessToken } = useAuth();
   const [messages, setMessages] = useState([
-    { from: 'bot', reply: 'Attach a document and type the customer name to save it. Type a name to see their documents, date-wise.' },
+    { from: 'bot', reply: 'Attach documents (or a zip) and type the customer name to file them into that lead. New customer? Add their mobile number. Type a name or Lead ID to see their documents.' },
   ]);
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
@@ -27,15 +23,16 @@ export default function AiBotPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const downloadAll = async (lead, i) => {
-    setZipping(i);
-    const url = `${API_BASE}/ai-bot/zip?lead=${encodeURIComponent(lead)}`;
+  // key: which button is busy, e.g. "3:all" or "3:kyc"
+  const download = async (lead, category, key) => {
+    setZipping(key);
+    const url = `${API_BASE}/archives/leads/${lead.id}/zip${category ? `?category=${category}` : ''}`;
     try {
       try {
-        await downloadWithAuth(url, localStorage.getItem('instafin_token'), `${lead}.zip`);
+        await downloadWithAuth(url, localStorage.getItem('instafin_token'), `${lead.name}.zip`);
       } catch (err) {
         if (!(await refreshAccessToken())) throw err;
-        await downloadWithAuth(url, localStorage.getItem('instafin_token'), `${lead}.zip`);
+        await downloadWithAuth(url, localStorage.getItem('instafin_token'), `${lead.name}.zip`);
       }
     } catch (err) {
       setMessages((m) => [...m, { from: 'bot', reply: err.message || 'Download failed', error: true }]);
@@ -107,37 +104,53 @@ export default function AiBotPage() {
             <div key={i} className="flex justify-start">
               <div className={`max-w-[90%] rounded-2xl rounded-bl-sm px-4 py-2 text-sm border ${m.error ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-800'}`}>
                 <div className="whitespace-pre-wrap break-words">{m.reply}</div>
-                {m.folders?.length > 0 && (
+                {(m.leads || m.choose)?.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {m.folders.map((f) => (
-                      <button key={f} onClick={() => send(`show ${f}`)} className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-xs font-medium">📁 {f}</button>
+                    {(m.leads || m.choose).map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => send(m.choose ? (l.code || l.name) : `show ${l.code || l.name}`)}
+                        className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-xs font-medium"
+                      >
+                        👤 {l.name}{l.code ? ` · ${l.code}` : ''}
+                      </button>
                     ))}
                   </div>
                 )}
-                {m.dates?.length > 0 && (
+                {m.folders?.length > 0 && (
                   <button
-                    onClick={() => downloadAll(m.lead, i)}
-                    disabled={zipping === i}
+                    onClick={() => download(m.lead, null, `${i}:all`)}
+                    disabled={zipping === `${i}:all`}
                     className="mt-2 px-3 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {zipping === i ? 'Preparing zip…' : `⬇ Download all (${m.dates.reduce((n, d) => n + d.files.length, 0)})`}
+                    {zipping === `${i}:all` ? 'Preparing zip…' : `⬇ Download all (${m.folders.reduce((n, f) => n + f.files.length, 0)})`}
                   </button>
                 )}
-                {m.dates?.map((d) => (
-                  <div key={d.date} className="mt-3">
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">📅 {d.date}</div>
-                    <ul className="mt-1 space-y-1">
-                      {d.files.map((f) => (
-                        <li key={f.url} className="flex items-center justify-between gap-3">
-                          <a href={f.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">{f.name}</a>
+                {m.folders?.map((f) => (
+                  <details key={f.key} className="mt-2 border border-gray-200 rounded-lg" open={m.folders.length === 1}>
+                    <summary className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer select-none">
+                      <span className="font-medium text-gray-800">📁 {f.label} <span className="text-gray-400 font-normal">({f.files.length})</span></span>
+                      <button
+                        onClick={(e) => { e.preventDefault(); download(m.lead, f.key, `${i}:${f.key}`); }}
+                        disabled={zipping === `${i}:${f.key}`}
+                        className="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded disabled:opacity-50"
+                        aria-label={`Download ${f.label}`}
+                      >
+                        {zipping === `${i}:${f.key}` ? '…' : '⬇ Folder'}
+                      </button>
+                    </summary>
+                    <ul className="px-3 pb-2 space-y-1">
+                      {f.files.map((file) => (
+                        <li key={file.url} className="flex items-center justify-between gap-3">
+                          <a href={file.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">{file.name}</a>
                           <span className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs text-gray-400">{formatSize(f.size)}</span>
-                            <a href={`${f.url}?dl=1`} className="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded" aria-label={`Download ${f.name}`}>⬇</a>
+                            <span className="text-xs text-gray-400">{file.date}</span>
+                            <a href={`${file.url}?dl=1`} className="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded" aria-label={`Download ${file.name}`}>⬇</a>
                           </span>
                         </li>
                       ))}
                     </ul>
-                  </div>
+                  </details>
                 ))}
               </div>
             </div>
@@ -170,7 +183,7 @@ export default function AiBotPage() {
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={files.length ? 'Customer name, e.g. Ravi Kumar PAN' : 'Customer name or "leads"'}
+              placeholder={files.length ? 'Customer name, e.g. Ravi Kumar PAN' : 'Customer name, Lead ID or "leads"'}
               className="flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             <button type="submit" disabled={busy} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 shrink-0">Send</button>
