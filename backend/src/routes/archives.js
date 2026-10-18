@@ -5,6 +5,7 @@ import fs from 'fs';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import { fileStore } from '../lib/fileStore.js';
 
 const router = express.Router();
 
@@ -59,8 +60,7 @@ async function getFileBuffer(record) {
 
   if (process.env.NODE_ENV === 'production') {
     try {
-      const { data, error } = await supabase.storage
-        .from('lead-documents')
+      const { data, error } = await fileStore()
         .download(record.file_path);
       if (error) throw error;
       const buffer = Buffer.from(await data.arrayBuffer());

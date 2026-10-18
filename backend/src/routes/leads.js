@@ -16,6 +16,7 @@ import multer from 'multer';
 import { fillPdfForm } from '../services/formFiller.js';
 import { extractFormValues, flattenPdfForm } from '../services/formSubmission.js';
 import { loadFormPdf, loadStoredFile } from '../services/formStorage.js';
+import { fileStore } from '../lib/fileStore.js';
 
 // Helper to record status change in status_history
 async function recordStatusChange(leadId, previousStatus, newStatus, changedBy, notes) {
@@ -1741,8 +1742,7 @@ router.get('/:id/summary', authorize('admin', 'operations_head', 'executive', 'd
     if (process.env.NODE_ENV === 'production') {
       // Production: check in Supabase Storage
       try {
-        const { data, error } = await supabase.storage
-          .from('lead-documents')
+        const { data, error } = await fileStore()
           .download(fileName);
 
         if (error) {
@@ -1840,8 +1840,7 @@ router.post('/:id/summarize', authorize('admin', 'operations_head', 'executive',
     if (process.env.NODE_ENV === 'production') {
       try {
         const fileBuffer = Buffer.from(summaryText, 'utf8');
-        const { error: uploadError } = await supabase.storage
-          .from('lead-documents')
+        const { error: uploadError } = await fileStore()
           .upload(fileName, fileBuffer, {
             contentType: 'text/plain',
             upsert: true
@@ -1997,8 +1996,7 @@ router.post('/:id/fill-form', authorize('admin', 'operations_head', 'executive',
     const storagePath = `filled-forms/${leadId}_${form.id}_${stamp}.pdf`;
 
     if (process.env.NODE_ENV === 'production') {
-      const { error: upErr } = await supabase.storage
-        .from('lead-documents')
+      const { error: upErr } = await fileStore()
         .upload(storagePath, filledBuffer, { contentType: 'application/pdf', upsert: true });
       if (upErr) throw upErr;
     } else {
@@ -2119,8 +2117,7 @@ router.post('/:id/submit-form', authorize('admin', 'operations_head', 'executive
     const stamp = Date.now();
     const storagePath = `filled-forms/${leadId}_${form.id}_${stamp}.pdf`;
     if (process.env.NODE_ENV === 'production') {
-      const { error: upErr } = await supabase.storage
-        .from('lead-documents')
+      const { error: upErr } = await fileStore()
         .upload(storagePath, flattenedBuffer, { contentType: 'application/pdf', upsert: true });
       if (upErr) throw upErr;
     } else {

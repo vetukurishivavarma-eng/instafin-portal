@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { supabase } from '../lib/supabase.js';
 import { FORM_SOURCES } from '../data/formSources.js';
+import { fileStore } from '../lib/fileStore.js';
 
 const formsDir = path.join(process.cwd(), 'uploads', 'forms');
 if (!fs.existsSync(formsDir)) {
@@ -79,8 +80,7 @@ export async function syncFormsFromInternet(bankName = null) {
 
       // Store the file
       if (isProduction()) {
-        const { error: uploadError } = await supabase.storage
-          .from('lead-documents')
+        const { error: uploadError } = await fileStore()
           .upload(filePath, fileBuffer, { contentType: 'application/pdf', upsert: true });
         if (uploadError) throw uploadError;
         dbFilePath = filePath;

@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { PDFDocument } from 'pdf-lib';
 import { supabase } from '../lib/supabase.js';
+import { fileStore } from '../lib/fileStore.js';
 
 // ─────────────────────────────────────────────────────────────
 // Section metadata (shared with leads routes)
@@ -218,8 +219,7 @@ export async function loadDocumentBuffer(fileName) {
   if (fs.existsSync(localPath)) {
     return fs.readFileSync(localPath);
   }
-  const { data, error } = await supabase.storage
-    .from('lead-documents')
+  const { data, error } = await fileStore()
     .download(fileName);
   if (error) {
     console.warn(`Could not download ${fileName} from Supabase:`, error.message);

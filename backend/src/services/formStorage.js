@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { supabase } from '../lib/supabase.js';
 import { resolveLocalFormPath } from '../data/formFileMap.js';
+import { fileStore } from '../lib/fileStore.js';
 
 const isProduction = () => process.env.NODE_ENV === 'production';
 
@@ -38,8 +39,7 @@ function findLocalFile(relativePath) {
  */
 export async function loadStoredFile(filePath) {
   if (isProduction()) {
-    const { data, error } = await supabase.storage
-      .from('lead-documents')
+    const { data, error } = await fileStore()
       .download(filePath);
     if (error) throw new Error(`Storage download failed: ${error.message}`);
     if (typeof data.arrayBuffer === 'function') {
@@ -84,8 +84,7 @@ export async function loadFormPdf(form) {
  */
 export async function saveFormPdf(form, buffer) {
   if (isProduction()) {
-    const { error } = await supabase.storage
-      .from('lead-documents')
+    const { error } = await fileStore()
       .upload(form.file_path, buffer, { contentType: 'application/pdf', upsert: true });
     if (error) throw new Error(`Storage upload failed: ${error.message}`);
     return;

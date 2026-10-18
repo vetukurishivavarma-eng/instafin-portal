@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import { fileStore } from '../lib/fileStore.js';
 
 const router = express.Router();
 
@@ -154,8 +155,7 @@ router.post('/upload', authorize('admin', 'operations_head', 'executive', 'dsa')
       try {
         const fileBuffer = fs.readFileSync(req.file.path);
         const storagePath = `${leadId}/${uuidv4()}-${req.file.originalname}`;
-        const { data, error } = await supabase.storage
-          .from('lead-documents')
+        const { data, error } = await fileStore()
           .upload(storagePath, fileBuffer, { contentType: req.file.mimetype });
 
         if (error) throw error;
@@ -230,8 +230,7 @@ router.get('/file/:fileId', authorize('admin', 'operations_head', 'executive', '
 
     if (process.env.NODE_ENV === 'production') {
       // Production: get signed URL from Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('lead-documents')
+      const { data, error } = await fileStore()
         .createSignedUrl(record.file_path, 3600); // 1 hour expiry
 
       if (error) throw error;
@@ -328,7 +327,7 @@ router.delete('/file/:fileId', authorize('admin', 'executive', 'dsa'), async (re
     if (record.file_path) {
       if (process.env.NODE_ENV === 'production') {
         try {
-          await supabase.storage.from('lead-documents').remove([record.file_path]);
+          await fileStore().remove([record.file_path]);
         } catch (e) {
           console.warn('Failed to delete file from storage:', e.message);
         }

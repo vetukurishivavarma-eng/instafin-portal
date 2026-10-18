@@ -18,6 +18,7 @@ import hurdlesRouter from './routes/hurdles.js';
 import eligibilityFormulasRouter from './routes/eligibilityFormulas.js';
 import whatsappIntakeRouter from './routes/whatsappIntake.js';
 import aiBotRouter from './routes/aiBot.js';
+import filesRouter from './routes/files.js';
 import { hurdleGuard } from './middleware/hurdleGuard.js';
 import { startWhatsAppIntake } from './whatsapp-intake/index.js';
 
@@ -61,6 +62,7 @@ app.use('/api/hurdles', hurdlesRouter);
 app.use('/api/eligibility-formulas', eligibilityFormulasRouter);
 app.use('/api/whatsapp-intake', whatsappIntakeRouter);
 app.use('/api/ai-bot', aiBotRouter);
+app.use('/api/files', filesRouter);
 
 // Health check
 app.get('/', (req, res) => {

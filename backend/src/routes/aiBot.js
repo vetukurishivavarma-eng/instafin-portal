@@ -10,9 +10,9 @@ import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { parseMessage, slugify, displayName, todayIST } from '../services/aiBotParse.js';
+import { fileStore } from '../lib/fileStore.js';
 
 const router = express.Router();
-const BUCKET = 'lead-documents';
 const ROOT = 'ai-bot';
 
 const upload = multer({
@@ -23,7 +23,7 @@ const upload = multer({
 router.use(authenticate, authorize('ai_bot', 'admin'));
 
 async function listDir(prefix) {
-  const { data, error } = await supabase.storage.from(BUCKET).list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'desc' } });
+  const { data, error } = await fileStore().list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'desc' } });
   if (error) throw error;
   return (data || []).filter((e) => e.name !== '.emptyFolderPlaceholder');
 }
@@ -60,7 +60,7 @@ async function listCustomer(slug, date) {
     const files = (await listDir(`${ROOT}/${slug}/${d}`)).filter((e) => e.id);
     if (!files.length) continue;
     const paths = files.map((f) => `${ROOT}/${slug}/${d}/${f.name}`);
-    const { data: signed, error } = await supabase.storage.from(BUCKET).createSignedUrls(paths, 3600);
+    const { data: signed, error } = await fileStore().createSignedUrls(paths, 3600);
     if (error) throw error;
     out.push({
       date: d,
@@ -102,7 +102,7 @@ router.post('/message', upload.array('files', 10), async (req, res) => {
       for (const [i, f] of files.entries()) {
         const name = safeFileName(f.originalname, intent.label && files.length > 1 ? `${intent.label} ${i + 1}` : intent.label);
         const key = `${ROOT}/${slug}/${date}/${time}_${name}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(key, f.buffer, { contentType: f.mimetype, upsert: false });
+        const { error } = await fileStore().upload(key, f.buffer, { contentType: f.mimetype, upsert: false });
         if (error) throw error;
         saved.push(name);
       }

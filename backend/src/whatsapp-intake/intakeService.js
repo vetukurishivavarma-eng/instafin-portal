@@ -7,6 +7,7 @@ import { matchDocumentName } from './documentCatalog.js';
 import { validateInboundFile } from './fileValidation.js';
 import { notifyExecutiveOfUpload } from './notifyExecutive.js';
 import { getRequiredDocumentIdsForLead } from './leadChecklistResolver.js';
+import { fileStore, usingDrive } from '../lib/fileStore.js';
 
 const uploadsDir = path.join(process.cwd(), 'uploads');
 
@@ -155,8 +156,7 @@ export async function processInboundDocument(message, { supabase }) {
   let storedFilePath;
   if (process.env.WHATSAPP_INTAKE_STORAGE !== 'local') {
     const storagePath = `${lead.id}/${uuidv4()}-${message.originalFilename}`;
-    const { error: storageError } = await supabase.storage
-      .from('lead-documents')
+    const { error: storageError } = await (usingDrive() ? fileStore() : supabase.storage.from('lead-documents'))
       .upload(storagePath, message.buffer, { contentType: message.mimeType });
     if (storageError) {
       return fail('STORAGE_WRITE_FAILED', storageError.message, { matched_lead_id: lead.id, matched_document_id: match.documentId });

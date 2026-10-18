@@ -11,6 +11,7 @@ import { anchorFieldsGenerically } from '../services/formFieldAnchorGeneric.js';
 import { loadFormPdf, saveFormPdf } from '../services/formStorage.js';
 import { bakeAcroFormFields } from '../services/formAcroBaker.js';
 import { FORM_FIELD_KEYS } from '../data/formSources.js';
+import { fileStore } from '../lib/fileStore.js';
 
 // Validate/sanitize a manually-drawn field map from the visual calibration
 // editor: { full_name: { page, xPct, yPct, widthPct, heightPct }, ... }
@@ -138,8 +139,7 @@ router.get('/:id/download', authorize('admin', 'operations_head', 'executive', '
     if (isProduction()) {
       // Production: download from Supabase Storage
       try {
-        const { data, error: storageError } = await supabase.storage
-          .from('lead-documents')
+        const { data, error: storageError } = await fileStore()
           .download(form.file_path);
 
         if (storageError) {
@@ -230,8 +230,7 @@ router.post('/', authorize('admin'), async (req, res) => {
       if (isProduction()) {
         // Production: upload to Supabase Storage
         const storagePath = `forms/${fileName}`;
-        const { error: uploadError } = await supabase.storage
-          .from('lead-documents')
+        const { error: uploadError } = await fileStore()
           .upload(storagePath, fileBuffer, {
             contentType: uploadContentType,
             upsert: true
@@ -300,8 +299,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
 
       if (isProduction()) {
         const storagePath = `forms/${fileName}`;
-        const { error: uploadError } = await supabase.storage
-          .from('lead-documents')
+        const { error: uploadError } = await fileStore()
           .upload(storagePath, fileBuffer, {
             contentType: uploadContentType,
             upsert: true
