@@ -6,7 +6,7 @@ import { downloadWithAuth } from '../utils/download';
 // AI Bot login: type a customer's name (+ attach files or a zip) to file them
 // into that lead's checklist, or ask for the lead's documents, shown in
 // category folders (KYC, Income Proof, ...) that can each be downloaded.
-const EXAMPLES = ['Ravi Kumar PAN', 'Ravi Kumar 9876543210 PAN', 'show Ravi Kumar', 'L10031', 'leads'];
+const EXAMPLES = ['Ravi Kumar PAN', 'Ravi Kumar 9876543210 PAN', 'Ravi Kumar new loan', 'show Ravi Kumar', 'leads'];
 
 export default function AiBotPage() {
   const { user, logout, refreshAccessToken } = useAuth();
@@ -47,11 +47,12 @@ export default function AiBotPage() {
     body,
   });
 
-  const send = async (overrideText) => {
+  // overrideText: a button's value (sent to the server); shown: its label (shown in chat).
+  const send = async (overrideText, shown) => {
     const msg = (overrideText ?? text).trim();
     if (busy || (!msg && !files.length)) return;
     const sending = overrideText ? [] : files;
-    setMessages((m) => [...m, { from: 'me', text: msg, files: sending.map((f) => f.name) }]);
+    setMessages((m) => [...m, { from: 'me', text: shown || msg, files: sending.map((f) => f.name) }]);
     if (!overrideText) {
       setText('');
       setFiles([]);
@@ -104,15 +105,16 @@ export default function AiBotPage() {
             <div key={i} className="flex justify-start">
               <div className={`max-w-[90%] rounded-2xl rounded-bl-sm px-4 py-2 text-sm border ${m.error ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-800'}`}>
                 <div className="whitespace-pre-wrap break-words">{m.reply}</div>
-                {(m.leads || m.choose)?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {(m.leads || m.choose).map((l) => (
+                {m.options?.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mt-2">
+                    {m.options.map((o) => (
                       <button
-                        key={l.id}
-                        onClick={() => send(m.choose ? (l.code || l.name) : `show ${l.code || l.name}`)}
-                        className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-xs font-medium"
+                        key={o.value}
+                        onClick={() => send(o.value, o.label)}
+                        disabled={busy}
+                        className="text-left px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 text-sm font-medium disabled:opacity-50"
                       >
-                        👤 {l.name}{l.code ? ` · ${l.code}` : ''}
+                        {o.label}
                       </button>
                     ))}
                   </div>

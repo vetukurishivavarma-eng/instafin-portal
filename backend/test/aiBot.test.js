@@ -92,3 +92,19 @@ describe('filing into checklist slots and folders', () => {
     expect(istDate('2026-10-18T20:00:00Z')).toBe('2026-10-19');
   });
 });
+
+describe('one-tap new lead', async () => {
+  const { LOAN_TYPES, defaultProfile, leadButton } = await import('../src/routes/aiBot.js');
+  const { DECISION_TREE } = await import('../src/whatsapp-intake/leadChecklistData.js');
+  it('every loan-type button gives a real checklist, not the general fallback', () => {
+    for (const [type] of LOAN_TYPES) {
+      const p = defaultProfile(type);
+      const key = [p.loan_type, p.loan_status, p.income_source, p.resident_type, p.business_type].filter(Boolean).join('|');
+      expect(DECISION_TREE[key], key).toBeTruthy();
+    }
+  });
+  it('labels loans so a customer’s loans can be told apart', () => {
+    expect(leadButton({ customer_name: 'Ravi Kumar', loan_type: 'home_loan', status: 'Processing', lead_code: 'L10031' }))
+      .toBe('Ravi Kumar · Home Loan · Processing · L10031');
+  });
+});
