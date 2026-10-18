@@ -3,6 +3,7 @@
 // same as a Supabase signed URL.
 import express from 'express';
 import { verifyFileLink, driveStream } from '../lib/fileStore.js';
+import { contentDisposition } from '../utils/downloadName.js';
 
 const router = express.Router();
 
@@ -12,7 +13,9 @@ router.get('/:token', async (req, res) => {
   try {
     const file = await driveStream(link.f);
     res.setHeader('Content-Type', file.headers.get('content-type') || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(link.n)}`);
+    // ?dl=1 forces a download instead of opening in the browser tab.
+    const name = link.n.replace(/^\d{6}_/, '');
+    res.setHeader('Content-Disposition', contentDisposition(name, Boolean(req.query.dl)));
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.send(Buffer.from(await file.arrayBuffer()));
   } catch (err) {

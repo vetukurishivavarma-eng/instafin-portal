@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { fileStore } from '../lib/fileStore.js';
+import { zipName, contentDisposition } from '../utils/downloadName.js';
 
 const router = express.Router();
 
@@ -224,11 +225,22 @@ router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executiv
       return res.status(400).json({ error: 'No uploaded documents for this lead' });
     }
 
-    // Pre-load all file buffers BEFORE setting headers so we can respond cleanly
-    // with an error if no files are actually available on disk.
-    const entries = [];
-    const usedNames = new Set();
+    // Stream one file at a time into the zip (fetch -> append -> next) so only
+    // one document sits in memory at once; 100+ MB leads would otherwise risk
+    // the 512 MB free server. Missing files are skipped and logged.
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', contentDisposition(zipName(lead.customer_name)));
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    archive.on('error', err => {
+      console.error('Archive error:', err.message);
+      try { res.end(); } catch (e) { /* already closed */ }
+    });
+    archive.pipe(res);
+
+    const usedNames = new Set();
+    let added = 0;
     for (const doc of docs) {
       const fileData = await getFileBuffer(doc);
       if (!fileData || !fileData.exists) {
@@ -253,25 +265,12 @@ router.get('/leads/:leadId/zip', authorize('admin', 'operations_head', 'executiv
       }
       usedNames.add(entryName.toLowerCase());
 
-      entries.push({ buffer: fileData.buffer, name: entryName });
+      archive.append(fileData.buffer, { name: entryName });
+      added++;
+      // Let the archiver compress + flush this file before fetching the next.
+      await new Promise(resolve => archive.once('entry', resolve));
     }
-
-    if (entries.length === 0) {
-      return res.status(404).json({ error: 'No downloadable documents found for this lead' });
-    }
-
-    const customerSafe = sanitizeName(lead.customer_name, 'Lead');
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${customerSafe}-documents.zip"`);
-
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    archive.on('error', err => {
-      console.error('Archive error:', err.message);
-      try { res.status(500).end(); } catch (e) { /* headers may already be sent */ }
-    });
-
-    archive.pipe(res);
-    entries.forEach(entry => archive.append(entry.buffer, { name: entry.name }));
+    if (!added) archive.append('No downloadable files were found for this lead.', { name: 'README.txt' });
     await archive.finalize();
   } catch (error) {
     console.error('ZIP download error:', error);

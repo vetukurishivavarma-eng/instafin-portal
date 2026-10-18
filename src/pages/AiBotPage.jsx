@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import API_BASE from '../config/api';
+import { downloadWithAuth } from '../utils/download';
 
 // AI Bot login: type a customer's name (+ attach files) to save, or ask for
 // their documents. Folders are per customer, sub-folders per date received.
@@ -22,7 +23,26 @@ export default function AiBotPage() {
   const fileRef = useRef(null);
   const endRef = useRef(null);
 
+  const [zipping, setZipping] = useState(null);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const downloadAll = async (lead, i) => {
+    setZipping(i);
+    const url = `${API_BASE}/ai-bot/zip?lead=${encodeURIComponent(lead)}`;
+    try {
+      try {
+        await downloadWithAuth(url, localStorage.getItem('instafin_token'), `${lead}.zip`);
+      } catch (err) {
+        if (!(await refreshAccessToken())) throw err;
+        await downloadWithAuth(url, localStorage.getItem('instafin_token'), `${lead}.zip`);
+      }
+    } catch (err) {
+      setMessages((m) => [...m, { from: 'bot', reply: err.message || 'Download failed', error: true }]);
+    } finally {
+      setZipping(null);
+    }
+  };
 
   const post = (body) => fetch(`${API_BASE}/ai-bot/message`, {
     method: 'POST',
@@ -94,6 +114,15 @@ export default function AiBotPage() {
                     ))}
                   </div>
                 )}
+                {m.dates?.length > 0 && (
+                  <button
+                    onClick={() => downloadAll(m.lead, i)}
+                    disabled={zipping === i}
+                    className="mt-2 px-3 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {zipping === i ? 'Preparing zip…' : `⬇ Download all (${m.dates.reduce((n, d) => n + d.files.length, 0)})`}
+                  </button>
+                )}
                 {m.dates?.map((d) => (
                   <div key={d.date} className="mt-3">
                     <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">📅 {d.date}</div>
@@ -101,7 +130,10 @@ export default function AiBotPage() {
                       {d.files.map((f) => (
                         <li key={f.url} className="flex items-center justify-between gap-3">
                           <a href={f.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">{f.name}</a>
-                          <span className="text-xs text-gray-400 shrink-0">{formatSize(f.size)}</span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-gray-400">{formatSize(f.size)}</span>
+                            <a href={`${f.url}?dl=1`} className="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded" aria-label={`Download ${f.name}`}>⬇</a>
+                          </span>
                         </li>
                       ))}
                     </ul>

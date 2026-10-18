@@ -6,6 +6,7 @@ import ChecklistDisplay from '../components/ChecklistDisplay';
 import { downloadPDF, downloadProfilePDF, downloadEligibilityPDF } from '../export/pdf';
 import { shareOnWhatsApp, isWebShareAvailable } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
+import { downloadWithAuth, fileDownloadName } from '../utils/download';
 
 // Category labels shared by the section headers and per-section analyze handler
 const CATEGORY_LABELS = {
@@ -478,8 +479,11 @@ export default function ChecklistsPage() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         fetchChecklistStatuses(selectedLead.id);
-        setSuccess(`${documentName} uploaded successfully!`);
+        setSuccess(data.unzipped
+          ? `${data.files.length} file(s) from the zip added to ${documentName}${data.skipped?.length ? ` (skipped: ${data.skipped.join(', ')})` : ''}`
+          : `${documentName} uploaded successfully!`);
         setShowUploadForm(null);
         setUploadDescription('');
         setTimeout(() => setSuccess(''), 3000);
@@ -526,8 +530,25 @@ export default function ChecklistsPage() {
   };
 
   // Handle view document (by file record ID)
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const handleDownloadAll = async () => {
+    if (!selectedLead) return;
+    setDownloadingAll(true);
+    try {
+      await downloadWithAuth(`${API_BASE}/archives/leads/${selectedLead.id}/zip`, accessToken, `${selectedLead.customerName || 'Lead'}.zip`);
+    } catch (err) {
+      setError(err.message);
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
   const handleViewDocument = async (fileId) => {
-    setViewDoc({ url: null, id: fileId, loading: true });
+    // Save-as name: "<Lead>_<Document>_<date>.<ext>"
+    const file = Object.values(checklistStatuses).flat().find(f => f.id === fileId);
+    const downloadName = fileDownloadName(selectedLead?.customerName, file?.documentName, file?.originalFile);
+    setViewDoc({ url: null, id: fileId, loading: true, downloadName });
     try {
       const res = await fetch(`${API_BASE}/checklist-status/file/${fileId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
@@ -535,7 +556,7 @@ export default function ChecklistsPage() {
       if (!res.ok) throw new Error('Failed to fetch file');
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      setViewDoc({ url: blobUrl, id: fileId, loading: false });
+      setViewDoc(prev => ({ ...prev, url: blobUrl, loading: false }));
     } catch (err) {
       setError('Failed to load document');
       setTimeout(() => setError(''), 5000);
@@ -1066,6 +1087,16 @@ export default function ChecklistsPage() {
                   <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full font-medium">
                     {pendingRequiredCount} Pending
                   </span>
+                  {Object.values(checklistStatuses || {}).some(f => f?.length) && (
+                    <button
+                      onClick={handleDownloadAll}
+                      disabled={downloadingAll}
+                      className="bg-blue-600 text-white px-3 py-1 rounded-full font-medium hover:bg-blue-700 disabled:opacity-50"
+                      title="Download every uploaded file for this lead as one zip"
+                    >
+                      {downloadingAll ? 'Preparing…' : '⬇ Download All'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1244,11 +1275,14 @@ export default function ChecklistsPage() {
                       property_documents: 'Property Documents',
                       financial_documents: 'Financial Documents',
                       legal_documents: 'Legal Documents',
-                      others: 'Others'
+                      others: 'Other Documents'
                     };
 
+                    // "Other Documents": same 'other_docs' slot Customer Login uses, so
+                    // uncategorised files show on both pages. Not counted as pending.
+                    const withOther = [...checklistItems, { id: 'other_docs', name: 'Other Document (anything not listed above)', category: 'others', required: false }];
                     return categoryOrder.map(category => {
-                      const items = checklistItems.filter(item => item.category === category);
+                      const items = withOther.filter(item => item.category === category);
                       if (items.length === 0) return null;
 
                       return (
@@ -1417,12 +1451,12 @@ export default function ChecklistsPage() {
                                                 Uploading...
                                               </span>
                                             ) : (
-                                              'Choose File & Upload'
+                                              'Choose File or Zip & Upload'
                                             )}
                                             <input
                                               type="file"
                                               className="hidden"
-                                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
+                                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls,.zip"
                                               disabled={isUploading}
                                               onChange={(e) => {
                                                 if (e.target.files[0]) {
@@ -2180,6 +2214,15 @@ export default function ChecklistsPage() {
             <div className="flex justify-between items-center px-6 py-4 border-b">
               <h3 className="text-lg font-bold text-gray-900">Uploaded Document</h3>
               <div className="flex items-center gap-3">
+                {viewDoc.url && (
+                  <a
+                    href={viewDoc.url}
+                    download={viewDoc.downloadName}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Download
+                  </a>
+                )}
                 {viewDoc.url && (
                   <a
                     href={viewDoc.url}

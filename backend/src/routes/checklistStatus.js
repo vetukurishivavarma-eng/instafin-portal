@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { fileStore } from '../lib/fileStore.js';
+import { isZip, extractZip } from '../utils/unzip.js';
+import { downloadName } from '../utils/downloadName.js';
 
 const router = express.Router();
 
@@ -28,7 +30,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // zips of several documents can exceed 10 MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'application/pdf',
@@ -40,7 +42,7 @@ const upload = multer({
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
     ];
-    if (allowedTypes.includes(file.mimetype)) {
+    if (allowedTypes.includes(file.mimetype) || isZip(file)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type'));
@@ -148,6 +150,43 @@ router.post('/upload', authorize('admin', 'operations_head', 'executive', 'dsa')
       return res.status(404).json({ error: 'Lead not found' });
     }
 
+    // A .zip is unpacked: every file inside becomes its own upload under this
+    // same checklist item (named after the file inside the zip).
+    if (isZip(req.file)) {
+      let unzipped;
+      try {
+        unzipped = extractZip(fs.readFileSync(req.file.path));
+      } catch (zipErr) {
+        return res.status(400).json({ error: `Could not open zip: ${zipErr.message}` });
+      } finally {
+        fs.unlink(req.file.path, () => {});
+      }
+      if (!unzipped.files.length) {
+        return res.status(400).json({ error: 'No PDF, image, Word or Excel files found in the zip' });
+      }
+      const saved = [];
+      for (const f of unzipped.files) {
+        const storagePath = `${leadId}/${uuidv4()}-${f.name}`;
+        const { error: upErr } = await fileStore().upload(storagePath, f.buffer, { contentType: f.mimetype });
+        if (upErr) throw upErr;
+        const { data: row, error: rowErr } = await supabase
+          .from('lead_checklist_status')
+          .insert({
+            lead_id: leadId,
+            document_id: documentId,
+            document_name: buildDocName(documentName, description || `From ${req.file.originalname}`, f.name),
+            status: 'uploaded',
+            file_path: storagePath,
+            uploaded_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+        if (rowErr) throw rowErr;
+        saved.push({ id: row.id, originalFile: f.name });
+      }
+      return res.status(201).json({ unzipped: true, files: saved, skipped: unzipped.skipped });
+    }
+
     let filePath;
 
     if (process.env.NODE_ENV === 'production') {
@@ -217,7 +256,7 @@ router.get('/file/:fileId', authorize('admin', 'operations_head', 'executive', '
 
     const { data: record } = await supabase
       .from('lead_checklist_status')
-      .select('file_path, document_name')
+      .select('file_path, document_name, lead_id')
       .eq('id', fileId)
       .single();
 
@@ -226,12 +265,13 @@ router.get('/file/:fileId', authorize('admin', 'operations_head', 'executive', '
     }
 
     const parsed = parseDocName(record.document_name);
-    const downloadName = parsed.originalFile || parsed.name || 'document';
+    const { data: leadRow } = await supabase.from('leads').select('customer_name').eq('id', record.lead_id).maybeSingle();
+    const saveAs = downloadName(leadRow?.customer_name, parsed.originalFile || record.file_path, parsed.name);
 
     if (process.env.NODE_ENV === 'production') {
       // Production: get signed URL from Supabase Storage
       const { data, error } = await fileStore()
-        .createSignedUrl(record.file_path, 3600); // 1 hour expiry
+        .createSignedUrl(record.file_path, 3600, { name: saveAs }); // 1 hour expiry
 
       if (error) throw error;
       return res.redirect(data.signedUrl);
@@ -241,7 +281,7 @@ router.get('/file/:fileId', authorize('admin', 'operations_head', 'executive', '
       if (!fs.existsSync(localPath)) {
         return res.status(404).json({ error: 'File not found on disk' });
       }
-      return res.download(localPath, downloadName);
+      return res.download(localPath, saveAs);
     }
   } catch (error) {
     console.error('File download error:', error);

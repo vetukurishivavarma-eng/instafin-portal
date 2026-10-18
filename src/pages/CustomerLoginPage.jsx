@@ -6,6 +6,7 @@ import { getChecklistWithFallback, getCoapplicantChecklist, clearChecklistCache 
 import { downloadEligibilityPDF, downloadPDF, downloadProfilePDF } from '../export/pdf';
 import { shareOnWhatsApp } from '../export/whatsapp';
 import { matchFiles } from '../utils/bulkDocMatcher';
+import { downloadWithAuth, fileDownloadName } from '../utils/download';
 import { FORM_FIELD_LABELS } from '../data/formFieldKeys';
 
 // Normalize field values for checklist matching
@@ -555,8 +556,11 @@ export default function CustomerLoginPage() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         fetchChecklistStatuses(selectedLead.id);
-        setSuccess(`${documentName} uploaded successfully!`);
+        setSuccess(data.unzipped
+          ? `${data.files.length} file(s) from the zip added to ${documentName}${data.skipped?.length ? ` (skipped: ${data.skipped.join(', ')})` : ''}`
+          : `${documentName} uploaded successfully!`);
         setShowUploadForm(null);
         setTimeout(() => setSuccess(''), 3000);
       } else {
@@ -625,6 +629,19 @@ export default function CustomerLoginPage() {
   };
 
   // View file
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const handleDownloadAll = async () => {
+    if (!selectedLead) return;
+    setDownloadingAll(true);
+    try {
+      await downloadWithAuth(`${API_BASE}/archives/leads/${selectedLead.id}/zip`, accessToken, `${selectedLead.customerName || 'Lead'}.zip`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
   const handleViewDocument = async (fileId, docName) => {
     if (!fileId) return;
     // Find document info from checklistStatuses
@@ -632,6 +649,7 @@ export default function CustomerLoginPage() {
     let fileCategory = '';
     let fileDescription = '';
     let fileUploadDate = '';
+    let fileOriginal = '';
 
     Object.entries(checklistStatuses).forEach(([docId, files]) => {
       const matchedFile = (files || []).find(f => f.id === fileId);
@@ -642,6 +660,7 @@ export default function CustomerLoginPage() {
         fileCategory = checklistItem?.category || '';
         fileDescription = matchedFile.description || '';
         fileUploadDate = matchedFile.uploadedAt || '';
+        fileOriginal = matchedFile.originalFile || '';
       }
     });
 
@@ -652,6 +671,7 @@ export default function CustomerLoginPage() {
       category: fileCategory,
       description: fileDescription,
       uploadDate: fileUploadDate,
+      downloadName: fileDownloadName(selectedLead?.customerName, fileName, fileOriginal),
       mimeType: '',
       fileSize: null,
       loading: true,
@@ -2435,6 +2455,16 @@ export default function CustomerLoginPage() {
                   <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-medium">
                     {pendingCount} Pending
                   </span>
+                  {Object.values(checklistStatuses || {}).some(f => f?.length) && (
+                    <button
+                      onClick={handleDownloadAll}
+                      disabled={downloadingAll}
+                      className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                      title="Download every uploaded file for this lead as one zip"
+                    >
+                      {downloadingAll ? 'Preparing…' : '⬇ Download All'}
+                    </button>
+                  )}
                   {notRequiredCount > 0 && (
                     <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-medium">
                       {notRequiredCount} Not Required
@@ -2924,7 +2954,7 @@ export default function CustomerLoginPage() {
                                       <input
                                         type="file"
                                         className="hidden"
-                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
+                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls,.zip"
                                         disabled={uploadingDoc === item.id}
                                         onChange={(e) => {
                                           if (e.target.files[0]) {
@@ -3052,7 +3082,7 @@ export default function CustomerLoginPage() {
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls,.zip"
                       disabled={uploadingDoc === 'other_docs'}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -3774,7 +3804,7 @@ export default function CustomerLoginPage() {
                 {viewDoc.url && !viewDoc.loading && (
                   <a
                     href={viewDoc.url}
-                    download={viewDoc.name || 'document'}
+                    download={viewDoc.downloadName || viewDoc.name || 'document'}
                     className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     title="Download file"
                   >
@@ -3866,7 +3896,7 @@ export default function CustomerLoginPage() {
                   <p className="text-xs text-gray-400 mb-4">This file type cannot be previewed in the browser.</p>
                   <a
                     href={viewDoc.url}
-                    download={viewDoc.name || 'document'}
+                    download={viewDoc.downloadName || viewDoc.name || 'document'}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">

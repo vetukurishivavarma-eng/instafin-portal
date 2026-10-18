@@ -144,9 +144,13 @@ export function verifyFileLink(tokenStr) {
   return payload.e > Date.now() ? payload : null;
 }
 
-function linkFor(file, expiresInSec) {
+// opts.download (as in Supabase): a file name to save as, or true; forces download.
+// opts.name: save-as name but still opens in the browser tab.
+function linkFor(file, expiresInSec, opts = {}) {
   const base = process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3001}`;
-  return `${base.replace(/\/+$/, '')}/api/files/${sign({ f: file.id, n: file.name, e: Date.now() + expiresInSec * 1000 })}`;
+  const name = (typeof opts.download === 'string' && opts.download) || opts.name || file.name;
+  const tokenStr = sign({ f: file.id, n: name, e: Date.now() + expiresInSec * 1000 });
+  return `${base.replace(/\/+$/, '')}/api/files/${tokenStr}${opts.download ? '?dl=1' : ''}`;
 }
 
 // Stream a Drive file id (used by the /api/files route).
@@ -197,10 +201,10 @@ const driveBucket = {
     return removed;
   }),
 
-  createSignedUrl: (filePath, expiresIn) => wrap(async () => {
+  createSignedUrl: (filePath, expiresIn, opts) => wrap(async () => {
     const file = await findFile(filePath);
     if (!file) throw notFound();
-    return { signedUrl: linkFor(file, expiresIn) };
+    return { signedUrl: linkFor(file, expiresIn, opts) };
   }),
 
   createSignedUrls: (paths, expiresIn) => wrap(async () => {
