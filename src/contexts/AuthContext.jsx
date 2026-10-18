@@ -51,6 +51,8 @@ export function AuthProvider({ children }) {
       navigate('/operations/dashboard');
     } else if (data.user.role === 'executive') {
       navigate('/executive/leads');
+    } else if (data.user.role === 'ai_bot') {
+      navigate('/ai-bot');
     } else {
       navigate('/dashboard');
     }

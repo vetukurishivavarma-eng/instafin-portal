@@ -29,6 +29,7 @@ import EligibilityPage from './pages/EligibilityPage'
 import LeadArchivesPage from './pages/LeadArchivesPage'
 
 import HurdlePage from './pages/HurdlePage'
+import AiBotPage from './pages/AiBotPage'
 
 import './index.css'
 
@@ -52,6 +53,7 @@ function ProtectedRoute({ children, allowedRoles }) {
     if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     if (user.role === 'operations_head') return <Navigate to="/operations/dashboard" replace />;
     if (user.role === 'executive') return <Navigate to="/executive/leads" replace />;
+    if (user.role === 'ai_bot') return <Navigate to="/ai-bot" replace />;
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -73,6 +75,7 @@ function RoleRedirect() {
   if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
   if (user.role === 'operations_head') return <Navigate to="/operations/dashboard" replace />;
   if (user.role === 'executive') return <Navigate to="/executive/leads" replace />;
+  if (user.role === 'ai_bot') return <Navigate to="/ai-bot" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -162,6 +165,13 @@ function AppRoutes() {
         <Route path="/admin/hurdles" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <HurdlePage />
+          </ProtectedRoute>
+        } />
+
+        {/* AI Bot login - save / fetch documents by customer name */}
+        <Route path="/ai-bot" element={
+          <ProtectedRoute allowedRoles={['ai_bot']}>
+            <AiBotPage />
           </ProtectedRoute>
         } />
 
